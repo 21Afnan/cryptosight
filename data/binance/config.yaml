@@ -1,0 +1,18 @@
+# Binance Exchange Data Ingestion Configuration
+
+exchange: "binance" # Options: binance, bybit
+
+symbols:
+  - "BTC"
+  - "ETH"
+  - "SOL"
+  - "ADA"
+
+timeframe: "1m" # Options: 1m, 3m, 5m, 15m, 30m, 1h, 1d
+start_time: "2023-06-22 00:00:00" # Format: YYYY-MM-DD HH:MM:SS in UTC
+end_time: "now" # Options: now or YYYY-MM-DD HH:MM:SS in UTC
+fill_method: "ffill" # Options: ffill, bfill, interpolate, none
+
+# Connection retry configurations
+max_retries: 5
+retry_delay: 3

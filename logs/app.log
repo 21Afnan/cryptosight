@@ -1,0 +1,128 @@
+[2026-06-23 22:05:56] INFO [test_module:6] - Starting logging test...
+[2026-06-23 22:05:56] WARNING [test_module:7] - This is a warning log message!
+[2026-06-23 22:05:56] ERROR [test_module:8] - This is an error log message!
+[2026-06-23 22:05:56] INFO [test_module:9] - Logging test completed successfully.
+[2026-06-23 22:33:59] INFO [DBManager:142] - --- Starting Database Manager Self-Test ---
+[2026-06-23 22:33:59] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-23 22:33:59] INFO [DBManager:80] - Table 'bybit_data.bybit_btc_usdt_1m' created.
+[2026-06-23 22:33:59] INFO [DBManager:112] - Saved 1 records to 'bybit_data.bybit_btc_usdt_1m'.
+[2026-06-23 22:33:59] INFO [DBManager:153] - Self-test latest timestamp: 2026-06-23 22:33:59.943894+05:00
+[2026-06-23 22:33:59] INFO [DBManager:156] - --- Database Manager Self-Test Finished Successfully ---
+[2026-06-23 23:31:32] INFO [BinanceClient:44] - Fetching historical candles for BTCUSDT from 2026-06-20 00:00:00 to 2026-06-21 00:00:00...
+[2026-06-23 23:31:33] INFO [BinanceClient:69] - Fetched 25 raw candles from Binance.
+[2026-06-23 23:31:33] INFO [BinanceClient:95] - Sample candle: [1781913600000, 63543.9, 63777.0, 63470.0, 63530.01, 640.14667]
+[2026-06-23 23:31:33] INFO [BinanceClient:96] - Last candle: [1782000000000, 64298.01, 64322.91, 64237.31, 64294.0, 425.19081]
+[2026-06-23 23:39:45] INFO [BybitClient:41] - Fetching historical candles for BTCUSDT from 2026-06-20 00:00:00 to 2026-06-21 00:00:00...
+[2026-06-23 23:39:45] INFO [BybitClient:93] - Fetched 0 raw candles from Bybit.
+[2026-06-23 23:40:08] INFO [BybitClient:41] - Fetching historical candles for BTCUSDT from 2026-06-20 00:00:00 to 2026-06-21 00:00:00...
+[2026-06-23 23:40:08] WARNING [BybitClient:62] - Error fetching from Bybit (Attempt 1/3): Invalid period! (ErrCode: 10001) (ErrTime: 18:40:08).
+Request → GET https://api.bybit.com/v5/market/kline: category=spot&end=1782000000000&interval=1m&limit=1000&start=1781913600000&symbol=BTCUSDT.
+[2026-06-23 23:40:10] WARNING [BybitClient:62] - Error fetching from Bybit (Attempt 2/3): Invalid period! (ErrCode: 10001) (ErrTime: 18:40:10).
+Request → GET https://api.bybit.com/v5/market/kline: category=spot&end=1782000000000&interval=1m&limit=1000&start=1781913600000&symbol=BTCUSDT.
+[2026-06-23 23:40:13] WARNING [BybitClient:62] - Error fetching from Bybit (Attempt 3/3): Invalid period! (ErrCode: 10001) (ErrTime: 18:40:13).
+Request → GET https://api.bybit.com/v5/market/kline: category=spot&end=1782000000000&interval=1m&limit=1000&start=1781913600000&symbol=BTCUSDT.
+[2026-06-23 23:40:13] ERROR [BybitClient:66] - Max retries reached. Bybit data fetch failed.
+[2026-06-23 23:40:13] ERROR [BybitClient:113] - Test failed: Invalid period! (ErrCode: 10001) (ErrTime: 18:40:13).
+Request → GET https://api.bybit.com/v5/market/kline: category=spot&end=1782000000000&interval=1m&limit=1000&start=1781913600000&symbol=BTCUSDT.
+[2026-06-23 23:40:56] INFO [BybitClient:41] - Fetching historical candles for BTCUSDT from 2026-06-20 00:00:00 to 2026-06-21 00:00:00...
+[2026-06-23 23:40:57] INFO [BybitClient:94] - Fetched 1000 raw candles from Bybit.
+[2026-06-23 23:40:57] INFO [BybitClient:110] - Sample candle: [1781940060000, 63742.5, 63742.6, 63724.3, 63739.9, 3.641031]
+[2026-06-23 23:40:57] INFO [BybitClient:111] - Last candle: [1782000000000, 64298.6, 64307.8, 64298.6, 64302.9, 2.270888]
+[2026-06-23 23:42:46] INFO [BybitClient:49] - Fetching historical candles for BTCUSDT from 2026-06-20 00:00:00 to 2026-06-21 00:00:00...
+[2026-06-23 23:42:46] INFO [BybitClient:102] - Fetched 1000 raw candles from Bybit.
+[2026-06-23 23:42:46] INFO [BybitClient:118] - Sample candle: [1781940060000, 63742.5, 63742.6, 63724.3, 63739.9, 3.641031]
+[2026-06-23 23:42:46] INFO [BybitClient:119] - Last candle: [1782000000000, 64298.6, 64307.8, 64298.6, 64302.9, 2.270888]
+[2026-06-23 23:55:02] INFO [BybitMain:19] - --- Starting Bybit Ingestion Pipeline ---
+[2026-06-23 23:55:02] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-23 23:55:02] INFO [DBManager:80] - Table 'bybit_data.bybit_btc_usdt_60' created.
+[2026-06-23 23:55:02] INFO [Downloader:45] - Starting BTC/USDT fresh on BYBIT from: 2023-06-22 00:00:00
+[2026-06-23 23:55:02] ERROR [Downloader:78] - Failed to download data for BTC/USDT on BYBIT: Unsupported timeframe: 60
+[2026-06-23 23:55:02] ERROR [BybitMain:34] - Failed to process symbol BTC: Unsupported timeframe: 60
+[2026-06-23 23:55:02] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-23 23:55:02] INFO [DBManager:80] - Table 'bybit_data.bybit_eth_usdt_60' created.
+[2026-06-23 23:55:02] INFO [Downloader:45] - Starting ETH/USDT fresh on BYBIT from: 2023-06-22 00:00:00
+[2026-06-23 23:55:02] ERROR [Downloader:78] - Failed to download data for ETH/USDT on BYBIT: Unsupported timeframe: 60
+[2026-06-23 23:55:02] ERROR [BybitMain:34] - Failed to process symbol ETH: Unsupported timeframe: 60
+[2026-06-23 23:55:02] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-23 23:55:02] INFO [DBManager:80] - Table 'bybit_data.bybit_sol_usdt_60' created.
+[2026-06-23 23:55:02] INFO [Downloader:45] - Starting SOL/USDT fresh on BYBIT from: 2023-06-22 00:00:00
+[2026-06-23 23:55:02] ERROR [Downloader:78] - Failed to download data for SOL/USDT on BYBIT: Unsupported timeframe: 60
+[2026-06-23 23:55:02] ERROR [BybitMain:34] - Failed to process symbol SOL: Unsupported timeframe: 60
+[2026-06-23 23:55:02] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-23 23:55:02] INFO [DBManager:80] - Table 'bybit_data.bybit_ada_usdt_60' created.
+[2026-06-23 23:55:02] INFO [Downloader:45] - Starting ADA/USDT fresh on BYBIT from: 2023-06-22 00:00:00
+[2026-06-23 23:55:02] ERROR [Downloader:78] - Failed to download data for ADA/USDT on BYBIT: Unsupported timeframe: 60
+[2026-06-23 23:55:02] ERROR [BybitMain:34] - Failed to process symbol ADA: Unsupported timeframe: 60
+[2026-06-23 23:55:02] INFO [BybitMain:36] - --- Bybit Ingestion Pipeline Finished ---
+[2026-06-23 23:56:07] INFO [BybitMain:19] - --- Starting Bybit Ingestion Pipeline ---
+[2026-06-23 23:56:07] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-23 23:56:07] INFO [DBManager:78] - Table 'bybit_data.bybit_btc_usdt_1m' verified.
+[2026-06-23 23:56:07] INFO [Downloader:42] - Resuming BTC/USDT on BYBIT from: 2026-06-23 22:33:59
+[2026-06-23 23:56:07] INFO [BybitClient:49] - Fetching historical candles for BTCUSDT from 2026-06-23 22:33:59 to now...
+[2026-06-23 23:56:07] INFO [BybitClient:102] - Fetched 0 raw candles from Bybit.
+[2026-06-23 23:56:07] INFO [Downloader:58] - No new data returned from exchange for BTC/USDT.
+[2026-06-23 23:56:07] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-23 23:56:07] INFO [DBManager:80] - Table 'bybit_data.bybit_eth_usdt_1m' created.
+[2026-06-23 23:56:07] INFO [Downloader:45] - Starting ETH/USDT fresh on BYBIT from: 2023-06-22 00:00:00
+[2026-06-23 23:56:07] INFO [BybitClient:49] - Fetching historical candles for ETHUSDT from 2023-06-22 00:00:00 to now...
+[2026-06-23 23:56:07] INFO [BybitClient:102] - Fetched 1001 raw candles from Bybit.
+[2026-06-23 23:56:07] INFO [DBManager:112] - Saved 1001 records to 'bybit_data.bybit_eth_usdt_1m'.
+[2026-06-23 23:56:07] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-23 23:56:08] INFO [DBManager:80] - Table 'bybit_data.bybit_sol_usdt_1m' created.
+[2026-06-23 23:56:08] INFO [Downloader:45] - Starting SOL/USDT fresh on BYBIT from: 2023-06-22 00:00:00
+[2026-06-23 23:56:08] INFO [BybitClient:49] - Fetching historical candles for SOLUSDT from 2023-06-22 00:00:00 to now...
+[2026-06-23 23:56:08] INFO [BybitClient:102] - Fetched 1001 raw candles from Bybit.
+[2026-06-23 23:56:08] INFO [DBManager:112] - Saved 1001 records to 'bybit_data.bybit_sol_usdt_1m'.
+[2026-06-23 23:56:08] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-23 23:56:08] INFO [DBManager:80] - Table 'bybit_data.bybit_ada_usdt_1m' created.
+[2026-06-23 23:56:08] INFO [Downloader:45] - Starting ADA/USDT fresh on BYBIT from: 2023-06-22 00:00:00
+[2026-06-23 23:56:08] INFO [BybitClient:49] - Fetching historical candles for ADAUSDT from 2023-06-22 00:00:00 to now...
+[2026-06-23 23:56:09] INFO [BybitClient:102] - Fetched 1001 raw candles from Bybit.
+[2026-06-23 23:56:09] INFO [DBManager:112] - Saved 1001 records to 'bybit_data.bybit_ada_usdt_1m'.
+[2026-06-23 23:56:09] INFO [BybitMain:36] - --- Bybit Ingestion Pipeline Finished ---
+[2026-06-23 23:56:26] INFO [BybitMain:19] - --- Starting Bybit Ingestion Pipeline ---
+[2026-06-23 23:56:26] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-23 23:56:26] INFO [DBManager:80] - Table 'bybit_data.bybit_btc_usdt_1m' created.
+[2026-06-23 23:56:27] INFO [Downloader:45] - Starting BTC/USDT fresh on BYBIT from: 2023-06-22 00:00:00
+[2026-06-23 23:56:27] INFO [BybitClient:49] - Fetching historical candles for BTCUSDT from 2023-06-22 00:00:00 to now...
+[2026-06-23 23:56:27] INFO [BybitClient:102] - Fetched 1001 raw candles from Bybit.
+[2026-06-23 23:56:27] INFO [DBManager:112] - Saved 1001 records to 'bybit_data.bybit_btc_usdt_1m'.
+[2026-06-23 23:56:27] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-23 23:56:27] INFO [DBManager:80] - Table 'bybit_data.bybit_eth_usdt_1m' created.
+[2026-06-23 23:56:27] INFO [Downloader:45] - Starting ETH/USDT fresh on BYBIT from: 2023-06-22 00:00:00
+[2026-06-23 23:56:27] INFO [BybitClient:49] - Fetching historical candles for ETHUSDT from 2023-06-22 00:00:00 to now...
+[2026-06-23 23:56:28] INFO [BybitClient:102] - Fetched 1001 raw candles from Bybit.
+[2026-06-23 23:56:28] INFO [DBManager:112] - Saved 1001 records to 'bybit_data.bybit_eth_usdt_1m'.
+[2026-06-23 23:56:28] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-23 23:56:28] INFO [DBManager:80] - Table 'bybit_data.bybit_sol_usdt_1m' created.
+[2026-06-23 23:56:28] INFO [Downloader:45] - Starting SOL/USDT fresh on BYBIT from: 2023-06-22 00:00:00
+[2026-06-23 23:56:28] INFO [BybitClient:49] - Fetching historical candles for SOLUSDT from 2023-06-22 00:00:00 to now...
+[2026-06-23 23:56:29] INFO [BybitClient:102] - Fetched 1001 raw candles from Bybit.
+[2026-06-23 23:56:29] INFO [DBManager:112] - Saved 1001 records to 'bybit_data.bybit_sol_usdt_1m'.
+[2026-06-23 23:56:29] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-23 23:56:29] INFO [DBManager:80] - Table 'bybit_data.bybit_ada_usdt_1m' created.
+[2026-06-23 23:56:29] INFO [Downloader:45] - Starting ADA/USDT fresh on BYBIT from: 2023-06-22 00:00:00
+[2026-06-23 23:56:29] INFO [BybitClient:49] - Fetching historical candles for ADAUSDT from 2023-06-22 00:00:00 to now...
+[2026-06-23 23:56:29] INFO [BybitClient:102] - Fetched 1001 raw candles from Bybit.
+[2026-06-23 23:56:29] INFO [DBManager:112] - Saved 1001 records to 'bybit_data.bybit_ada_usdt_1m'.
+[2026-06-23 23:56:29] INFO [BybitMain:36] - --- Bybit Ingestion Pipeline Finished ---
+[2026-06-23 23:57:14] INFO [BinanceMain:19] - --- Starting Binance Ingestion Pipeline ---
+[2026-06-23 23:57:14] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-23 23:57:14] INFO [DBManager:80] - Table 'binance_data.binance_btc_usdt_1m' created.
+[2026-06-23 23:57:14] INFO [Downloader:45] - Starting BTC/USDT fresh on BINANCE from: 2023-06-22 00:00:00
+[2026-06-23 23:57:14] INFO [BinanceClient:44] - Fetching historical candles for BTCUSDT from 2023-06-22 00:00:00 to now...
+[2026-06-23 23:58:08] INFO [BinanceMain:19] - --- Starting Binance Ingestion Pipeline ---
+[2026-06-23 23:58:08] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-23 23:58:08] INFO [DBManager:78] - Table 'binance_data.binance_btc_usdt_1m' verified.
+[2026-06-23 23:58:08] INFO [Downloader:45] - Starting BTC/USDT fresh on BINANCE from: 2023-06-22 00:00:00
+[2026-06-23 23:58:08] INFO [BinanceClient:44] - Fetching historical candles for BTCUSDT from 2023-06-22 00:00:00 to now...
+[2026-06-23 23:59:41] INFO [BinanceMain:19] - --- Starting Binance Ingestion Pipeline ---
+[2026-06-23 23:59:41] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-23 23:59:41] INFO [DBManager:78] - Table 'binance_data.binance_btc_usdt_1m' verified.
+[2026-06-23 23:59:41] INFO [Downloader:45] - Starting BTC/USDT fresh on BINANCE from: 2023-06-22 00:00:00
+[2026-06-23 23:59:41] INFO [BinanceClient:44] - Fetching historical candles for BTCUSDT from 2023-06-22 00:00:00 to now...
+[2026-06-24 00:00:07] INFO [BinanceMain:19] - --- Starting Binance Ingestion Pipeline ---
+[2026-06-24 00:00:07] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-24 00:00:07] INFO [DBManager:78] - Table 'binance_data.binance_btc_usdt_1m' verified.
+[2026-06-24 00:00:07] INFO [Downloader:45] - Starting BTC/USDT fresh on BINANCE from: 2023-06-22 00:00:00
+[2026-06-24 00:00:07] INFO [BinanceClient:44] - Fetching historical candles for BTCUSDT from 2023-06-22 00:00:00 to now...
