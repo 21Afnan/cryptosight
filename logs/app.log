@@ -126,3 +126,22 @@ Request → GET https://api.bybit.com/v5/market/kline: category=spot&end=1782000
 [2026-06-24 00:00:07] INFO [DBManager:78] - Table 'binance_data.binance_btc_usdt_1m' verified.
 [2026-06-24 00:00:07] INFO [Downloader:45] - Starting BTC/USDT fresh on BINANCE from: 2023-06-22 00:00:00
 [2026-06-24 00:00:07] INFO [BinanceClient:44] - Fetching historical candles for BTCUSDT from 2023-06-22 00:00:00 to now...
+[2026-06-24 00:01:30] INFO [BinanceMain:19] - --- Starting Binance Ingestion Pipeline ---
+[2026-06-24 00:01:30] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-24 00:01:30] INFO [DBManager:78] - Table 'binance_data.binance_btc_usdt_1m' verified.
+[2026-06-24 00:01:30] INFO [Downloader:45] - Starting BTC/USDT fresh on BINANCE from: 2023-06-22 00:00:00
+[2026-06-24 00:01:30] INFO [BinanceClient:44] - Fetching historical candles for BTCUSDT from 2023-06-22 00:00:00 to now...
+[2026-06-24 00:03:39] INFO [BinanceMain:19] - --- Starting Binance Ingestion Pipeline ---
+[2026-06-24 00:03:39] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-24 00:03:39] INFO [DBManager:80] - Table 'binance_data.binance_sol_usdt_1m' created.
+[2026-06-24 00:03:40] INFO [Downloader:45] - Starting SOL/USDT fresh on BINANCE from: 2026-06-22 00:00:00
+[2026-06-24 00:03:40] INFO [BinanceClient:44] - Fetching historical candles for SOLUSDT from 2026-06-22 00:00:00 to now...
+[2026-06-24 00:03:42] INFO [BinanceClient:69] - Fetched 2584 raw candles from Binance.
+[2026-06-24 00:03:42] INFO [DBManager:112] - Saved 2584 records to 'binance_data.binance_sol_usdt_1m'.
+[2026-06-24 00:03:43] INFO [DBManager:39] - Connected to database 'postgres'.
+[2026-06-24 00:03:43] INFO [DBManager:80] - Table 'binance_data.binance_ada_usdt_1m' created.
+[2026-06-24 00:03:43] INFO [Downloader:45] - Starting ADA/USDT fresh on BINANCE from: 2026-06-22 00:00:00
+[2026-06-24 00:03:43] INFO [BinanceClient:44] - Fetching historical candles for ADAUSDT from 2026-06-22 00:00:00 to now...
+[2026-06-24 00:03:45] INFO [BinanceClient:69] - Fetched 2584 raw candles from Binance.
+[2026-06-24 00:03:45] INFO [DBManager:112] - Saved 2584 records to 'binance_data.binance_ada_usdt_1m'.
+[2026-06-24 00:03:45] INFO [BinanceMain:36] - --- Binance Ingestion Pipeline Finished ---
