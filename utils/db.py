@@ -33,7 +33,12 @@ def get_connection():
             user=db_user,
             password=db_password
         )
-        logger.info(f"Connected to database '{db_name}'.")
+        # Force session to UTC timezone
+        with connection.cursor() as cursor:
+            cursor.execute("SET TIME ZONE 'UTC';")
+        connection.commit()
+
+        logger.info(f"Connected to database '{db_name}' (timezone forced to UTC).")
         return connection
     except Exception as error:
         logger.error(f"Failed to connect to the database: {error}")
@@ -45,11 +50,11 @@ def create_schema_and_table(conn, exchange: str, symbol: str, timeframe: str):
     clean_symbol = symbol.lower().replace("/", "_")
     table_name = f"{exchange.lower()}_{clean_symbol}_{timeframe.lower()}"
 
-    # SQL definition for schema and table
+    # SQL definition for schema and table using TIMESTAMP (without timezone) for clean UTC values
     create_schema_sql = f"CREATE SCHEMA IF NOT EXISTS {schema_name};"
     create_table_sql = f"""
     CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (
-        timestamp TIMESTAMPTZ PRIMARY KEY,
+        timestamp TIMESTAMP PRIMARY KEY,
         open      NUMERIC NOT NULL,
         high      NUMERIC NOT NULL,
         low       NUMERIC NOT NULL,

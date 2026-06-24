@@ -40,8 +40,21 @@ class BybitClient:
         bybit_symbol = f"{symbol.upper()}USDT"
         logger.info(f"Fetching historical candles for {bybit_symbol} from {start_time} to {end_time}...")
         
+        # Determine timeframe interval in milliseconds for safe forward pagination chunking
+        tf_ms = 60 * 1000  # Default to 1m
+        interval_lower = timeframe.lower()
+        if "m" in interval_lower:
+            tf_ms = int(interval_lower.replace("m", "")) * 60 * 1000
+        elif "h" in interval_lower:
+            tf_ms = int(interval_lower.replace("h", "")) * 60 * 60 * 1000
+        elif "d" in interval_lower:
+            tf_ms = 24 * 60 * 60 * 1000
+
         all_candles = []
         while since < end_limit:
+            # Query up to 1000 candles at a time forward to prevent Bybit from returning only the newest 1000
+            query_end = min(since + 1000 * tf_ms, end_limit)
+            
             retries = 0
             response = None
             while retries < max_retries:
@@ -51,7 +64,7 @@ class BybitClient:
                         symbol=bybit_symbol,
                         interval=interval,
                         start=since,
-                        end=end_limit,
+                        end=query_end,
                         limit=1000
                     )
                     if response.get("retCode") != 0:
@@ -68,7 +81,9 @@ class BybitClient:
             
             klines = response.get("result", {}).get("list", [])
             if not klines:
-                break
+                # If no candles returned in this chunk, advance since to avoid infinite loop
+                since = query_end + 1
+                continue
                 
             # Bybit returns newest first; reverse it
             klines.reverse()
@@ -93,21 +108,3 @@ class BybitClient:
             
         logger.info(f"Fetched {len(all_candles)} raw candles from Bybit.")
         return all_candles
-
-if __name__ == "__main__":
-    bybit_client = BybitClient()
-    try:
-        # Fetch some candles from a specific range to test
-        test_candles = bybit_client.fetch_raw_candles(
-            symbol="BTC", 
-            timeframe="1m", 
-            start_time="2026-06-20 00:00:00", 
-            end_time="2026-06-21 00:00:00",
-            max_retries=3,
-            retry_delay=2
-        )
-        if test_candles:
-            logger.info(f"Sample candle: {test_candles[0]}")
-            logger.info(f"Last candle: {test_candles[-1]}")
-    except Exception as e:
-        logger.error(f"Test failed: {e}")

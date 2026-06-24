@@ -82,20 +82,3 @@ class BinanceClient:
                     raise e
 
 
-if __name__ == "__main__":
-    # Quick self-test
-    binance_client = BinanceClient()
-    try:
-        test_candles = binance_client.fetch_raw_candles(
-            symbol="BTC",
-            timeframe="1h",
-            start_time="2026-06-20 00:00:00",
-            end_time="2026-06-21 00:00:00",
-            max_retries=3,
-            retry_delay=2
-        )
-        if test_candles:
-            logger.info(f"First candle : {test_candles[0]}")
-            logger.info(f"Last candle  : {test_candles[-1]}")
-    except Exception as e:
-        logger.error(f"Test failed: {e}")
