@@ -98,7 +98,9 @@ def download_exchange_data(exchange: str, symbol: str, timeframe: str, start_tim
         # 6. Calculate volume_pct column
         total_volume = df['volume'].sum()
         if total_volume > 0.0:
-            df['volume_pct'] = (df['volume'] / total_volume) * 100.0
+            # float to integer percentage conversion
+            df['volume_pct'] = ((df['volume'] / total_volume) * 100.0).round().astype(int)
+
         else:
             df['volume_pct'] = 0.0
 
