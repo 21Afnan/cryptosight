@@ -131,3 +131,134 @@ def download_exchange_data(exchange: str, symbol: str, timeframe: str, start_tim
         raise e
     finally:
         conn.close()
+def fetch_and_merge_missing_data(exchange: str, symbol: str, timeframe: str, output_path: str):
+    """
+    Queries database for stored candles, gets missing candles up to now from exchange,
+    merges both datasets, and saves the output to a CSV file. Does NOT save to database.
+    """
+    import os
+    import pandas as pd
+    from cryptosight.utils.db import get_connection
+    from cryptosight.data.binance.binance_client_exch import BinanceClient
+    from cryptosight.data.bybit.bybit_client_exch import BybitClient
+
+    print(f"\nStarting merge process for {exchange.upper()} {symbol} {timeframe}...")
+
+    # 1. Standardize table name and query database into a DataFrame
+    schema_name = f"{exchange.lower()}_data"
+    pair_name = symbol.upper()
+    if "/" not in pair_name:
+        pair_name = f"{pair_name}/USDT"
+    clean_symbol = pair_name.lower().replace("/", "_")
+    table_name = f"{exchange.lower()}_{clean_symbol}_{timeframe.lower()}"
+    
+    query = f"SELECT timestamp, open, high, low, close, volume FROM {schema_name}.{table_name} ORDER BY timestamp ASC;"
+    
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            colnames = [desc[0] for desc in cursor.description]
+        db_df = pd.DataFrame(rows, columns=colnames)
+    finally:
+        conn.close()
+
+    if db_df.empty:
+        print("Database table is empty. No data to merge.")
+        return None
+
+    db_df['timestamp'] = pd.to_datetime(db_df['timestamp'], utc=True)
+    db_df.set_index('timestamp', inplace=True)
+
+    db_min = db_df.index.min()
+    db_max = db_df.index.max()
+    print(f"Database data range: {db_min} to {db_max} (Total: {len(db_df)} records)")
+
+    # 2. Get current time in UTC
+    now_utc = pd.Timestamp.now(tz='UTC')
+    print(f"Current UTC Time: {now_utc}")
+
+    # 3. Define missing time window range
+    start_fetch = db_max.strftime("%Y-%m-%d %H:%M:%S")
+    end_fetch = "now"
+
+    # 4. Fetch missing data from Exchange Client
+    exchange_name = exchange.lower().strip()
+    if exchange_name == "binance":
+        client = BinanceClient()
+    elif exchange_name == "bybit":
+        client = BybitClient()
+    else:
+        raise ValueError(f"Unsupported exchange: {exchange_name}")
+
+    print(f"Fetching missing data from exchange starting from: {start_fetch}")
+    raw_candles = client.fetch_raw_candles(
+        symbol=symbol,
+        timeframe=timeframe,
+        start_time=start_fetch,
+        end_time=end_fetch,
+        max_retries=3,
+        retry_delay=2
+    )
+
+    if not raw_candles:
+        print("No missing data returned from the exchange.")
+        merged_df = db_df
+    else:
+        # Convert raw candles to DataFrame
+        timestamps = [pd.to_datetime(candle[0], unit='ms', utc=True) for candle in raw_candles]
+        ohlcv_values = [candle[1:6] for candle in raw_candles]
+
+        ex_df = pd.DataFrame(
+            ohlcv_values,
+            index=timestamps,
+            columns=['open', 'high', 'low', 'close', 'volume']
+        )
+
+        # Drop the last row (incomplete candle)
+        if not ex_df.empty:
+            ex_df = ex_df.iloc[:-1]
+
+        print(f"Fetched {len(ex_df)} new candles from Exchange.")
+
+        # Concat both and remove duplicate indexes (keeping newest from exchange)
+        merged_df = pd.concat([db_df, ex_df])
+        merged_df = merged_df[~merged_df.index.duplicated(keep='first')].sort_index()
+
+    print(f"Merged DataFrame range: {merged_df.index.min()} to {merged_df.index.max()} (Total: {len(merged_df)} records)")
+
+    # 5. Save the merged output to the specified file path
+    if output_path:
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        merged_df.to_csv(output_path)
+        print(f"SUCCESS: Merged data saved to file: {output_path}")
+
+    return merged_df
+
+
+if __name__ == "__main__":
+    # Test the function directly when running: python data/downloader.py
+    from pathlib import Path
+    import sys
+
+    # Add project's parent directory to sys.path to enable 'cryptosight' imports
+    project_root = Path(__file__).resolve().parent.parent
+    if str(project_root.parent) not in sys.path:
+        sys.path.insert(0, str(project_root.parent))
+
+    test_out = str(project_root / "logs" / "merged_test_output.csv")
+    print("Running ad-hoc test for fetch_and_merge_missing_data...")
+    try:
+        # Check Binance BTC 1m data merge
+        df = fetch_and_merge_missing_data(
+            exchange="binance",
+            symbol="BTC",
+            timeframe="1m",
+            output_path=test_out
+        )
+        if df is not None:
+            print(f"Test Succeeded! Merged rows count: {len(df)}")
+    except Exception as e:
+        print(f"Test Failed: {e}")
+
