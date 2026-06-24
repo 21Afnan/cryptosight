@@ -1,0 +1,16 @@
+[2026-06-24 12:24:39] INFO [BinanceClient:47] - Fetching BTCUSDT | 1h | 2026-06-20 00:00:00 to 2026-06-21 00:00:00
+[2026-06-24 12:24:39] INFO [BinanceClient:72] - Fetched 25 candles for BTCUSDT.
+[2026-06-24 12:24:39] INFO [BinanceClient:98] - First candle : [1781913600000, 63543.9, 63777.0, 63470.0, 63530.01, 640.14667]
+[2026-06-24 12:24:39] INFO [BinanceClient:99] - Last candle  : [1782000000000, 64298.01, 64322.91, 64237.31, 64294.0, 425.19081]
+[2026-06-24 12:25:03] INFO [BinanceMain:49] - === Config Loaded ===
+[2026-06-24 12:25:03] INFO [BinanceMain:50] - Exchange   : binance
+[2026-06-24 12:25:03] INFO [BinanceMain:51] - Symbols    : ['MINA']
+[2026-06-24 12:25:03] INFO [BinanceMain:52] - Timeframe  : 1m
+[2026-06-24 12:25:03] INFO [BinanceMain:53] - Start Time : 2026-06-22 00:00:00
+[2026-06-24 12:25:03] INFO [BinanceMain:54] - End Time   : now
+[2026-06-24 12:25:03] INFO [BinanceMain:55] - Fill Method: ffill
+[2026-06-24 12:25:03] INFO [BinanceMain:56] - Max Retries: 5
+[2026-06-24 12:25:03] INFO [BinanceMain:57] - Retry Delay: 3
+[2026-06-24 12:25:03] INFO [BinanceMain:15] - --- Starting Binance Ingestion Pipeline ---
+[2026-06-24 12:25:03] ERROR [BinanceMain:32] - Failed to process symbol MINA: Missing database configuration in .env
+[2026-06-24 12:25:03] INFO [BinanceMain:34] - --- Binance Ingestion Pipeline Finished ---

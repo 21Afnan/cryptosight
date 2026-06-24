@@ -1,16 +1,8 @@
-import os
 import sys
 import time
-import datetime
-from pathlib import Path
-
-# Add project root to path to resolve 'utils' imports
-project_root = Path(__file__).resolve().parent.parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
-
+import pandas as pd
 from pybit.unified_trading import HTTP
-from utils.logger import get_logger
+from cryptosight.utils.logger import get_logger
 
 logger = get_logger("BybitClient")
 
@@ -24,15 +16,15 @@ class BybitClient:
         self.session = HTTP(testnet=False)
 
     def fetch_raw_candles(self, symbol: str, timeframe: str, start_time: str, end_time: str = "now", max_retries: int = 5, retry_delay: int = 3) -> list:
-        # Convert start and end times to millisecond timestamps
-        dt_start = datetime.datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.timezone.utc)
-        since = int(dt_start.timestamp() * 1000)
+        # Convert start and end times to millisecond timestamps using pandas
+        dt_start = pd.to_datetime(start_time, format="%Y-%m-%d %H:%M:%S", utc=True)
+        since = int(dt_start.value // 10**6)
         
         if not end_time or end_time == "now":
             end_limit = int(time.time() * 1000)
         else:
-            dt_end = datetime.datetime.strptime(end_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.timezone.utc)
-            end_limit = int(dt_end.timestamp() * 1000)
+            dt_end = pd.to_datetime(end_time, format="%Y-%m-%d %H:%M:%S", utc=True)
+            end_limit = int(dt_end.value // 10**6)
             
         # Dynamically convert timeframe (e.g. "1m" -> "1", "1h" -> "60", "1d" -> "D")
         interval = timeframe.lower()

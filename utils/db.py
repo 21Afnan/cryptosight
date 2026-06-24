@@ -3,10 +3,7 @@ import psycopg2
 import datetime
 from pathlib import Path
 from dotenv import load_dotenv
-try:
-    from utils.logger import get_logger
-except ModuleNotFoundError:
-    from logger import get_logger
+from cryptosight.utils.logger import get_logger
 
 # Initialize logging for the database manager
 logger = get_logger("DBManager")
@@ -18,7 +15,7 @@ load_dotenv(dotenv_path=current_dir.parent / ".env")
 def get_connection():
     """Reads database configurations from env and connects to PostgreSQL."""
     db_host = os.getenv("DB_HOST")
-    db_port = os.getenv("DB_PORT", "5432")
+    db_port = os.getenv("DB_PORT")
     db_name = os.getenv("DB_NAME")
     db_user = os.getenv("DB_USER")
     db_password = os.getenv("DB_PASSWORD")
@@ -57,7 +54,8 @@ def create_schema_and_table(conn, exchange: str, symbol: str, timeframe: str):
         high      NUMERIC NOT NULL,
         low       NUMERIC NOT NULL,
         close     NUMERIC NOT NULL,
-        volume    NUMERIC NOT NULL
+        volume    NUMERIC NOT NULL,
+        volume_pct NUMERIC
     );
     """
     try:
@@ -94,15 +92,16 @@ def insert_ohlcv(conn, exchange: str, symbol: str, timeframe: str, ohlcv_data: l
 
     # Upsert query using ON CONFLICT (timestamp) to prevent duplicate key errors
     upsert_sql = f"""
-    INSERT INTO {schema_name}.{table_name} (timestamp, open, high, low, close, volume)
-    VALUES (%s, %s, %s, %s, %s, %s)
+    INSERT INTO {schema_name}.{table_name} (timestamp, open, high, low, close, volume, volume_pct)
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (timestamp) 
     DO UPDATE SET 
         open = EXCLUDED.open,
         high = EXCLUDED.high,
         low = EXCLUDED.low,
         close = EXCLUDED.close,
-        volume = EXCLUDED.volume;
+        volume = EXCLUDED.volume,
+        volume_pct = EXCLUDED.volume_pct;
     """
     try:
         with conn.cursor() as cursor:
@@ -137,22 +136,4 @@ def get_latest_timestamp(conn, exchange: str, symbol: str, timeframe: str):
         logger.error(f"Error getting latest timestamp from '{schema_name}.{table_name}': {error}")
         return None
 
-# Self-test block when file is executed directly
-if __name__ == "__main__":
-    logger.info("--- Starting Database Manager Self-Test ---")
-    try:
-        connection = get_connection()
-        create_schema_and_table(connection, exchange="bybit", symbol="BTC/USDT", timeframe="1m")
-        
-        # Insert one test record
-        test_data = [(datetime.datetime.now(datetime.timezone.utc), 60000.0, 60100.0, 59900.0, 60050.0, 1.2)]
-        insert_ohlcv(connection, "bybit", "BTC/USDT", "1m", test_data)
-        
-        # Read the latest timestamp
-        latest = get_latest_timestamp(connection, "bybit", "BTC/USDT", "1m")
-        logger.info(f"Self-test latest timestamp: {latest}")
-        
-        connection.close()
-        logger.info("--- Database Manager Self-Test Finished Successfully ---")
-    except Exception as e:
-        logger.error(f"--- Database Manager Self-Test Failed: {e} ---")
+
