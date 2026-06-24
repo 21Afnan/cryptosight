@@ -223,16 +223,17 @@ def fetch_and_merge_missing_data(exchange: str, symbol: str, timeframe: str, out
         print(f"Fetched {len(ex_df)} new candles from Exchange.")
 
         # Concat both and remove duplicate indexes (keeping newest from exchange)
-        merged_df = pd.concat([db_df, ex_df])
-        merged_df = merged_df[~merged_df.index.duplicated(keep='first')].sort_index()
+        # merged_df = pd.concat([db_df, ex_df])
+        # merged_df = merged_df[~merged_df.index.duplicated(keep='first')].sort_index()
+        merged_df = db_df
 
     print(f"Merged DataFrame range: {merged_df.index.min()} to {merged_df.index.max()} (Total: {len(merged_df)} records)")
 
     # 5. Save the merged output to the specified file path
-    if output_path:
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        merged_df.to_csv(output_path)
-        print(f"SUCCESS: Merged data saved to file: {output_path}")
+    # if output_path:
+    #     os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    #     merged_df.to_csv(output_path)
+    #     print(f"SUCCESS: Merged data saved to file: {output_path}")
 
     return merged_df
 
@@ -262,3 +263,40 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Test Failed: {e}")
 
+def resample_ohlcv(exchange: str, symbol: str, timeframe: str, target_timeframe: str = "4h", output_path: str = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    1. Calls fetch_and_merge_missing_data to fetch, merge, and clean database and exchange data.
+    2. Resamples the resulting merged data to the target higher timeframe.
+    3. Returns both: (merged_lower_tf_df, resampled_df)
+    """
+    import pandas as pd
+
+    # 1. Fetch, merge, and clean the data from DB and Exchange
+    merged_df = fetch_and_merge_missing_data(
+        exchange=exchange,
+        symbol=symbol,
+        timeframe=timeframe,
+        output_path=output_path
+    )
+
+    if merged_df is None or merged_df.empty:
+        print("No data available to resample.")
+        return pd.DataFrame(), pd.DataFrame()
+
+    # 2. Define aggregation rules for each column
+    agg_rules = {
+        'open': 'first',   # Open price of the first candle in the window
+        'high': 'max',     # Highest price reached during the period
+        'low': 'min',      # Lowest price reached during the period
+        'close': 'last',   # Close price of the last candle in the window
+        'volume': 'sum'    # Sum of all volumes during the period
+    }
+
+    # 3. Resample the merged DataFrame to the target timeframe (e.g., "4h")
+    resampled_df = merged_df.resample(target_timeframe).agg(agg_rules)
+
+    # 4. Drop empty intervals (gaps) from the resampled data
+    resampled_df.dropna(subset=['open', 'high', 'low', 'close'], inplace=True)
+
+    # Return both original merged DataFrame and the resampled DataFrame
+    return merged_df, resampled_df
