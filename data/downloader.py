@@ -78,7 +78,9 @@ def download_exchange_data(exchange: str, symbol: str, timeframe: str, start_tim
             columns=['open', 'high', 'low', 'close', 'volume']
         ).copy()
 
-
+        # Drop the last row (incomplete candle) since it is not complete
+        if not df.empty:
+            df = df.iloc[:-1]
 
         # Log how many missing (NaN) values exist in each column
         missing_counts = df.isnull().sum()
@@ -88,21 +90,16 @@ def download_exchange_data(exchange: str, symbol: str, timeframe: str, start_tim
         df['volume'] = df['volume'].fillna(0.0)
 
         # 5. Fill missing OHLC values based on fill_method parameter
+        ohlc_cols = ['open', 'high', 'low', 'close']
         if fill_method == "ffill":
-            df[['open', 'high', 'low', 'close']] = df[['open', 'high', 'low', 'close']].ffill()
+            df[ohlc_cols] = df[ohlc_cols].ffill()
         elif fill_method == "interpolate_linear":
-            df[['open', 'high', 'low', 'close']] = df[['open', 'high', 'low', 'close']].interpolate(method='linear')
+            df[ohlc_cols] = df[ohlc_cols].interpolate(method='linear')
         elif fill_method == "interpolate_time":
-            df[['open', 'high', 'low', 'close']] = df[['open', 'high', 'low', 'close']].interpolate(method='time')
+            df[ohlc_cols] = df[ohlc_cols].interpolate(method='time')
 
-        # 6. Calculate volume_pct column
-        total_volume = df['volume'].sum()
-        if total_volume > 0.0:
-            # Keep as float rounded to 4 decimal places to prevent small values rounding to 0
-            df['volume_pct'] = ((df['volume'] / total_volume) * 100.0).round(4)
-
-        else:
-            df['volume_pct'] = 0.0
+        # 6. Calculate volume_pct column (Temporarily removed/disabled)
+        df['volume_pct'] = None
 
         # 7. Convert final DataFrame back to list of tuples for database insert
         final_data = []
@@ -119,7 +116,7 @@ def download_exchange_data(exchange: str, symbol: str, timeframe: str, start_tim
                 float(row['low']),
                 float(row['close']),
                 float(row['volume']),
-                float(row['volume_pct'])
+                None  # volume_pct is disabled/None for now
             ))
 
         if not final_data:
