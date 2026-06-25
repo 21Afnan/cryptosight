@@ -23,6 +23,8 @@ def get_logger(name: str) -> logging.Logger:
         log_file = LOG_DIR / "binance.log"
     elif "bybit" in ctx:
         log_file = LOG_DIR / "bybit.log"
+    elif "db" in ctx:
+        log_file = LOG_DIR / "db.log"
     else:
         log_file = LOG_DIR / "app.log"
 

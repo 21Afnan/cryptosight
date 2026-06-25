@@ -1,68 +1,41 @@
-import yaml
-from pathlib import Path
-from cryptosight.data.downloader import download_exchange_data
+﻿from pathlib import Path
+from cryptosight.data.downloader import Downloader
 from cryptosight.utils.logger import get_logger
+from cryptosight.utils.config import load_config, log_config
 
 logger = get_logger("BybitMain")
 
 
-def main(exchange: str, symbols: list, timeframe: str, start_time: str,
-         end_time: str, fill_method: str, max_retries: int, retry_delay: int):
-    """
-    Main runner for bybit ingestion.
-    Reads all parameters from config and passes them to the downloader.
-    """
-    logger.info("--- Starting Bybit Ingestion Pipeline ---")
+class Main:
+    def __init__(self, config_name: str = "config.yaml"):
+        config_path = Path(__file__).parent / config_name
+        self.cfg = load_config(config_path)
+        log_config(logger, self.cfg)
 
-    for symbol in symbols:
-        try:
-            download_exchange_data(
-                exchange=exchange,
-                symbol=symbol,
-                timeframe=timeframe,
-                start_time=start_time,
-                end_time=end_time,
-                fill_method=fill_method,
-                max_retries=max_retries,
-                retry_delay=retry_delay
-            )
-        except Exception as e:
-            logger.error(f"Failed to process symbol {symbol}: {e}")
+    def main(self):
+        """Runs Bybit ingestion pipeline for all configured symbols."""
+        logger.info("--- Starting Bybit Ingestion Pipeline ---")
 
-    logger.info("--- Bybit Ingestion Pipeline Finished ---")
+        for symbol in self.cfg["symbols"]:
+            try:
+                dl = Downloader(
+                    exchange=self.cfg["exchange"],
+                    symbol=symbol,
+                    timeframe=self.cfg["timeframe"],
+                )
+                dl.download(
+                    start_time=self.cfg["start_time"],
+                    end_time=self.cfg["end_time"],
+                    max_retries=self.cfg["max_retries"],
+                    retry_delay=self.cfg["retry_delay"],
+                    fill_method=self.cfg["fill_method"],
+                )
+            except Exception as e:
+                logger.error(f"Failed to process {symbol}: {e}")
+
+        logger.info("--- Bybit Ingestion Pipeline Finished ---")
 
 
 if __name__ == "__main__":
-    # Path(__file__) = this file
-    # .parent = folder containing this file (bybit/)
-    # / "config.yaml" = joins path to config file
-    config_path = Path(__file__).parent / "config.yaml"
-    
-    # Path.read_text() reads file content — no need for open/close
-    config = yaml.safe_load(config_path.read_text())
-
-    # Safety check — wrap single string symbol in list
-    symbols = config.get("symbols", [])
-    if isinstance(symbols, str):
-        symbols = [symbols]
-
-    logger.info("=== Config Loaded ===")
-    logger.info(f"Exchange   : {config.get('exchange')}")
-    logger.info(f"Symbols    : {symbols}")
-    logger.info(f"Timeframe  : {config.get('timeframe')}")
-    logger.info(f"Start Time : {config.get('start_time')}")
-    logger.info(f"End Time   : {config.get('end_time')}")
-    logger.info(f"Fill Method: {config.get('fill_method')}")
-    logger.info(f"Max Retries: {config.get('max_retries')}")
-    logger.info(f"Retry Delay: {config.get('retry_delay')}")
-
-    main(
-        exchange=config.get("exchange"),
-        symbols=symbols,
-        timeframe=config.get("timeframe"),
-        start_time=config.get("start_time"),
-        end_time=config.get("end_time"),
-        fill_method=config.get("fill_method"),
-        max_retries=config.get("max_retries"),
-        retry_delay=config.get("retry_delay")
-    )
+    pipeline = Main()
+    pipeline.main()
