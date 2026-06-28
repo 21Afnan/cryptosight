@@ -2,6 +2,7 @@ import time
 import pandas as pd
 from pybit.unified_trading import HTTP
 from cryptosight.utils.logger import get_logger
+from cryptosight.utils.config import normalize_timestamp
 
 logger = get_logger("BybitClient")
 
@@ -46,8 +47,8 @@ class BybitClient:
 
         # Convert human-readable strings to milliseconds — Bybit only understands ms
         start_ms = int(pd.to_datetime(start_time, format="%Y-%m-%d %H:%M:%S", utc=True).value // 10**6)
-        end_ms   = int(pd.Timestamp.now(tz="UTC").value // 10**6) if (not end_time or end_time == "now") \
-                   else int(pd.to_datetime(end_time, format="%Y-%m-%d %H:%M:%S", utc=True).value // 10**6)
+        end_str  = normalize_timestamp(end_time)
+        end_ms   = int(pd.to_datetime(end_str, format="%Y-%m-%d %H:%M:%S", utc=True).value // 10**6)
 
         # interval  → what Bybit API expects  e.g "1h" → "60"
         # candle_ms → how many ms one candle spans, used for pagination

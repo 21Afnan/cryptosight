@@ -2,6 +2,7 @@ import time
 import pandas as pd
 from binance import Client
 from cryptosight.utils.logger import get_logger
+from cryptosight.utils.config import normalize_timestamp
 
 logger = get_logger("BinanceClient")
 
@@ -28,11 +29,7 @@ class BinanceClient:
         binance_symbol = f"{symbol.upper()}USDT"
 
         # Binance does not understand "now" — convert it to a real UTC string
-        end_str = (
-            pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M:%S")
-            if end_time == "now"
-            else end_time
-        )
+        end_str = normalize_timestamp(end_time)
 
         retries = 0
         while retries < max_retries:

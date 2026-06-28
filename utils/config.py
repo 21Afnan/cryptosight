@@ -1,4 +1,5 @@
 import yaml
+import pandas as pd
 from pathlib import Path
 from logging import Logger
 
@@ -34,3 +35,13 @@ def log_config(logger: Logger, config: dict) -> None:
     logger.info(f"Fill Method: {config.get('fill_method')}")
     logger.info(f"Max Retries: {config.get('max_retries')}")
     logger.info(f"Retry Delay: {config.get('retry_delay')}")
+
+
+def normalize_timestamp(timestamp_str: str) -> str:
+    """
+    Converts 'now' (or None/empty) into a standard UTC string: 'YYYY-MM-DD HH:MM:SS'.
+    Passes valid historical date strings through untouched.
+    """
+    if not timestamp_str or timestamp_str.lower().strip() == "now":
+        return pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M:%S")
+    return timestamp_str

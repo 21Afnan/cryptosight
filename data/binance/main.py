@@ -1,5 +1,11 @@
-﻿from pathlib import Path
-from cryptosight.data.downloader import Downloader
+import sys
+import os
+from pathlib import Path
+
+# Add project root to sys.path so standalone execution works
+sys.path.insert(0, os.path.abspath("../../.."))
+
+from cryptosight.data.downloader import run_pipeline
 from cryptosight.utils.logger import get_logger
 from cryptosight.utils.config import load_config, log_config
 
@@ -18,17 +24,17 @@ class Main:
 
         for symbol in self.cfg["symbols"]:
             try:
-                dl = Downloader(
+                # LITERALLY ONLY ONE FUNCTION CALL PASSING ALL PARAMETERS TOGETHER!
+                run_pipeline(
                     exchange=self.cfg["exchange"],
                     symbol=symbol,
                     timeframe=self.cfg["timeframe"],
-                )
-                dl.download(
                     start_time=self.cfg["start_time"],
                     end_time=self.cfg["end_time"],
                     max_retries=self.cfg["max_retries"],
                     retry_delay=self.cfg["retry_delay"],
                     fill_method=self.cfg["fill_method"],
+                    target_timeframe=self.cfg["target_timeframe"],
                 )
             except Exception as e:
                 logger.error(f"Failed to process {symbol}: {e}")

@@ -25,3 +25,6 @@ max_retries: 5
 
 # Time to wait (in seconds) between retries
 retry_delay: 3          
+
+# Target timeframe for resampling
+target_timeframe: "5m"

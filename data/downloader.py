@@ -6,6 +6,7 @@ from cryptosight.utils.db import (
 )
 from cryptosight.data.binance.binance_client import BinanceClient
 from cryptosight.data.bybit.bybit_client import BybitClient
+from cryptosight.utils.config import normalize_timestamp
 
 logger = get_logger("Downloader")
 
@@ -67,7 +68,9 @@ class Downloader:
                 logger.info("No new candles returned from exchange.")
                 return
 
-            df = df.set_index("timestamp").iloc[:-1]  # drop unclosed live candle
+            df = df.set_index("timestamp")
+            if (not end_time or end_time == "now") and len(df) > 1:
+                df = df.iloc[:-1]  # drop unclosed live candle when fetching up to 'now'
 
             if df.empty:
                 logger.info("No completed candles to save.")
@@ -78,7 +81,7 @@ class Downloader:
             # Fill missing values inline
             df["volume"] = df["volume"].fillna(0.0)
             if fill_method == "ffill":
-                df[cols] = df[cols].ffill()
+                df[cols] = df[cols].ffill().bfill()
 
             insert_ohlcv(conn, self.exchange, self.symbol, self.timeframe, list(df.itertuples(index=True, name=None)))
 
@@ -136,7 +139,7 @@ class Downloader:
             conn.close()
 
         # Step 3 — fetch the gap from exchange
-        end_str = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M:%S") if end_time == "now" else end_time
+        end_str = normalize_timestamp(end_time)
 
         new_df = self.client.fetch_candles(
             symbol=self.symbol, timeframe=self.timeframe,
@@ -145,7 +148,9 @@ class Downloader:
         )
 
         if not new_df.empty:
-            new_df = new_df.set_index("timestamp").iloc[:-1]  # drop unclosed live candle
+            new_df = new_df.set_index("timestamp")
+            if (not end_time or end_time == "now") and len(new_df) > 1:
+                new_df = new_df.iloc[:-1]  # drop unclosed live candle when fetching up to 'now'
             logger.info(f"Fetched {len(new_df)} new candles from {self.exchange.upper()}.")
 
         # Step 4 — merge DB + new data
@@ -162,7 +167,7 @@ class Downloader:
 
         # Step 5 — fill missing values
         merged_df["volume"] = merged_df["volume"].fillna(0.0)
-        merged_df[["open", "high", "low", "close"]] = merged_df[["open", "high", "low", "close"]].ffill()
+        merged_df[["open", "high", "low", "close"]] = merged_df[["open", "high", "low", "close"]].ffill().bfill()
 
         logger.info(f"get_data() ready --> {len(merged_df)} candles ({merged_df.index.min()} to {merged_df.index.max()})")
         return merged_df
@@ -174,7 +179,12 @@ class Downloader:
             logger.warning("No data to resample.")
             return pd.DataFrame(), pd.DataFrame()
 
-        resampled_df = original_df.resample(target_timeframe).agg({
+        # Convert crypto minute abbreviation ('5m') to pandas frequency ('5min')
+        pandas_freq = target_timeframe
+        if target_timeframe.endswith("m") and not target_timeframe.endswith("min"):
+            pandas_freq = target_timeframe[:-1] + "min"
+
+        resampled_df = original_df.resample(pandas_freq).agg({
             "open":   "first",
             "high":   "max",
             "low":    "min",
@@ -184,4 +194,39 @@ class Downloader:
 
         logger.info(f"Resampled to [{target_timeframe}] — {len(resampled_df)} candles.")
         return original_df, resampled_df
+
+def run_pipeline(
+    exchange: str,
+    symbol: str,
+    timeframe: str,
+    start_time: str,
+    end_time: str,
+    max_retries: int,
+    retry_delay: int,
+    fill_method: str,
+    target_timeframe: str,
+):
+    """
+    One-stop Master Pipeline Function:
+    Creates Downloader object internally and runs download, get_data, or resample in a single call.
+    """
+    dl = Downloader(exchange=exchange, symbol=symbol, timeframe=timeframe)
+    logger.info(f"Running master pipeline for {dl.exchange.upper()} | {dl.symbol.upper()} [{dl.timeframe}]")
+
+    # 1. DOWNLOAD & SAVE TO DB (Active by default)
+    dl.download(
+        start_time=start_time,
+        end_time=end_time,
+        max_retries=max_retries,
+        retry_delay=retry_delay,
+        fill_method=fill_method,
+    )
+
+    # 2. GET FULL MERGED DATA IN MEMORY (Uncomment below to use)
+    # df = dl.get_data(start_time=start_time, end_time=end_time, max_retries=max_retries, retry_delay=retry_delay)
+    # return df
+
+    # 3. RESAMPLE TO TARGET TIMEFRAME (Uncomment below to use)
+    # orig_df, resampled_df = dl.resample(target_timeframe=target_timeframe, start_time=start_time, end_time=end_time, max_retries=max_retries, retry_delay=retry_delay)
+    # return resampled_df
 
