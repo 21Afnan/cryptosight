@@ -12,20 +12,22 @@ It is designed to be fully automatic: it checks the database for existing record
 cryptosight/
 ├── data/
 │   ├── binance/
-│   │   ├── binance_client_exch.py  # Binance data fetching client
+│   │   ├── binance_client.py      # Binance data fetching client
 │   │   ├── config.yaml            # Configuration file for Binance symbol ingestion
 │   │   └── main.py                # Entry point script to run Binance ingestion
 │   ├── bybit/
-│   │   ├── bybit_client_exch.py    # Bybit data fetching client with forward chunk pagination
+│   │   ├── bybit_client.py        # Bybit data fetching client with forward chunk pagination
 │   │   ├── config.yaml            # Configuration file for Bybit symbol ingestion
 │   │   └── main.py                # Entry point script to run Bybit ingestion
 │   └── downloader.py              # Central orchestrator (processes gaps, filters incomplete candles, handles merging)
 ├── logs/
 │   ├── binance.log                # Execution logs for Binance
-│   └── bybit.log                  # Execution logs for Bybit
+│   ├── bybit.log                  # Execution logs for Bybit
+│   └── db.log / app.log           # Database and general execution logs
 ├── utils/
+│   ├── config.py                  # YAML config loader and validation utility
 │   ├── db.py                      # PostgreSQL connection manager (timezone forced to UTC)
-│   └── logger.py                  # Logger helper
+│   └── logger.py                  # Logger helper with rotating file handlers
 ├── .env                           # Environment file for database credentials (git-ignored)
 ├── requirements.txt               # Project dependencies
 └── README.md                      # Documentation
@@ -45,7 +47,7 @@ graph LR
 ```
 
 1. **Start**: The user runs the main script for an exchange (e.g. `python data/binance/main.py`).
-2. **Config**: The script reads symbols, timeframe, and target dates from the exchange's `config.yaml`.
+2. **Config**: The script reads symbols, timeframe, and target dates from the exchange's `config.yaml` via `utils/config.py`.
 3. **Database Check**: The pipeline checks the database for the latest stored timestamp to avoid redownloading existing data.
 4. **Fetch**: The exchange client fetches missing data from the exchange APIs.
    - *Bybit Client* uses a forward pagination chunking loop of 1000 candles to ensure complete historical data.
@@ -80,9 +82,12 @@ DB_PASSWORD=your_password
 
 ### 3. Edit Ingestion Settings
 Update the settings in [data/binance/config.yaml](file:///d:/Neurog_Internship/cryptosight/data/binance/config.yaml) or [data/bybit/config.yaml](file:///d:/Neurog_Internship/cryptosight/data/bybit/config.yaml):
-- `symbols`: List of symbols to ingest (e.g., `BTC`, `SOL`).
-- `timeframe`: Candlestick interval (e.g., `1m`, `5m`, `1h`).
-- `start_time`: Time to begin fetching from (e.g., `2026-06-22 00:00:00`).
+- `symbols`: Single string or list of symbols to ingest (e.g., `["BTC", "ADA"]`).
+- `timeframe`: Candlestick interval (e.g., `1m`, `5m`, `1h`, `1d`).
+- `start_time`: UTC timestamp to begin fetching from (e.g., `"2026-06-22 00:00:00"`).
+- `end_time`: Target end time in UTC or `"now"` for real-time fetching.
+- `fill_method`: Method to handle missing data gaps inline (e.g., `"ffill"` for forward fill).
+- `max_retries` & `retry_delay`: API error retry parameters.
 
 ### 4. Run the Ingestion Pipeline
 To ingest data from Binance:
@@ -99,18 +104,40 @@ python data/bybit/main.py
 
 ## 🛠️ Advanced Features
 
-### Ad-hoc Data Merging (without DB writes)
-If you want to fetch database data and merge it with current live exchange data *without* writing back to the PostgreSQL database, use the `fetch_and_merge_missing_data` function in `data/downloader.py`:
+### Ad-hoc Data Merging & Fetching (without DB writes)
+If you want to load stored data from PostgreSQL and merge it with live exchange data up to the current timestamp *without* saving new exchange records back to the database, use the `get_data` method on the `Downloader` class:
 
 ```python
-from cryptosight.data.downloader import fetch_and_merge_missing_data
+from cryptosight.data.downloader import Downloader
 
-# Fetches stored data, finds missing range up to now, fetches from exchange,
-# merges them, and saves the output to a CSV file.
-df = fetch_and_merge_missing_data(
-    exchange="bybit",
-    symbol="BTC",
-    timeframe="1m",
-    output_path="logs/merged_btc_data.csv"
+dl = Downloader(exchange="bybit", symbol="btc", timeframe="1h")
+
+# Loads stored DB candles, fetches missing gap up to 'now' from exchange,
+# fills missing values, and returns a merged Pandas DataFrame.
+df = dl.get_data(
+    start_time="2026-06-22 00:00:00",
+    end_time="now",
+    max_retries=5,
+    retry_delay=3
 )
+print(df.tail())
+```
+
+### Timeframe Resampling
+You can easily resample your ingested candlestick data to a higher timeframe (e.g., resampling `1h` data into `4h` candles) using the `resample` method:
+
+```python
+from cryptosight.data.downloader import Downloader
+
+dl = Downloader(exchange="binance", symbol="btc", timeframe="1h")
+
+# Returns tuple of (original_df, resampled_df)
+original_df, resampled_df = dl.resample(
+    target_timeframe="4h",
+    start_time="2026-06-22 00:00:00",
+    end_time="now",
+    max_retries=5,
+    retry_delay=3
+)
+print(resampled_df.tail())
 ```
