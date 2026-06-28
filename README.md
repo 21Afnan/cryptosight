@@ -110,6 +110,7 @@ end_time: "now"              # "now" fetches up to real-time current minute
 fill_method: "ffill"         # "ffill" (Forward Fill) fills small market gaps
 max_retries: 5
 retry_delay: 3
+target_timeframe: "5m"       # Optional target timeframe for resampling
 ```
 
 ---
