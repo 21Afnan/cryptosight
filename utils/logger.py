@@ -25,6 +25,8 @@ def get_logger(name: str) -> logging.Logger:
         log_file = LOG_DIR / "bybit.log"
     elif "db" in ctx:
         log_file = LOG_DIR / "db.log"
+    elif "indicators" in ctx:
+        log_file = LOG_DIR / "tal_Indicators.log"
     else:
         log_file = LOG_DIR / "app.log"
 

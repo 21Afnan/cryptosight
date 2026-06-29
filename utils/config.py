@@ -35,6 +35,7 @@ def log_config(logger: Logger, config: dict) -> None:
     logger.info(f"Fill Method: {config.get('fill_method')}")
     logger.info(f"Max Retries: {config.get('max_retries')}")
     logger.info(f"Retry Delay: {config.get('retry_delay')}")
+    logger.info(f"Target Timeframe : {config.get('target_timeframe')}")
 
 
 def normalize_timestamp(timestamp_str: str) -> str:

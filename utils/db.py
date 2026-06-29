@@ -1,4 +1,6 @@
 import os
+import csv
+from io import StringIO
 import psycopg2
 from pathlib import Path
 from dotenv import load_dotenv
@@ -82,31 +84,56 @@ def create_schema_and_table(conn, exchange: str, symbol: str, timeframe: str):
 
 
 def insert_ohlcv(conn, exchange: str, symbol: str, timeframe: str, ohlcv_data: list):
-    """Inserts or updates OHLCV data records into the database."""
+    """Inserts or updates OHLCV data records into the database using COPY + Temp Table."""
     if not ohlcv_data:
         return
 
     schema_name, table_name = get_table_names(exchange, symbol, timeframe)
+    full_table = f"{schema_name}.{table_name}"
+    temp_table = f"temp_{table_name}"
 
-    upsert_sql = f"""
-    INSERT INTO {schema_name}.{table_name} (timestamp, open, high, low, close, volume)
-    VALUES (%s, %s, %s, %s, %s, %s)
-    ON CONFLICT (timestamp) 
-    DO UPDATE SET 
-        open   = EXCLUDED.open,
-        high   = EXCLUDED.high,
-        low    = EXCLUDED.low,
-        close  = EXCLUDED.close,
-        volume = EXCLUDED.volume;
-    """
+    # 1. Deduplicate incoming batch in Python keeping the last candle per timestamp
+    unique_data = {row[0]: row for row in ohlcv_data}
+    deduped_data = list(unique_data.values())
+
+    # 2. Convert Python list of tuples into an in-memory TSV string buffer
+    #    NaN/NaT -> '' so COPY loads them as real NULL, not the literal text "nan"
+    buffer = StringIO()
+    writer = csv.writer(buffer, delimiter='\t')
+    for row in deduped_data:
+        writer.writerow(['' if v != v else v for v in row])  # v != v is True only for NaN
+    buffer.seek(0)
+
     try:
         with conn.cursor() as cursor:
-            cursor.executemany(upsert_sql, ohlcv_data)
+            # 3. Create a temporary staging table (session-local, auto-dropped on commit)
+            cursor.execute(f"DROP TABLE IF EXISTS {temp_table};")
+            cursor.execute(f"""
+                CREATE TEMP TABLE {temp_table} 
+                (LIKE {full_table} INCLUDING DEFAULTS) ON COMMIT DROP;
+            """)
+
+            # 4. Stream data via COPY into the temp table — one round-trip, not N
+            cursor.copy_from(buffer, temp_table, sep='\t', columns=('timestamp', 'open', 'high', 'low', 'close', 'volume'))
+
+            # 5. Bulk upsert from temp table into the real table, handling ON CONFLICT
+            cursor.execute(f"""
+                INSERT INTO {full_table} (timestamp, open, high, low, close, volume)
+                SELECT DISTINCT ON (timestamp) timestamp, open, high, low, close, volume FROM {temp_table}
+                ORDER BY timestamp ASC
+                ON CONFLICT (timestamp) DO UPDATE SET 
+                    open   = EXCLUDED.open,
+                    high   = EXCLUDED.high,
+                    low    = EXCLUDED.low,
+                    close  = EXCLUDED.close,
+                    volume = EXCLUDED.volume;
+            """)
+
             conn.commit()
-            logger.info(f"Saved {len(ohlcv_data)} records to '{schema_name}.{table_name}'.")
+            logger.info(f"Saved {len(ohlcv_data)} records to '{full_table}' via COPY.")
     except Exception as error:
         conn.rollback()
-        logger.error(f"Error inserting data into '{schema_name}.{table_name}': {error}")
+        logger.error(f"Error inserting via COPY into '{full_table}': {error}")
         raise
 
 
