@@ -122,58 +122,10 @@ DB_PASSWORD=your_password
 ## 🚀 Usage Examples
 
 ### 1. Automated Data Ingestion
-Execute the ingestion script directly from any working directory:
-
-```powershell
-# Run Binance ingestion
-python data/binance/main.py
-
-# Run Bybit ingestion
-python data/bybit/main.py
-```
+Execute the ingestion script directly from any working directory to fetch missing historical data from either Binance or Bybit. The scripts automatically determine the missing time range and bulk insert the new candles into the PostgreSQL database.
 
 ### 2. In-Memory Gap Fetching & Resampling
-Load historical candles from PostgreSQL, merge them with live exchange gap data in RAM, and resample timeframes on the fly:
-
-```python
-from cryptosight.data.downloader import Downloader
-
-dl = Downloader(exchange="bybit", symbol="btc", timeframe="1m")
-
-# Get combined DB + Live gap dataframe
-df = dl.get_data(start_time="2026-06-22 00:00:00", end_time="now")
-
-# Automatically resample 1-minute data into clean 5-minute candles
-original_1m, resampled_5m = dl.resample(target_timeframe="5m", start_time="2026-06-22 00:00:00", end_time="now")
-print(resampled_5m.tail())
-```
+Load historical candles from PostgreSQL, merge them with live exchange gap data in RAM, and resample timeframes on the fly using the `Downloader` orchestrator. This allows for seamless transitions between different timeframe granularities (e.g., converting 1-minute base data into clean 5-minute candles).
 
 ### 3. Quantitative Analysis & Interactive Dashboard
-Calculate technical indicators and render a comprehensive interactive trading dashboard:
-
-```python
-from cryptosight.data.downloader import Downloader
-from cryptosight.tal_Indicators.indicators import Indicators
-
-# 1. Fetch live market data
-dl = Downloader(exchange="bybit", symbol="btc", timeframe="1m")
-df = dl.get_data(start_time="2026-06-25 00:00:00", end_time="now")
-
-# 2. Initialize Indicators wrapper with custom global overrides
-ind = Indicators(
-    df,
-    RSI={"timeperiod": 14},
-    BBANDS={"timeperiod": 20, "nbdevup": 2.0, "nbdevdn": 2.0}
-)
-
-# 3. Compute indicators directly as Python methods
-rsi_df = ind.rsi()
-macd_df = ind.macd()          # Returns columns: ['macd', 'signal', 'histogram']
-bbands_df = ind.bbands()      # Returns columns: ['upper_band', 'middle_band', 'lower_band']
-
-print("MACD Output:")
-print(macd_df.tail(2))
-
-# 4. Launch multi-panel interactive Plotly dashboard in ONE call!
-ind.plot(["RSI", "MACD", "BBANDS"])
-```
+Use the `Indicators` wrapper to calculate technical indicators (like RSI, MACD, Bollinger Bands) directly as python methods with custom parameters. Finally, launch a comprehensive multi-panel interactive Plotly dashboard in one call to visualize price action alongside your computed indicators.
