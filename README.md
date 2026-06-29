@@ -39,7 +39,6 @@ cryptosight/
 │   └── downloader.py              # Master orchestrator (run_pipeline, download, get_data, resample)
 ├── tal_Indicators/
 │   ├── config.py                  # Institutional catalog of 158 TA-Lib indicators & schema definitions
-│   ├── generate_config.py         # Automated TA-Lib metadata scraper and schema builder
 │   └── indicators.py              # Dynamic Indicators class wrapper & Plotly master dashboard engine
 ├── logs/
 │   ├── binance.log                # Rotating log file for Binance execution
@@ -47,7 +46,7 @@ cryptosight/
 │   └── db.log                     # Database connection and query execution logs
 ├── utils/
 │   ├── config.py                  # YAML loader and timestamp normalization utility
-│   ├── db.py                      # PostgreSQL schema, table creation, and bulk executemany loader
+│   ├── db.py                      # PostgreSQL schema, table creation, and bulk COPY loader
 │   └── logger.py                  # Rotating file and console logger configuration
 ├── .env                           # Database environment variables (git-ignored)
 ├── requirements.txt               # Python package dependencies
@@ -74,7 +73,7 @@ graph TD
     API --> Clean["Normalize Timestamps & Drop Unclosed Live Candle"]
     Clean --> Fill["Inline Data Cleaning (ffill / bfill)"]
     Fill --> Dedupe["Deduplicate Indices (~duplicated keep='last')"]
-    Dedupe --> Save["Bulk SQL Insert via executemany()"]
+    Dedupe --> Save["Bulk SQL Insert via COPY & Temp Table"]
     Save --> Success["Pipeline Complete 🚀"]
 ```
 
