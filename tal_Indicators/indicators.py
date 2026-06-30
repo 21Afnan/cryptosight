@@ -103,7 +103,7 @@ if __name__ == "__main__":
 
     dl = Downloader(exchange="bybit", symbol="btc", timeframe="1m")
     df = dl.get_data(start_time="2026-06-22 00:00:00", end_time="now", max_retries=5, retry_delay=3)
-
+    df = df.tail(1000)
     # Pass global custom parameters directly into Indicators initialization!
     ind = Indicators(
         df,
