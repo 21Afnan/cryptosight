@@ -121,11 +121,28 @@ DB_PASSWORD=your_password
 
 ## 🚀 Usage Examples
 
-### 1. Automated Data Ingestion
+### 1. Automated Data Ingestion (Manual)
 Execute the ingestion script directly from any working directory to fetch missing historical data from either Binance or Bybit. The scripts automatically determine the missing time range and bulk insert the new candles into the PostgreSQL database.
+
+### 2. Fully Automated Ingestion via Windows Task Scheduler
+To set up a hands-free data pipeline that runs continuously in the background (e.g., every 5 minutes):
+1. Create a `.bat` file (e.g., `run_binance.bat`) in the root directory:
+   ```bat
+   @echo off
+   cd /d "D:\Neurog_Internship"
+   call "venv\Scripts\activate.bat"
+   python -m cryptosight.data.binance.main
+   ```
+2. Open **Windows Task Scheduler** and create a new task.
+3. Check **"Run only when user is logged on"** (or provide a password for the background task) and tick **"Hidden"** to prevent terminal popups.
+4. Set the **Trigger** to repeat every 5 minutes indefinitely.
+5. Set the **Action** to start your `.bat` file, ensuring `Start in` is set to the root project directory (e.g., `D:\Neurog_Internship`).
+6. The orchestrator will automatically query the database gap and append new candles silently!
 
 ### 2. In-Memory Gap Fetching & Resampling
 Load historical candles from PostgreSQL, merge them with live exchange gap data in RAM, and resample timeframes on the fly using the `Downloader` orchestrator. This allows for seamless transitions between different timeframe granularities (e.g., converting 1-minute base data into clean 5-minute candles).
 
-### 3. Quantitative Analysis & Interactive Dashboard
+### 4. Quantitative Analysis & Interactive Dashboard
 Use the `Indicators` wrapper to calculate technical indicators (like RSI, MACD, Bollinger Bands) directly as python methods with custom parameters. Finally, launch a comprehensive multi-panel interactive Plotly dashboard in one call to visualize price action alongside your computed indicators.
+
+> **💡 Pro Tip (Handling Big Data):** When dealing with years of data (e.g., 1M+ candles), calculate your indicators on the full dataset, but slice the dataframe before plotting (e.g., `df = df.tail(1000)`) to prevent the browser/Plotly from freezing due to memory overload.
