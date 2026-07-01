@@ -50,28 +50,56 @@ class Indicators:
             else:
                 res = res.to_frame(name=output_names[0])
 
-            # Stash params actually used — needed for unique column naming
+            # Stash params/category — needed for column naming
             res.attrs["used_params"] = final_params
+            res.attrs["category"] = cfg.get("category", "")
             return res
 
         return caller
 
-    def get_dataframe(self, names: list = None, include_ohlcv: bool = True, **params_per_name) -> pd.DataFrame:
+    def generate_alias(self, indicator_name: str, output_name: str, params: dict, category: str) -> str:
+        """
+        Auto-generates a Signals-module-compliant alias string.
+        Pattern indicators  -> pat_<NAME>              (e.g. pat_DOJI)
+        Single-output       -> ind_<INDICATOR>_<params> (e.g. ind_RSI_14)
+        Multi-output primary-> ind_<INDICATOR>_<params> (e.g. ind_MACD_12_26_9)
+        Multi-output other  -> ind_<INDICATOR>_<OUTPUT>_<params> (e.g. ind_MACD_SIGNAL_12_26_9)
+        """
+        upper_ind = indicator_name.upper()
+        param_suffix = "_".join(str(v) for v in params.values())
+
+        if category == "Pattern Recognition":
+            pat_name = upper_ind[3:] if upper_ind.startswith("CDL") else upper_ind
+            return f"pat_{pat_name}"
+
+        is_primary = output_name.upper() == upper_ind
+        alias = f"ind_{upper_ind}" if is_primary else f"ind_{upper_ind}_{output_name.upper()}"
+
+        if param_suffix:
+            alias += f"_{param_suffix}"
+        return alias
+
+    def get_dataframe(
+        self,
+        names: list = None,
+        include_ohlcv: bool = True,
+        alias_style: bool = False,
+        **params_per_name
+    ) -> pd.DataFrame:
         """
         ONE function to build any indicator DataFrame you need.
 
         names          : list of indicators to calculate, e.g. ["rsi", "macd", "atr"]
-        include_ohlcv  : True  -> returns OHLCV + indicator columns (for saving/signals)
-                         False -> returns indicator columns only (for quick inspection/plotting)
+        include_ohlcv  : True  -> returns OHLCV + indicator columns
+                         False -> returns indicator columns only
+        alias_style    : False -> original naming, e.g. RSI_RSI_14           (default, backward compatible)
+                         True  -> Signals-module naming, e.g. ind_RSI_14     (for signals/main.py)
         params_per_name: per-indicator param overrides, e.g. rsi={"timeperiod": 14}
 
-        Column naming is always collision-safe: INDICATORNAME_OUTPUT_PARAMVALUES
-        e.g. RSI_RSI_14, MACD_MACD_12_26_9, MACD_SIGNAL_12_26_9
-        Safe to call the same indicator more than once with different params.
+        Safe to call the same indicator more than once with different params —
+        column names always stay unique either way.
         """
         names = names or []
-
-        # Base: either a copy of OHLCV, or an empty frame sharing the same index
         result_df = self.df.copy() if include_ohlcv else pd.DataFrame(index=self.df.index)
 
         for n in names:
@@ -80,14 +108,18 @@ class Indicators:
                 call_params = params_per_name.get(n, {})
                 res = caller(**call_params)
 
-                # Build param suffix like "14" or "12_26_9" from the params actually used
                 used_params = res.attrs.get("used_params", {})
+                category = res.attrs.get("category", "")
                 suffix = "_".join(str(v) for v in used_params.values())
 
                 for col in res.columns:
-                    col_name = f"{n.upper()}_{col.upper()}"
-                    if suffix:
-                        col_name += f"_{suffix}"
+                    if alias_style:
+                        col_name = self.generate_alias(n, col, used_params, category)
+                    else:
+                        col_name = f"{n.upper()}_{col.upper()}"
+                        if suffix:
+                            col_name += f"_{suffix}"
+
                     result_df[col_name] = res[col]
 
             except Exception as e:
@@ -95,33 +127,32 @@ class Indicators:
 
         return result_df
 
+def apply_indicators_from_config(df: pd.DataFrame, indicator_config: dict) -> pd.DataFrame:
+    """
+    Helper function to calculate and merge all indicators based on the YAML config.
+    """
+    ind = Indicators(df)
+    merged_df = df.copy()
 
-if __name__ == "__main__":
-    from cryptosight.data.downloader import Downloader
-
-    dl = Downloader(exchange="bybit", symbol="btc", timeframe="1m")
-    df = dl.get_data(start_time="2026-06-22 00:00:00", end_time="now", max_retries=5, retry_delay=3)
-    df = df.tail(1000)
-
-    ind = Indicators(
-        df,
-        RSI={"timeperiod": 14},
-        ATR={"timeperiod": 14}
-    )
-
-    # Indicators only, no OHLCV — quick look
-    quick_df = ind.get_dataframe(["rsi", "macd"], include_ohlcv=False)
-    print("Indicators only:")
-    print(quick_df.tail(5))
-
-    # Full OHLCV + indicators — for saving/signals module
-    full_df = ind.get_dataframe(["rsi", "macd", "atr"], include_ohlcv=True)
-    print("\nFull OHLCV + indicators:")
-    print(full_df.tail(10))
-
-    import os
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    csv_path = os.path.join(current_dir, "indicators_output.csv")
-    
-    full_df.to_csv(csv_path)
-    print(f"\nSaved to {csv_path}")
+    for ind_name, configs in indicator_config.items():
+        for cfg in configs:
+            params = cfg.get("parameters", {})
+            try:
+                caller = getattr(ind, ind_name)
+                res = caller(**params)
+            
+                used_params = res.attrs.get("used_params", {})
+                category = res.attrs.get("category", "")
+                aliases_map = cfg.get("aliases", {})
+            
+                for col in res.columns:
+                    if col in aliases_map:
+                        col_alias = aliases_map[col]
+                    else:
+                        col_alias = ind.generate_alias(ind_name, col, used_params, category)
+                    
+                    merged_df[col_alias] = res[col]
+            except Exception as e:
+                logger.error(f"Failed to calculate {ind_name}: {e}")
+            
+    return merged_df
