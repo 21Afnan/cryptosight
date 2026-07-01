@@ -1,8 +1,6 @@
 import talib
 from talib import abstract
 import pandas as pd
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from cryptosight.utils.logger import get_logger
 from cryptosight.tal_Indicators.tal_ind_con import INDICATOR_CONFIG
 
@@ -49,53 +47,53 @@ class Indicators:
             output_names = [o["name"] for o in cfg["outputs"]]
             if isinstance(res, pd.DataFrame):
                 res.columns = output_names
-                return res
-            return res.to_frame(name=output_names[0])
+            else:
+                res = res.to_frame(name=output_names[0])
+
+            # Stash params actually used — needed for unique column naming
+            res.attrs["used_params"] = final_params
+            return res
 
         return caller
 
-    def plot(self, names: list = None, **params_per_name) -> None:
+    def get_dataframe(self, names: list = None, include_ohlcv: bool = True, **params_per_name) -> pd.DataFrame:
         """
-        ONE master plotting function!
-        Plots Price + any list of requested indicators stacked vertically on a single unified dashboard.
-        e.g. indicators.plot(["RSI", "MACD", "ATR"], RSI={"timeperiod": 14})
+        ONE function to build any indicator DataFrame you need.
+
+        names          : list of indicators to calculate, e.g. ["rsi", "macd", "atr"]
+        include_ohlcv  : True  -> returns OHLCV + indicator columns (for saving/signals)
+                         False -> returns indicator columns only (for quick inspection/plotting)
+        params_per_name: per-indicator param overrides, e.g. rsi={"timeperiod": 14}
+
+        Column naming is always collision-safe: INDICATORNAME_OUTPUT_PARAMVALUES
+        e.g. RSI_RSI_14, MACD_MACD_12_26_9, MACD_SIGNAL_12_26_9
+        Safe to call the same indicator more than once with different params.
         """
         names = names or []
-        num_rows = 1 + len(names)
-        row_heights = [0.4] + [0.6 / len(names)] * len(names) if names else [1.0]
 
-        fig = make_subplots(
-            rows=num_rows, cols=1,
-            shared_xaxes=True,
-            vertical_spacing=0.03,
-            row_heights=row_heights,
-            subplot_titles=["Price"] + [n.upper() for n in names]
-        )
+        # Base: either a copy of OHLCV, or an empty frame sharing the same index
+        result_df = self.df.copy() if include_ohlcv else pd.DataFrame(index=self.df.index)
 
-        # Row 1: Candlesticks
-        fig.add_trace(go.Candlestick(
-            x=self.df.index, open=self.df["open"], high=self.df["high"],
-            low=self.df["low"], close=self.df["close"], name="Price"
-        ), row=1, col=1)
-
-        # Rows 2+: Indicators
-        for i, n in enumerate(names, start=2):
+        for n in names:
             try:
-                # Call __getattr__ dynamically to compute indicator with config defaults!
                 caller = getattr(self, n)
-                res = caller(**params_per_name.get(n, {}))
-                for col in res.columns:
-                    fig.add_trace(go.Scatter(x=res.index, y=res[col], name=col), row=i, col=1)
-            except Exception as e:
-                logger.warning(f"Skipped plotting {n}: {e}")
+                call_params = params_per_name.get(n, {})
+                res = caller(**call_params)
 
-        fig.update_layout(
-            title="CryptoSight Quant Trading Dashboard",
-            height=280 * num_rows,
-            xaxis_rangeslider_visible=False,
-            template="plotly_dark"
-        )
-        fig.show()
+                # Build param suffix like "14" or "12_26_9" from the params actually used
+                used_params = res.attrs.get("used_params", {})
+                suffix = "_".join(str(v) for v in used_params.values())
+
+                for col in res.columns:
+                    col_name = f"{n.upper()}_{col.upper()}"
+                    if suffix:
+                        col_name += f"_{suffix}"
+                    result_df[col_name] = res[col]
+
+            except Exception as e:
+                logger.warning(f"Skipped calculating {n}: {e}")
+
+        return result_df
 
 
 if __name__ == "__main__":
@@ -104,15 +102,26 @@ if __name__ == "__main__":
     dl = Downloader(exchange="bybit", symbol="btc", timeframe="1m")
     df = dl.get_data(start_time="2026-06-22 00:00:00", end_time="now", max_retries=5, retry_delay=3)
     df = df.tail(1000)
-    # Pass global custom parameters directly into Indicators initialization!
+
     ind = Indicators(
         df,
         RSI={"timeperiod": 14},
         ATR={"timeperiod": 14}
     )
 
+    # Indicators only, no OHLCV — quick look
+    quick_df = ind.get_dataframe(["rsi", "macd"], include_ohlcv=False)
+    print("Indicators only:")
+    print(quick_df.tail(5))
 
+    # Full OHLCV + indicators — for saving/signals module
+    full_df = ind.get_dataframe(["rsi", "macd", "atr"], include_ohlcv=True)
+    print("\nFull OHLCV + indicators:")
+    print(full_df.tail(10))
 
-    # ONE single plot call! (automatically uses settings passed into Indicators constructor above)
-    ind.plot(["RSI", "MACD", "ATR"])
-
+    import os
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    csv_path = os.path.join(current_dir, "indicators_output.csv")
+    
+    full_df.to_csv(csv_path)
+    print(f"\nSaved to {csv_path}")
