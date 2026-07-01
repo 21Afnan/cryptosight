@@ -3,8 +3,6 @@ Auto-generated TA-Lib Indicator Configuration File.
 Contains input requirements, output names, and default parameters for all TA-Lib indicators.
 """
 
-TOTAL_INDICATORS = 158
-
 INDICATOR_CONFIG = {
 
     "ACOS": {
