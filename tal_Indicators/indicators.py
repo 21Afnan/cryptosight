@@ -151,7 +151,8 @@ def apply_indicators_from_config(df: pd.DataFrame, indicator_config: dict) -> pd
                     else:
                         col_alias = ind.generate_alias(ind_name, col, used_params, category)
                     
-                    merged_df[col_alias] = res[col]
+                    # .shift(1) applied here to prevent Look-Ahead Bias at the indicator level
+                    merged_df[col_alias] = res[col].shift(1)
             except Exception as e:
                 logger.error(f"Failed to calculate {ind_name}: {e}")
             
