@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from cryptosight.utils.logger import get_logger
-from cryptosight.tal_Indicators.config import INDICATOR_CONFIG
+from cryptosight.tal_Indicators.tal_ind_con import INDICATOR_CONFIG
 
 logger = get_logger("Indicators")
 
