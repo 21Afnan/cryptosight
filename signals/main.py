@@ -41,6 +41,8 @@ def run_signals_pipeline(df: pd.DataFrame, config_path: str) -> pd.DataFrame:
     return merged_df
 
 if __name__ == "__main__":
+    from cryptosight.data.downloader import Downloader
+    
     # Test the entire pipeline
     current_dir = os.path.dirname(os.path.abspath(__file__))
     config_file = os.path.join(current_dir, "strategy_config.yaml")
