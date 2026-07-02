@@ -35,9 +35,8 @@ def run_signals_pipeline(df: pd.DataFrame, indicator_config: dict, strategy_conf
     conditions_df = evaluator.process_strategy(strategy_config)
 
     # 3. Shift conditions by 1 to prevent look-ahead bias (condition on bar T -> act on bar T+1)
-    pd.set_option("future.no_silent_downcasting", True)
-    conditions_df = conditions_df.shift(1).fillna(False).astype(bool)
-    merged_df = pd.concat([merged_df, conditions_df], axis=1)
+    conditions_df = conditions_df.shift(1).dropna().astype(bool)
+    merged_df = pd.concat([merged_df, conditions_df], axis=1, join="inner")
 
     # 4. Generate signals from rules
     logger.info("Generating Signals...")
@@ -45,11 +44,12 @@ def run_signals_pipeline(df: pd.DataFrame, indicator_config: dict, strategy_conf
     final_signal = rules.generate_signals()
 
     # 5. Shift signal by 1 to prevent look-ahead bias (signal on bar T -> execute on bar T+1)
-    final_signal = final_signal.shift(1).fillna(0).astype(int)
+    final_signal = final_signal.shift(1).dropna().astype(int)
     merged_df["signal"] = final_signal
 
     # 6. Drop NaN rows resulting from indicator calculation periods and shifts
     merged_df.dropna(inplace=True)
+    merged_df["signal"] = merged_df["signal"].astype(int)
 
     logger.info(f"Pipeline complete — {len(merged_df)} rows, {(final_signal != 0).sum()} active signals.")
     return merged_df
