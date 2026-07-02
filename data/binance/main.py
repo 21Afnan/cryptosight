@@ -24,7 +24,6 @@ class Main:
 
         for symbol in self.cfg["symbols"]:
             try:
-                # LITERALLY ONLY ONE FUNCTION CALL PASSING ALL PARAMETERS TOGETHER!
                 run_pipeline(
                     exchange=self.cfg["exchange"],
                     symbol=symbol,
