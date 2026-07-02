@@ -1,6 +1,6 @@
 
 # Which exchange to fetch data from. Options: "binance", "bybit", or a list like ["binance", "bybit"]
-exchange: "binance"
+exchange: "bybit"
 
 # You can pass a single symbol as a string: symbols: "BTC" - Or you can pass a list of multiple symbols:
 # symbols: ["BTC", "ETH", "SOL", "LTC", "DOGE", "MINA", "SUI", "ADA"]

@@ -214,19 +214,31 @@ def run_pipeline(
     logger.info(f"Running master pipeline for {dl.exchange.upper()} | {dl.symbol.upper()} [{dl.timeframe}]")
 
     # 1. DOWNLOAD & SAVE TO DB (Active by default)
-    dl.download(
-        start_time=start_time,
-        end_time=end_time,
-        max_retries=max_retries,
-        retry_delay=retry_delay,
-        fill_method=fill_method,
-    )
+    # dl.download(
+    #     start_time=start_time,
+    #     end_time=end_time,
+    #     max_retries=max_retries,
+    #     retry_delay=retry_delay,
+    #     fill_method=fill_method,
+    # )
 
     # 2. GET FULL MERGED DATA IN MEMORY (Uncomment below to use)
     # df = dl.get_data(start_time=start_time, end_time=end_time, max_retries=max_retries, retry_delay=retry_delay)
     # return df
 
     # 3. RESAMPLE TO TARGET TIMEFRAME (Uncomment below to use)
-    # orig_df, resampled_df = dl.resample(target_timeframe=target_timeframe, start_time=start_time, end_time=end_time, max_retries=max_retries, retry_delay=retry_delay)
-    # return resampled_df
+    orig_df, resampled_df = dl.resample(target_timeframe=target_timeframe, start_time=start_time, end_time=end_time, max_retries=max_retries, retry_delay=retry_delay)
+    conn = get_connection()
+    try:
+        # Create Table if doesn't exist (e.g. btc_1h)
+        create_schema_and_table(conn, exchange, symbol, target_timeframe)
+        
+        # Save resampled candles to DB
+        insert_ohlcv(conn, exchange, symbol, target_timeframe, list(resampled_df.itertuples(index=True, name=None)))
+    finally:
+        # Close connection to avoid leak
+        conn.close()
+        
+    return resampled_df
+    
 

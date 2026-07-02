@@ -161,3 +161,35 @@ def apply_indicators_from_config(df: pd.DataFrame, indicator_config: dict) -> pd
     merged_df.dropna(inplace=True)
     
     return merged_df
+
+if __name__ == "__main__":
+    from cryptosight.data.downloader import Downloader
+    
+    print("=" * 60)
+    # 1. Load the 1h resampled data from the database
+    print("Loading 1h BTC data from DB...")
+    dl = Downloader(exchange="bybit", symbol="btc", timeframe="1h")
+    # Fetching starting from 2025-07-02 to now
+    df = dl.get_data(start_time="2025-07-02 00:00:00", end_time="now", max_retries=3, retry_delay=2)
+    
+    if df.empty:
+        print("[FAILED] No 1h data found in the DB. Please run the Binance ingestion pipeline first to store 1h candles.")
+    else:
+        print(f"[SUCCESS] Loaded {len(df)} candles from DB.")
+        
+        # 2. Initialize Indicators wrapper
+        ind = Indicators(df)
+        
+        # 3. Calculate SMA (Simple Moving Average)
+        print("Calculating SMA (20 period)...")
+        sma_df = ind.sma(timeperiod=20)
+        
+        # 4. Merge SMA and lag it by 1 row using .shift(1) (prevents Look-Ahead Bias)
+        df["ind_SMA_20"] = sma_df["sma"].shift(1)
+        # 6. Save the results to a CSV file
+        output_path = "btc_1h_indicators_bybit_with_bias.csv"
+        df.to_csv(output_path)
+        print(f"[SUCCESS] Saved resampled data with ind_SMA_20 (lagged) to: {output_path}")
+        print("\nLast 5 rows:")
+        print(df.tail(5))
+        print("=" * 60)
