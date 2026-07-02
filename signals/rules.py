@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 
 class RulesEvaluator:
     def __init__(self, conditions_df: pd.DataFrame, strategy_config: dict):
@@ -49,7 +48,7 @@ class RulesEvaluator:
         if side not in self.strategy_config:
             return pd.Series(False, index=self.conditions_df.index)
             
-        rule = self.strategy_config[side].get("rule", "AND").upper()
+        rule = self.strategy_config[side].get("rule").upper()
         columns = self.get_columns_for_side(side)
         
         if rule == "AND":
@@ -59,7 +58,7 @@ class RulesEvaluator:
         elif rule == "MAJORITY":
             return self.evaluate_majority(columns)
         else:
-            return self.evaluate_and(columns) # Default fallback
+            raise ValueError(f"Unknown rule '{rule}' for side '{side}'. Expected AND, OR, or MAJORITY.")
 
     def generate_signals(self) -> pd.Series:
         """

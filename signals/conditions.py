@@ -1,5 +1,7 @@
 import pandas as pd
-import numpy as np
+from cryptosight.utils.logger import get_logger
+
+logger = get_logger("Conditions")
 
 class ConditionEvaluator:
     def __init__(self, df: pd.DataFrame):
@@ -10,7 +12,7 @@ class ConditionEvaluator:
 
     def get_series(self, operand) -> pd.Series:
         """
-        Helper method to resolve whether an operand is a column name (string) or a static value (int/float).
+        Helper method to resolve whether an operand/right,left indicators name is a column name (string) or a static value (int/float).
         """
         if isinstance(operand, str) and operand in self.df.columns:
             return self.df[operand]
@@ -21,15 +23,37 @@ class ConditionEvaluator:
         """
         Evaluates a single condition and returns a boolean Series.
         """
-        if left is None and right is not None:
-            left = right
+        operator = operator.lower()
+        price_operators = {
+            "close_above", "close_below",
+            "open_above", "open_below",
+            "high_above", "high_below",
+            "low_above", "low_below"
+        }
+
+        # Consolidate price-relation operators
+        if operator in price_operators:
+            if left is None:
+                raise ValueError(f"Condition missing required 'left' operand (operator={operator})")
+            if right is not None:
+                logger.warning(f"Operator '{operator}' ignores 'right' — you set right={right}, it has no effect.")
             
+            price_col = operator.split("_")[0]
+            direction = operator.split("_")[1]
+            left_series = self.get_series(left)
+            if direction == "above":
+                return self.df[price_col] > left_series
+            else:
+                return self.df[price_col] < left_series
+
+        # Loud error check for missing left operand
+        if left is None:
+            raise ValueError(f"Condition missing required 'left' operand (operator={operator})")
+
         left_series = self.get_series(left)
         
         if right is not None:
             right_series = self.get_series(right)
-
-        operator = operator.lower()
 
         # Basic Comparison Operators
         if operator == ">":
@@ -58,26 +82,8 @@ class ConditionEvaluator:
             prev_right = right_series.shift(1)
             return (prev_left >= prev_right) & (left_series < right_series)
 
-        # Price Relation Operators
-        elif operator == "close_above":
-            return self.df["close"] > left_series
-        elif operator == "close_below":
-            return self.df["close"] < left_series
-        elif operator == "open_above":
-            return self.df["open"] > left_series
-        elif operator == "open_below":
-            return self.df["open"] < left_series
-        elif operator == "high_above":
-            return self.df["high"] > left_series
-        elif operator == "high_below":
-            return self.df["high"] < left_series
-        elif operator == "low_above":
-            return self.df["low"] > left_series
-        elif operator == "low_below":
-            return self.df["low"] < left_series
-
-        # Pattern Match
-        elif operator == "pattern_match" or str(left).startswith("pat_"):
+        # Pattern Match (requires explicit pattern_match operator)
+        elif operator == "pattern_match":
             # Candlestick patterns usually output 100 or -100 when detected
             # We assume any non-zero value means the pattern is detected
             return left_series != 0
@@ -90,11 +96,10 @@ class ConditionEvaluator:
         If a condition becomes true, it remains true for the next N bars.
         Using pandas rolling window to achieve this efficiently.
         """
-        if persist_bars <= 0:
+        if persist_bars is None or persist_bars <= 0:
             return condition_series
             
         # A rolling max over (persist_bars + 1) will keep the 'True' (1) alive for N subsequent bars
-        # Example: persist_bars = 5. A True will stay True for the current bar + 5 next bars = window of 6.
         window_size = persist_bars + 1
         persisted = condition_series.rolling(window=window_size, min_periods=1).max()
         
@@ -112,12 +117,15 @@ class ConditionEvaluator:
             if side not in strategy_config:
                 continue
                 
-            conditions = strategy_config[side].get("conditions", [])
+            conditions = strategy_config[side].get("conditions")
+            if not conditions:
+                continue
+                
             for i, cond in enumerate(conditions):
                 left = cond.get("left")
                 operator = cond.get("operator")
                 right = cond.get("right")
-                persist_bars = cond.get("persist_bars", 0)
+                persist_bars = cond.get("persist_bars")
                 
                 # 1. Evaluate the raw condition
                 raw_series = self.evaluate_condition(left, operator, right)

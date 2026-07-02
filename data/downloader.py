@@ -149,8 +149,6 @@ class Downloader:
 
         if not new_df.empty:
             new_df = new_df.set_index("timestamp")
-            if (not end_time or end_time == "now") and len(new_df) > 1:
-                new_df = new_df.iloc[:-1]  # drop unclosed live candle when fetching up to 'now'
             logger.info(f"Fetched {len(new_df)} new candles from {self.exchange.upper()}.")
 
         # Step 4 — merge DB + new data
@@ -165,7 +163,12 @@ class Downloader:
             merged_df = pd.concat([db_df, new_df])
             merged_df = merged_df[~merged_df.index.duplicated(keep="last")].sort_index()
 
-        # Step 5 — fill missing values
+        # Step 5 — drop last candle (always unclosed / still forming)
+        if len(merged_df) > 1:
+            merged_df = merged_df.iloc[:-1]
+            logger.info("Dropped last candle (unclosed/live).")
+
+        # Step 6 — fill missing values
         merged_df["volume"] = merged_df["volume"].fillna(0.0)
         merged_df[["open", "high", "low", "close"]] = merged_df[["open", "high", "low", "close"]].ffill().bfill()
 
@@ -193,6 +196,16 @@ class Downloader:
         })
 
         logger.info(f"Resampled to [{target_timeframe}] — {len(resampled_df)} candles.")
+
+        # Save resampled data to DB (uncomment to enable)
+        # conn = get_connection()
+        # try:
+        #     create_schema_and_table(conn, self.exchange, self.symbol, target_timeframe)
+        #     insert_ohlcv(conn, self.exchange, self.symbol, target_timeframe, list(resampled_df.itertuples(index=True, name=None)))
+        #     logger.info(f"Saved resampled [{target_timeframe}] data to DB.")
+        # finally:
+        #     conn.close()
+
         return original_df, resampled_df
 
 def run_pipeline(
@@ -226,19 +239,6 @@ def run_pipeline(
     # df = dl.get_data(start_time=start_time, end_time=end_time, max_retries=max_retries, retry_delay=retry_delay)
     # return df
 
-    # 3. RESAMPLE TO TARGET TIMEFRAME (Uncomment below to use)
-    orig_df, resampled_df = dl.resample(target_timeframe=target_timeframe, start_time=start_time, end_time=end_time, max_retries=max_retries, retry_delay=retry_delay)
-    conn = get_connection()
-    try:
-        # Create Table if doesn't exist (e.g. btc_1h)
-        create_schema_and_table(conn, exchange, symbol, target_timeframe)
-        
-        # Save resampled candles to DB
-        insert_ohlcv(conn, exchange, symbol, target_timeframe, list(resampled_df.itertuples(index=True, name=None)))
-    finally:
-        # Close connection to avoid leak
-        conn.close()
-        
-    return resampled_df
-    
-
+    # 3. RESAMPLE TO TARGET TIMEFRAME (save_to_db is handled inside resample() now)
+    # orig_df, resampled_df = dl.resample(target_timeframe=target_timeframe, start_time=start_time, end_time=end_time, max_retries=max_retries, retry_delay=retry_delay)
+    # return resampled_df

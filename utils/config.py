@@ -49,10 +49,3 @@ def normalize_timestamp(timestamp_str: str) -> str:
 
 
     
-def load_strategy_config(config_path: str) -> dict:
-    """
-    Simple parser specifically for signals/strategy_config.yaml without any data-related rules.
-    """
-    with open(config_path, 'r') as file:
-        return yaml.safe_load(file)
-

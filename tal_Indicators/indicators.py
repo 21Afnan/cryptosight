@@ -1,4 +1,3 @@
-import talib
 from talib import abstract
 import pandas as pd
 from cryptosight.utils.logger import get_logger
@@ -57,73 +56,45 @@ class Indicators:
 
         return caller
 
-    def generate_alias(self, indicator_name: str, output_name: str, params: dict, category: str) -> str:
-        """
-        Auto-generates a Signals-module-compliant alias string.
-        Pattern indicators  -> pat_<NAME>              (e.g. pat_DOJI)
-        Single-output       -> ind_<INDICATOR>_<params> (e.g. ind_RSI_14)
-        Multi-output primary-> ind_<INDICATOR>_<params> (e.g. ind_MACD_12_26_9)
-        Multi-output other  -> ind_<INDICATOR>_<OUTPUT>_<params> (e.g. ind_MACD_SIGNAL_12_26_9)
-        """
-        upper_ind = indicator_name.upper()
-        param_suffix = "_".join(str(v) for v in params.values())
-
-        if category == "Pattern Recognition":
-            pat_name = upper_ind[3:] if upper_ind.startswith("CDL") else upper_ind
-            return f"pat_{pat_name}"
-
-        is_primary = output_name.upper() == upper_ind
-        alias = f"ind_{upper_ind}" if is_primary else f"ind_{upper_ind}_{output_name.upper()}"
-
-        if param_suffix:
-            alias += f"_{param_suffix}"
-        return alias
-
     def get_dataframe(
         self,
         names: list = None,
         include_ohlcv: bool = True,
-        alias_style: bool = False,
+        indicator_config: dict = None,
         **params_per_name
     ) -> pd.DataFrame:
         """
         ONE function to build any indicator DataFrame you need.
-
-        names          : list of indicators to calculate, e.g. ["rsi", "macd", "atr"]
-        include_ohlcv  : True  -> returns OHLCV + indicator columns
-                         False -> returns indicator columns only
-        alias_style    : False -> original naming, e.g. RSI_RSI_14           (default, backward compatible)
-                         True  -> Signals-module naming, e.g. ind_RSI_14     (for signals/main.py)
-        params_per_name: per-indicator param overrides, e.g. rsi={"timeperiod": 14}
-
-        Safe to call the same indicator more than once with different params —
-        column names always stay unique either way.
+        Accepts either a list of indicator names or a structured indicator_config dictionary.
         """
         names = names or []
         result_df = self.df.copy() if include_ohlcv else pd.DataFrame(index=self.df.index)
 
+        # 1. Process explicit indicator names list (uses default naming)
         for n in names:
             try:
                 caller = getattr(self, n)
-                call_params = params_per_name.get(n, {})
-                res = caller(**call_params)
-
-                used_params = res.attrs.get("used_params", {})
-                category = res.attrs.get("category", "")
-                suffix = "_".join(str(v) for v in used_params.values())
-
+                res = caller(**params_per_name.get(n, {}))
                 for col in res.columns:
-                    if alias_style:
-                        col_name = self.generate_alias(n, col, used_params, category)
-                    else:
-                        col_name = f"{n.upper()}_{col.upper()}"
-                        if suffix:
-                            col_name += f"_{suffix}"
-
+                    col_name = f"ind_{n.lower()}_{col.lower()}"
                     result_df[col_name] = res[col]
-
             except Exception as e:
                 logger.warning(f"Skipped calculating {n}: {e}")
+
+        # 2. Process YAML configuration dictionary (uses custom config aliases)
+        if indicator_config:
+            for ind_name, configs in indicator_config.items():
+                for cfg in configs:
+                    params = cfg.get("parameters", {})
+                    aliases_map = cfg.get("aliases", {})
+                    try:
+                        caller = getattr(self, ind_name)
+                        res = caller(**params)
+                        for col in res.columns:
+                            col_name = aliases_map.get(col, f"ind_{ind_name.lower()}_{col.lower()}")
+                            result_df[col_name] = res[col]
+                    except Exception as e:
+                        logger.warning(f"Skipped calculating {ind_name}: {e}")
 
         return result_df
 
@@ -132,31 +103,14 @@ def apply_indicators_from_config(df: pd.DataFrame, indicator_config: dict) -> pd
     Helper function to calculate and merge all indicators based on the YAML config.
     """
     ind = Indicators(df)
-    merged_df = df.copy()
-
-    for ind_name, configs in indicator_config.items():
-        for cfg in configs:
-            params = cfg.get("parameters", {})
-            try:
-                caller = getattr(ind, ind_name)
-                res = caller(**params)
-            
-                used_params = res.attrs.get("used_params", {})
-                category = res.attrs.get("category", "")
-                aliases_map = cfg.get("aliases", {})
-            
-                for col in res.columns:
-                    if col in aliases_map:
-                        col_alias = aliases_map[col]
-                    else:
-                        col_alias = ind.generate_alias(ind_name, col, used_params, category)
-                    
-                    # To ADD Look-Ahead Bias (NOT RECOMMENDED for live trading), change the line below to:
-                    # merged_df[col_alias] = res[col]
-                    merged_df[col_alias] = res[col].shift(1)
-            except Exception as e:
-                logger.error(f"Failed to calculate {ind_name}: {e}")
-            
+    indicator_df = ind.get_dataframe(names=[], include_ohlcv=False, indicator_config=indicator_config)
+    
+    # Shift entire indicators dataframe by 1 to prevent Look-Ahead Bias
+    # To ADD Look-Ahead Bias (NOT RECOMMENDED for live trading), remove the .shift(1)
+    shifted_indicators = indicator_df.shift(1)
+    
+    merged_df = pd.concat([df, shifted_indicators], axis=1)
+    
     # Drop rows with NaN values caused by indicator calculation periods (e.g. first 200 rows for SMA200)
     merged_df.dropna(inplace=True)
     
