@@ -4127,6 +4127,4 @@ INDICATOR_CONFIG = {
 }
 
 
-def get_indicator_config(name: str) -> dict:
-    """Returns the configuration metadata for a given indicator name."""
-    return INDICATOR_CONFIG.get(name.upper(), {})
+

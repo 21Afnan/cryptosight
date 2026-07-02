@@ -12,7 +12,7 @@ symbols:
 timeframe: "1m"
 
 # Start time in UTC. Format: "YYYY-MM-DD HH:MM:SS"
-start_time: "2024-06-30 00:00:00"
+start_time: "2025-07-02 00:00:00"
 
 # End time in UTC. Options: "now" (real-time/latest) or "YYYY-MM-DD HH:MM:SS"
 end_time: "now"
@@ -27,4 +27,4 @@ max_retries: 5
 retry_delay: 3          
 
 # Target timeframe for resampling
-target_timeframe: "5m"
+target_timeframe: "1h"

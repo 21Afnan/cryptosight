@@ -1,6 +1,6 @@
 
 # Which exchange to fetch data from. Options: "binance", "bybit", or a list like ["binance", "bybit"]
-exchange: "bybit"
+exchange: "binance"
 
 # You can pass a single symbol as a string: symbols: "BTC" - Or you can pass a list of multiple symbols:
 # symbols: ["BTC", "ETH", "SOL", "LTC", "DOGE", "MINA", "SUI", "ADA"]
@@ -8,13 +8,12 @@ symbols:
     - "BTC" 
     - "ADA"
     - "SOL"
-    
 
-# Candle interval. Options: "1m", "3m", "5m", "15m", "30m", "1h", "1d","etc"
+# Candle interval. Options: "1m", "3m", "5m", "15m", "30m", "1h", "1d"
 timeframe: "1m"
 
 # Start time in UTC. Format: "YYYY-MM-DD HH:MM:SS"
-start_time: "2024-06-30 00:00:00"
+start_time: "2025-07-02 00:00:00"
 
 # End time in UTC. Options: "now" (real-time/latest) or "YYYY-MM-DD HH:MM:SS"
 end_time: "now"
@@ -29,4 +28,4 @@ max_retries: 5
 retry_delay: 3          
 
 # Target timeframe for resampling
-target_timeframe: "5m"
+target_timeframe: "1h"

@@ -151,9 +151,13 @@ def apply_indicators_from_config(df: pd.DataFrame, indicator_config: dict) -> pd
                     else:
                         col_alias = ind.generate_alias(ind_name, col, used_params, category)
                     
-                    # .shift(1) applied here to prevent Look-Ahead Bias at the indicator level
+                    # To ADD Look-Ahead Bias (NOT RECOMMENDED for live trading), change the line below to:
+                    # merged_df[col_alias] = res[col]
                     merged_df[col_alias] = res[col].shift(1)
             except Exception as e:
                 logger.error(f"Failed to calculate {ind_name}: {e}")
             
+    # Drop rows with NaN values caused by indicator calculation periods (e.g. first 200 rows for SMA200)
+    merged_df.dropna(inplace=True)
+    
     return merged_df
