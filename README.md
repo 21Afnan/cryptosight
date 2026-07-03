@@ -1,29 +1,73 @@
-# 🚀 CryptoSight: Quantitative Trading Data & Technical Analysis Engine
+# 🚀 CryptoSight: Enterprise Quantitative Data & Technical Analysis Engine
 
-**CryptoSight** is an enterprise-grade, fully automated cryptocurrency data ingestion and quantitative technical analysis framework. It seamlessly fetches historical and real-time OHLCV (Open, High, Low, Close, Volume) candlestick data from top exchanges (**Binance** and **Bybit**), stores it directly into a **PostgreSQL database** in timezone-independent UTC format, and powers interactive technical analysis across **158 TA-Lib indicators** via a dynamic Python wrapper.
+<div align="center">
 
-Designed for quantitative analysts, algorithmic traders, and financial engineers, CryptoSight eliminates boilerplate data cleaning and indicator mapping, allowing you to go from raw market feeds to multi-panel interactive trading dashboards in just a few lines of Python.
+![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Enterprise_Storage-316192?style=for-the-badge&logo=postgresql&logoColor=white)
+![TA-Lib](https://img.shields.io/badge/TA--Lib-158_Indicators-green?style=for-the-badge)
+![Plotly](https://img.shields.io/badge/Plotly-Interactive_Dark_Charts-3F4F75?style=for-the-badge&logo=plotly&logoColor=white)
+![Architecture](https://img.shields.io/badge/Architecture-Automated_Pipeline-orange?style=for-the-badge)
 
----
+**An automated, production-grade cryptocurrency data ingestion, dynamic technical analysis, and signal generation framework built for quantitative analysts, algorithmic traders, and financial engineers.**
 
-## ✨ Key Features
-
-### 📊 Ingestion & Data Management
-- **🔄 Smart Gap Ingestion**: Automatically queries PostgreSQL for the latest stored timestamp (`latest_ts`) and downloads *only* the missing gap up to `now`. Zero redundant API fetching.
-- **⚡ Unified Master Pipeline**: A clean facade pattern (`run_pipeline`) where initializing the orchestrator, fetching data, merging gaps, and database storage are controlled via a single call.
-- **🛡️ Live Candle Protection**: Safely detects and drops unclosed active live candles (e.g., the current minute candle in progress), ensuring only finalized candles are written to SQL.
-- **📦 Multi-Exchange Clients**: Specialized high-performance fetchers for **Binance** and **Bybit** (including automated forward chunk pagination for large historical queries).
-- **⏱️ Intelligent Resampling**: Translates crypto timeframe notations (`1m`, `5m`, `15m`, `1h`, `1d`) into standardized Pandas time-series rules (`1min`, `5min`) with automated open/high/low/close/volume aggregation.
-
-### 📈 Technical Indicators & Visualization (`tal_Indicators`)
-- **🔮 Magic 158 Indicator Wrapper**: Uses Python magic methods (`__getattr__`) to dynamically wrap every single TA-Lib function. Calculate any indicator as a direct method call: `ind.rsi()`, `ind.macd()`, or `ind.bbands()`.
-- **🎛️ 3-Tier Parameter Override Hierarchy**: Intelligently resolves indicator parameters by merging **Institutional Config Defaults** $\rightarrow$ **Constructor Global Overrides** $\rightarrow$ **Method Call Arguments**.
-- **📚 Institutional Metadata Catalog (`config.py`)**: Auto-generated source of truth defining standardized `category`, `display_name`, input columns, `parameters` (with `type`, `default`, and `description`), and structured `outputs` (`name`, `return_type`, `description`) across all 158 indicators.
-- **🖥️ Master Quantitative Dashboard (`ind.plot()`)**: One-call Plotly interactive charting suite that stacks Price Candlesticks and dynamic technical indicator subplots vertically on a dark-mode theme.
+</div>
 
 ---
 
-## 📁 Repository Structure
+## 🌟 Executive Summary
+
+**CryptoSight** bridges the gap between raw cryptocurrency market data feeds and institutional-grade quantitative strategies. It eliminates boilerplate data cleaning, API pagination headaches, and indicator mapping complexities by providing an end-to-end automated framework:
+
+1. **Automated Data Ingestion**: Seamlessly connects to **Binance** and **Bybit**, fetching historical and real-time OHLCV (Open, High, Low, Close, Volume) data with smart gap detection against a **PostgreSQL** database.
+2. **Dynamic 158 TA-Lib Engine**: Harnesses Python magic methods to wrap all 158 TA-Lib technical indicators dynamically, supported by an institutional parameter hierarchy and interactive multi-panel Plotly charting.
+3. **YAML-Driven Quantitative Signal Pipeline**: Evaluates multi-indicator crossover conditions, tracks look-back persistence windows, and generates leak-free long/short trading signals automatically.
+
+---
+
+## 🏗️ How It Was Built: Core Architectural Principles
+
+CryptoSight was engineered with reliability, data integrity, and zero-redundancy in mind. Instead of writing ad-hoc scripts, the system is organized into modular architectural layers:
+
+```mermaid
+graph TD
+    subgraph Data Ingestion Layer
+        API["Exchange APIs (Binance / Bybit)"] -->|Chunk Pagination| Fetcher["Multi-Exchange Clients"]
+        Fetcher -->|Clean & Sanitize| Facade["Master Downloader Facade"]
+    end
+
+    subgraph Storage & Synchronization Layer
+        Facade -->|Query MAX ts| SQL_Check[("PostgreSQL Database")]
+        SQL_Check -->|Only Download Gap| Facade
+        Facade -->|Bulk COPY & Deduplicate| SQL_Check
+    end
+
+    subgraph Quantitative & Visual Layer
+        SQL_Check -->|Load OHLCV| Engine["Dynamic TA-Lib Wrapper (158 Indicators)"]
+        Engine -->|3-Tier Param Resolution| Signals["YAML Signal & Condition Evaluator"]
+        Engine -->|One-Call Rendering| Dashboard["Interactive Plotly Dark Dashboard"]
+    end
+```
+
+### 🧠 1. Smart Gap Ingestion & Zero-Redundancy Storage
+When running routine data updates, re-downloading entire historical datasets is inefficient and risks exchange rate-limits. CryptoSight solves this via **Smart Gap Detection**:
+- The pipeline queries PostgreSQL for the exact timestamp of the last stored candle (`latest_ts`).
+- It computes the precise delta between `latest_ts` and current time, instructing the exchange client to download **only the missing gap**.
+- Employs high-speed PostgreSQL bulk insertion into staging tables with automated deduplication to guarantee database integrity.
+
+### 🛡️ 2. Live Candle Protection & Timestamp Normalization
+Cryptocurrency exchanges often stream unclosed, currently active candles (e.g., a 1-hour candle that is only 15 minutes old). Writing incomplete bars corrupts technical analysis indicators. CryptoSight automatically inspects the latest bar's timestamp and strips out active live candles, ensuring **only fully finalized candles** enter your permanent SQL storage. All timestamps are standardized to UTC milliseconds.
+
+### 🔮 3. Dynamic "Magic" TA-Lib Wrapper
+Instead of hardcoding functions for 158 different indicators, CryptoSight utilizes Python's dynamic object interception. When an indicator method is called on the wrapper class, the engine intercepts the call, consults a rich institutional catalog, maps column schemas, resolves parameter defaults, and executes C-compiled TA-Lib operations in microseconds.
+
+### ⚡ 4. Look-Ahead Bias-Free Signal Generation
+The quantitative signal engine evaluates trading rules defined in human-readable YAML configuration files. To ensure realistic backtesting and live trading execution:
+- Conditions (such as moving average crossovers or RSI thresholds) are evaluated across configurable persistence windows.
+- Generated signals are automatically **shifted by 1 bar** so that a signal triggered by the close of Bar $T$ is executed at the open of Bar $T+1$.
+
+---
+
+## 📁 Complete Repository Structure & Guide
 
 ```text
 cryptosight/
@@ -31,118 +75,97 @@ cryptosight/
 │   ├── binance/
 │   │   ├── binance_client.py      # Binance API fetcher with automatic retry & timestamp normalization
 │   │   ├── config.yaml            # YAML settings (symbols, timeframe, date ranges, retry rules)
-│   │   └── main.py                # Single-call execution script for Binance ingestion
+│   │   ├── main.py                # Single-call execution script for Binance ingestion
+│   │   └── run_binance.bat        # One-click Windows runner script for automated ingestion
 │   ├── bybit/
 │   │   ├── bybit_client.py        # Bybit API fetcher with forward chunk pagination loop
 │   │   ├── config.yaml            # YAML settings for Bybit ingestion
-│   │   └── main.py                # Single-call execution script for Bybit ingestion
+│   │   ├── main.py                # Single-call execution script for Bybit ingestion
+│   │   └── run_bybit.bat          # One-click Windows runner script for automated ingestion
 │   └── downloader.py              # Master orchestrator (run_pipeline, download, get_data, resample)
 ├── tal_Indicators/
 │   ├── config.py                  # Institutional catalog of 158 TA-Lib indicators & schema definitions
 │   └── indicators.py              # Dynamic Indicators class wrapper & Plotly master dashboard engine
+├── signals/
+│   ├── strategy_config.yaml       # Quantitative strategy definitions (indicators, operators, and rules)
+│   ├── conditions.py              # Evaluates multi-bar condition persistence windows
+│   ├── rules.py                   # Generates integer trading signals (+1 Long, -1 Short, 0 Neutral)
+│   └── main.py                    # Master execution pipeline running indicators -> conditions -> signals
+├── backtesting/
+│   ├── backtest.py                # Performance simulation and quantitative strategy backtesting engine
+│   └── backt_config.yaml          # YAML settings for backtest execution and fee structures
 ├── logs/
-│   ├── binance.log                # Rotating log file for Binance execution
-│   ├── bybit.log                  # Rotating log file for Bybit execution
-│   └── db.log                     # Database connection and query execution logs
+│   ├── binance.log                # Rotating log file tracking Binance API execution
+│   ├── bybit.log                  # Rotating log file tracking Bybit API execution
+│   └── db.log                     # Database connection and SQL query execution logs
 ├── utils/
 │   ├── config.py                  # YAML loader and timestamp normalization utility
 │   ├── db.py                      # PostgreSQL schema, table creation, and bulk COPY loader
 │   └── logger.py                  # Rotating file and console logger configuration
 ├── .env                           # Database environment variables (git-ignored)
 ├── requirements.txt               # Python package dependencies
-└── README.md                      # Project documentation
+└── README.md                      # Complete project documentation and operation guide
 ```
 
 ---
 
-## ⚙️ Architecture & Data Flow
+## 🛠️ Step-by-Step Guide: How to Run & Operate the Application
 
-### 1. Ingestion Pipeline Flow
-```mermaid
-graph TD
-    User["Terminal Execution (main.py)"] --> Config["Load YAML Config & Logger"]
-    Config --> Runner["Call Master Runner: run_pipeline()"]
-    Runner --> DB_Check["Check PostgreSQL: Get latest_ts"]
-    
-    DB_Check -->|Table Empty| Fetch_Start["Fetch from config start_time"]
-    DB_Check -->|Table Exists| Fetch_Gap["Fetch gap from latest_ts to now"]
-    
-    Fetch_Start --> API["Exchange API (Binance / Bybit)"]
-    Fetch_Gap --> API
-    
-    API --> Clean["Normalize Timestamps & Drop Unclosed Live Candle"]
-    Clean --> Fill["Inline Data Cleaning (ffill / bfill)"]
-    Fill --> Dedupe["Deduplicate Indices (~duplicated keep='last')"]
-    Dedupe --> Save["Bulk SQL Insert via COPY & Temp Table"]
-    Save --> Success["Pipeline Complete 🚀"]
-```
+CryptoSight is designed for seamless operation. You do not need to write code or scripts to run data ingestion, generate quantitative signals, or view interactive charts. Everything is controlled through simple configuration files and pre-built runners.
 
-### 2. Dynamic Indicators & Dashboard Flow
-```mermaid
-graph TD
-    DF["Pandas OHLCV DataFrame"] --> Init["Initialize Indicators(df, RSI={'timeperiod': 14})"]
-    Init --> Call["Dynamic Call: ind.macd() / ind.bbands()"]
-    Call --> ConfigLook["Lookup Metadata in INDICATOR_CONFIG"]
-    ConfigLook --> Merge["Merge Params: Config Defaults + Custom Overrides + Call Params"]
-    Merge --> Talib["Execute TA-Lib Abstract Function"]
-    Talib --> Format["Map Output Column Names (e.g., upper_band, middle_band, lower_band)"]
-    Format --> Plot["Master Dashboard: ind.plot(['RSI', 'MACD', 'BBANDS'])"]
-    Plot --> Chart["Interactive Plotly Dark Dashboard 🖥️"]
-```
+### Step 1: Initial Environment Preparation
+
+1. **Virtual Environment**: Ensure Python 3.10+ is installed. Activate your project virtual environment from your system terminal or file explorer.
+2. **Dependencies**: Install the required packages listed in the project requirements file (includes database adapters, technical analysis libraries, and visualization suites).
 
 ---
 
-## 🛠️ Setup & Installation
+### Step 2: Database Configuration
 
-### 1. Requirements & Virtual Environment
-Ensure you have **Python 3.10+**, **PostgreSQL**, and **TA-Lib** installed.
+Create a simple text file named `.env` inside the root workspace folder containing your PostgreSQL database connection details:
+- **Host**: Your local database address (usually localhost)
+- **Port**: Standard PostgreSQL port (5432)
+- **Name**: Your target database name
+- **User & Password**: Your secure database credentials
 
-```bash
-# Create and activate virtual environment
-python -m venv venv
-venv\Scripts\activate  # Windows PowerShell
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### 2. Database Configuration (`.env`)
-Create a `.env` file in the root workspace directory with your PostgreSQL credentials:
-
-```env
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=postgres
-DB_USER=postgres
-DB_PASSWORD=your_password
-```
+*Note: The system automatically detects missing tables on first run and builds optimal database structures and indices without any manual intervention.*
 
 ---
 
-## 🚀 Usage Examples
+### Step 3: Running Market Data Ingestion
 
-### 1. Automated Data Ingestion (Manual)
-Execute the ingestion script directly from any working directory to fetch missing historical data from either Binance or Bybit. The scripts automatically determine the missing time range and bulk insert the new candles into the PostgreSQL database.
+You can configure which coin pairs to download (e.g., Bitcoin or Ethereum), the candlestick timeframe, and historical date ranges simply by opening the configuration files (`data/binance/config.yaml` or `data/bybit/config.yaml`) in any text editor.
 
-### 2. Fully Automated Ingestion via Windows Task Scheduler
-To set up a hands-free data pipeline that runs continuously in the background (e.g., every 5 minutes):
-1. Create a `.bat` file (e.g., `run_binance.bat`) in the root directory:
-   ```bat
-   @echo off
-   cd /d "D:\Neurog_Internship"
-   call "venv\Scripts\activate.bat"
-   python -m cryptosight.data.binance.main
-   ```
-2. Open **Windows Task Scheduler** and create a new task.
-3. Check **"Run only when user is logged on"** (or provide a password for the background task) and tick **"Hidden"** to prevent terminal popups.
-4. Set the **Trigger** to repeat every 5 minutes indefinitely.
-5. Set the **Action** to start your `.bat` file, ensuring `Start in` is set to the root project directory (e.g., `D:\Neurog_Internship`).
-6. The orchestrator will automatically query the database gap and append new candles silently!
+| Execution Method | How to Run | Best For |
+| :--- | :--- | :--- |
+| **Option A: One-Click Windows Execution** | Simply navigate to the exchange folder inside your file explorer and **double-click** the pre-built batch file (`run_binance.bat` or `run_bybit.bat`). | Instant manual data updates without opening a terminal window. |
+| **Option B: Terminal Execution** | Run the exchange main module directly using your environment runner. | Developers and analysts executing pipelines within interactive terminal sessions. |
+| **Option C: 24/7 Automated Background Sync** | Open **Windows Task Scheduler**, create a hidden background task pointing to the batch file (`run_binance.bat`), and set the trigger to run **every 5 minutes**. | Hands-free, continuous live database synchronization. |
 
-### 2. In-Memory Gap Fetching & Resampling
-Load historical candles from PostgreSQL, merge them with live exchange gap data in RAM, and resample timeframes on the fly using the `Downloader` orchestrator. This allows for seamless transitions between different timeframe granularities (e.g., converting 1-minute base data into clean 5-minute candles).
+---
 
-### 4. Quantitative Analysis & Interactive Dashboard
-Use the `Indicators` wrapper to calculate technical indicators (like RSI, MACD, Bollinger Bands) directly as python methods with custom parameters. Finally, launch a comprehensive multi-panel interactive Plotly dashboard in one call to visualize price action alongside your computed indicators.
+### Step 4: Generating Quantitative Trading Signals
 
-> **💡 Pro Tip (Handling Big Data):** When dealing with years of data (e.g., 1M+ candles), calculate your indicators on the full dataset, but slice the dataframe before plotting (e.g., `df = df.tail(1000)`) to prevent the browser/Plotly from freezing due to memory overload.
+The quantitative signal module automatically loads synchronized market data from your database, calculates technical indicators, evaluates strategy rules, and generates trading signals.
+
+1. **Configure Your Strategy**: Open `signals/strategy_config.yaml` in any text editor to view or adjust moving average periods, RSI overbought/oversold boundaries, or logical combination rules.
+2. **Execute the Signal Pipeline**: Run the signals execution module (`signals/main.py`). The pipeline automatically handles parameter resolution and processes the entire dataset.
+3. **Review Results**: The system outputs a clean summary directly to your console and automatically generates a comprehensive CSV report containing the full historical price action alongside calculated indicators and active long/short trading signals inside the `signals/` directory (`signals_pipeline_output.csv`).
+
+---
+
+### Step 5: Rendering Interactive Visual Dashboards
+
+When performing exploratory research or reviewing strategy performance, CryptoSight provides a built-in visualizer that renders multi-panel, dark-mode interactive charts directly in your web browser:
+
+1. Pass your loaded dataset into the dynamic indicators wrapper.
+2. Compute any required technical indicators dynamically by calling their names.
+3. Call the master dashboard plotting function to instantly launch an interactive visual suite featuring synchronized zooming, panning, and multi-panel indicator overlays.
+
+> **💡 Institutional Tip**: When analyzing large datasets with hundreds of thousands of candles, slice your data to the most recent 1,000 to 2,000 bars prior to visualization to ensure lightning-fast browser performance and smooth UI interaction.
+
+---
+
+<div align="center">
+<b>CryptoSight</b> — Built for Quantitative Precision & High-Performance Data Engineering.
+</div>
