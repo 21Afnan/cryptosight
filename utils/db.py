@@ -2,6 +2,8 @@ import os
 import csv
 from io import StringIO
 import psycopg2
+from psycopg2.errors import UndefinedTable
+import pandas as pd
 from pathlib import Path
 from dotenv import load_dotenv
 from cryptosight.utils.logger import get_logger
@@ -154,3 +156,53 @@ def get_latest_timestamp(conn, exchange: str, symbol: str, timeframe: str):
     except Exception as error:
         logger.error(f"Error getting latest timestamp from '{schema_name}.{table_name}': {error}")
         return None
+
+
+def fetch_ohlcv(conn, exchange: str, symbol: str, timeframe: str, start_time: str, end_time: str) -> pd.DataFrame:
+    """
+    Ultra-fast vectorized fetch of OHLCV data from PostgreSQL using COPY TO STDOUT.
+    Streams C-speed CSV directly into pandas with pre-declared dtypes (skips inference).
+    """
+    schema_name, table_name = get_table_names(exchange, symbol, timeframe)
+    full_table = f"{schema_name}.{table_name}"
+
+    dtype_map = {
+        "open": "float64",
+        "high": "float64",
+        "low": "float64",
+        "close": "float64",
+        "volume": "float64",
+    }
+
+    try:
+        with conn.cursor() as cursor:
+            subquery = cursor.mogrify(
+                f"SELECT timestamp, open, high, low, close, volume FROM {full_table} "
+                f"WHERE timestamp >= %s AND timestamp <= %s ORDER BY timestamp ASC",
+                (start_time, end_time)
+            ).decode("utf-8")
+            
+            copy_query = f"COPY ({subquery}) TO STDOUT WITH (FORMAT CSV, HEADER TRUE)"
+            buffer = StringIO()
+            cursor.copy_expert(copy_query, buffer)
+            buffer.seek(0)
+
+            df = pd.read_csv(
+                buffer,
+                dtype=dtype_map,
+                parse_dates=["timestamp"],
+                index_col="timestamp",
+            )
+
+            if not df.empty:
+                if df.index.tz is None:
+                    df.index = df.index.tz_localize("UTC")
+                logger.info(f"Fetched {len(df)} candles from '{full_table}' via fast COPY.")
+            return df
+
+    except UndefinedTable:
+        logger.warning(f"Table '{full_table}' does not exist.")
+        return pd.DataFrame()
+    except Exception as error:
+        logger.error(f"Error fetching data via COPY from '{full_table}': {error}")
+        return pd.DataFrame()

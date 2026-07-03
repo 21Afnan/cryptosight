@@ -120,3 +120,25 @@ strategy:
         operator: cross_below
         right: close
         persist_bars: 0
+
+# ==========================================
+# MARKET CONFIGURATION
+# Defines the exchange, symbol, timeframe, and data range to run signals on
+# ==========================================
+market:
+  # The exchange from which the data will be fetched (e.g., "binance", "bybit")
+  exchange: "binance"
+  # The crypto asset symbol to evaluate signals on
+  symbol: "BTC"
+  # The base database timeframe (must always be 1m)
+  timeframe: "1m"
+  # The target timeframe to resample the 1m data to (e.g., "1m", "5m", "15m", "1h", "4h")
+  target_timeframe: "1h"
+  # The starting date/time for the historical data range in UTC (YYYY-MM-DD HH:MM:SS)
+  start_time: "2026-04-02 00:00:00"
+  # The ending date/time for the historical data range ("now" or YYYY-MM-DD HH:MM:SS)
+  end_time: "2026-06-02"
+  # Maximum network request retries if exchange API calls fail
+  max_retries: 5
+  # Delay in seconds between retries
+  retry_delay: 3

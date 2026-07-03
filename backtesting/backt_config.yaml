@@ -1,0 +1,58 @@
+# Backtest Configuration
+
+# Market Selection
+exchange: "binance"
+symbol: "BTC"
+
+# Must always be 1m OHLCV
+timeframe: "1m"
+
+# Backtest start date
+start_time: "2026-04-01"
+
+# Backtest end date
+end_time: "2026-06-01"
+
+# Starting balance
+initial_balance: 10000.0
+
+# how much percentage of our capital will be invested in a single trade
+position_size:
+  # Sizing method
+  type: fixed_percentage
+  # % of balance per trade
+  value: 10.0
+
+# Fees & Slippage
+# 0.05% fee per trade taken by the broker on every trade
+commission: 0.0005
+
+# 0.02% slippage per trade is just the price difference between expected price and actual execution price
+slippage: 0.0002
+
+# Trade Rules
+# if true then we can enter long (buy) in the market
+allow_long: true
+
+# if true then we can enter short (sell) in the market
+allow_short: true
+
+# Maximum number of trades we can have at a time
+max_open_positions: 1
+
+# Exit Targets (% from entry)
+
+# if we are having a profit of 2% then exit the trade
+take_profit:
+  type: percentage
+  value: 2.0
+
+# if we are having a loss of 1% then exit the trade
+stop_loss:
+  type: percentage
+  value: 1.0
+
+# Execution Pricing
+# if we are having profit of 2% we exit and if we are having loss of 1% we exit
+entry_price: next_open
+exit_price: next_open
