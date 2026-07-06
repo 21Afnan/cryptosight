@@ -32,26 +32,29 @@ CryptoSight was engineered with reliability, data integrity, and zero-redundancy
 ```mermaid
 graph TD
     subgraph Data Ingestion Layer
-        API["Exchange APIs (Binance / Bybit)"] -->|Chunk Pagination| Fetcher["Multi-Exchange Clients"]
-        Fetcher -->|Clean & Sanitize| Facade["Master Downloader Facade"]
+        API["Exchange APIs (Binance & Bybit)"] -->|Fetch Price Data| Fetcher["Exchange Downloaders"]
+        Fetcher -->|Clean & Organize| Facade["Master Data Downloader"]
     end
 
-    subgraph Storage & Synchronization Layer
-        Facade -->|Query MAX ts| SQL_Check[("PostgreSQL Database")]
-        SQL_Check -->|Only Download Gap| Facade
-        Facade -->|Bulk COPY & Deduplicate| SQL_Check
+    subgraph Database & Storage Layer
+        Facade -->|Check Last Saved Candle Date| SQL_Check[("PostgreSQL Database")]
+        SQL_Check -->|Download Only Missing Data| Facade
+        Facade -->|Fast Save & Remove Duplicates| SQL_Check
     end
 
-    subgraph Quantitative & Visual Layer
-        SQL_Check -->|Load OHLCV| Engine["Dynamic TA-Lib Wrapper (158 Indicators)"]
-        Engine -->|3-Tier Param Resolution| Signals["YAML Signal & Condition Evaluator"]
-        Engine -->|One-Call Rendering| Dashboard["Interactive Plotly Dark Dashboard"]
+    subgraph Indicators & Charting Layer
+        SQL_Check -->|Load Price Candles| Engine["158 Technical Indicators Engine"]
+        Engine -->|Show Interactive Charts| Dashboard["Dark Mode Web Charts"]
+    end
+
+    subgraph Trading Signals Layer
+        Engine -->|Apply Indicator Rules| Signals["Trading Signal Generator (YAML Rules)"]
     end
 
     subgraph Backtesting & Simulation Layer
-        SQL_Check -->|Fast COPY Stream| Backtester["Vectorized Backtesting Engine"]
-        Signals -->|Shifted Signals| Backtester
-        Backtester -->|Friction Modeling & TP/SL| Ledger["Trade Ledger & PnL Accounting (CSV)"]
+        SQL_Check -->|Load 1m Price Candles| Backtester["Strategy Backtesting Engine"]
+        Signals -->|Send Trading Signals| Backtester
+        Backtester -->|Simulate Trades, TP/SL & Fees| Ledger["Final Trade Report & PnL (CSV File)"]
     end
 ```
 
