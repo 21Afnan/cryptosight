@@ -8,20 +8,63 @@ from logging.handlers import RotatingFileHandler
 LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 MAX_BYTES = 5 * 1024 * 1024  # 5 MB per log file
 
+def detect_exchange(name: str) -> str:
+    """
+    Automatically detects if the current execution context is working with Binance or Bybit
+    by checking the logger name, command line arguments, environment variables, or active YAML config.
+    """
+    ctx = (name + " " + " ".join(sys.argv)).lower()
+    if "binance" in ctx:
+        return "binance"
+    if "bybit" in ctx:
+        return "bybit"
+
+    env_ex = os.environ.get("EXCHANGE", "").lower()
+    if "binance" in env_ex:
+        return "binance"
+    if "bybit" in env_ex:
+        return "bybit"
+
+    try:
+        root_dir = Path(__file__).resolve().parent.parent
+        if any("backtest" in arg.lower() for arg in sys.argv):
+            cfg_paths = [root_dir / "backtesting" / "backt_config.yaml"]
+        else:
+            cfg_paths = [
+                root_dir / "signals" / "strategy_config.yaml",
+                root_dir / "backtesting" / "backt_config.yaml",
+                root_dir / "indicators" / "tal_Indicators_config.yaml",
+                root_dir / "config" / "config.yaml"
+            ]
+        for cfg_path in cfg_paths:
+            if cfg_path.exists():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    for line in f.read().lower().splitlines():
+                        line = line.strip()
+                        if line.startswith("exchange:"):
+                            if "binance" in line:
+                                return "binance"
+                            if "bybit" in line:
+                                return "bybit"
+    except Exception:
+        pass
+    return None
+
+
 def get_logger(name: str) -> logging.Logger:
     """
-    Returns a logger that writes to binance.log, bybit.log, or app.log
-    based on the logger name passed in or the script being run.
+    Returns a logger that writes to binance.log, bybit.log, or app.log.
+    Automatically consolidates all DB, Backtester, Signals, and Indicator logs
+    into the active exchange's log file (binance.log or bybit.log).
     """
     os.makedirs(LOG_DIR, exist_ok=True)
 
-    # Check name first — e.g. get_logger("BinanceMain") → binance.log
-    # Then check running script name as backup
+    ex = detect_exchange(name)
     ctx = (name + (sys.argv[0] if sys.argv else "")).lower()
 
-    if "binance" in ctx:
+    if ex == "binance":
         log_file = LOG_DIR / "binance.log"
-    elif "bybit" in ctx:
+    elif ex == "bybit":
         log_file = LOG_DIR / "bybit.log"
     elif "db" in ctx:
         log_file = LOG_DIR / "db.log"
