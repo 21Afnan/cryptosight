@@ -270,6 +270,9 @@ class BacktestingEngine:
         )
 
         entries_df["net_pnl"] = entries_df["gross_pnl"] - entries_df["commission"] - entries_df["slippage"]
+        
+        # Calculate Percentage Net PnL (net_pnl as a percentage of initial trade investment)
+        entries_df["perc_pnl"] = (entries_df["net_pnl"] / (entries_df["entry_price"] * entries_df["quantity"])) * 100
 
         return entries_df
 
@@ -283,7 +286,7 @@ class BacktestingEngine:
         initial_balance = self.config["initial_balance"]
         
         # Vectorized cumulative sum of Net PnL added to the initial balance
-        entries_df["balance_after_trade"] = initial_balance + entries_df["net_pnl"].cumsum()
+        entries_df["balance"] = initial_balance + entries_df["net_pnl"].cumsum()
         
         return entries_df
 
@@ -330,7 +333,11 @@ class BacktestingEngine:
         # Step 9: Update the account balance after each trade
         ledger_df = self.update_balance(entries_df)
 
-        # Step 10: Save trade ledger to CSV
+        # Step 10: Clean up columns and save trade ledger to CSV
+        # Remove commission, slippage, gross_pnl, and dollar net_pnl from final ledger output
+        cols_to_drop = ["commission", "slippage", "gross_pnl", "net_pnl"]
+        ledger_df.drop(columns=[c for c in cols_to_drop if c in ledger_df.columns], inplace=True)
+
         output_csv = Path(__file__).resolve().parent / "backtest_ledger.csv"
         ledger_df.to_csv(output_csv)
         self.logger.info(f"Successfully saved trade ledger CSV to: {output_csv}")
@@ -355,14 +362,14 @@ if __name__ == "__main__":
     print(f"Total entries processed:  {len(ledger)}")
     print(f"Initial balance:          ${engine.config['initial_balance']:.2f}")
     if not ledger.empty:
-        final_balance = ledger["balance_after_trade"].iloc[-1]
+        final_balance = ledger["balance"].iloc[-1]
         net_profit = final_balance - engine.config['initial_balance']
         print(f"Final balance:            ${final_balance:.2f}")
         print(f"Net profit:               ${net_profit:.2f}")
         print("\n--- Last 5 rows of backtest ledger ---")
         pd.set_option('display.max_columns', None)
         pd.set_option('display.width', 1000)
-        print(ledger[["signal", "entry_price", "take_profit", "stop_loss", "exit_price", "exit_reason", "net_pnl", "balance_after_trade"]].tail(5))
+        print(ledger[["signal", "entry_price", "take_profit", "stop_loss", "exit_price", "exit_reason", "perc_pnl", "balance"]].tail(5))
     print("=" * 55)
 
     
