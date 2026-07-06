@@ -97,29 +97,55 @@
 #         persist_bars: 5
 
 
+#indicators:
+#  SMA:
+#     - parameters:
+#         timeperiod: 20
+#       aliases:
+#         sma: "ind_sma_20"
+
+# strategy:
+#   long:
+#     rule: AND
+#     conditions:
+#       - left: ind_sma_20
+#         operator: cross_above
+#         right: close
+#         persist_bars: 0
+
+#   short:
+#     rule: AND
+#     conditions:
+#       - left: ind_sma_20
+#         operator: cross_below
+#         right: close
+#         persist_bars: 0
 indicators:
-  SMA:
+  RSI:
     - parameters:
-        timeperiod: 20
+        timeperiod: 14       # Classic 14-bar RSI
       aliases:
-        sma: "ind_sma_20"
+        rsi: "ind_rsi_14"    # Our custom column name
 
 strategy:
   long:
     rule: AND
     conditions:
-      - left: ind_sma_20
-        operator: cross_above
-        right: close
+      # Condition: Trigger BUY when RSI drops below 30 (Oversold)
+      - left: ind_rsi_14
+        operator: "<"
+        right: 30
         persist_bars: 0
 
   short:
     rule: AND
     conditions:
-      - left: ind_sma_20
-        operator: cross_below
-        right: close
+      # Condition: Trigger SHORT when RSI goes above 70 (Overbought)
+      - left: ind_rsi_14
+        operator: ">"
+        right: 70
         persist_bars: 0
+
 
 # ==========================================
 # MARKET CONFIGURATION

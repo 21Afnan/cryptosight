@@ -97,8 +97,10 @@ class BacktestingEngine:
 
         entry_method = self.config["entry_price"]
 
-        if entry_method == "next_open":
-            entry_price_series = merged_df["open"].shift(-1)
+        if entry_method == "next_open" or entry_method == "open":
+            # Since signals from signals/main.py are ALREADY shifted by 1 bar (condition on T -> signal on T+1),
+            # this row is ALREADY the execution bar (T+1). We take this row's open price directly!
+            entry_price_series = merged_df["open"]
         elif entry_method == "current_close" or entry_method == "close":
             entry_price_series = merged_df["close"]
         else:
@@ -183,20 +185,33 @@ class BacktestingEngine:
         exit_prices = []
         exit_times = []
         exit_reasons = []
+        statuses = []
+        valid_indices = []
+        last_exit_time = None
+        max_open = self.config.get("max_open_positions", 1)
 
         for entry_time, row in entries_df.iterrows():
+            if max_open == 1 and last_exit_time is not None:
+                if entry_time <= last_exit_time:
+                    self.logger.info(f"Skipping signal at {entry_time} — previous trade open until {last_exit_time}")
+                    continue
+
             entry_price = row["entry_price"]
             tp_price = row["take_profit"]
             sl_price = row["stop_loss"]
             direction = int(row["signal"])  # 1 for Long, -1 for Short
 
-            # Find starting index of the trade (execution starts at t+1 candle index)
-            start_idx = time_to_idx[entry_time] + 1
+            # Since signals are already shifted by 1 bar in main.py, entry_time IS the execution bar!
+            # We start checking for TP/SL from this exact entry candle itself (no +1 delay).
+            start_idx = time_to_idx[entry_time]
             if start_idx >= len(ohlcv_times):
                 # No data after entry, exit immediately at entry_price
                 exit_prices.append(entry_price)
                 exit_times.append(entry_time)
                 exit_reasons.append("end_of_data")
+                statuses.append("Ongoing")
+                valid_indices.append(entry_time)
+                last_exit_time = entry_time
                 continue
 
             # Slice future candles
@@ -223,32 +238,42 @@ class BacktestingEngine:
                 exit_offset = len(highs_slice) - 1
                 exit_price = ohlcv_closes[-1]
                 exit_reason = "end_of_data"
+                status = "Ongoing"
             elif tp_first_idx < sl_first_idx:
                 exit_offset = tp_first_idx
                 exit_price = tp_price
                 exit_reason = "take_profit"
+                status = "Completed"
             elif sl_first_idx < tp_first_idx:
                 exit_offset = sl_first_idx
                 exit_price = sl_price
                 exit_reason = "stop_loss"
+                status = "Completed"
             else:
                 # Both hit in the same candle -> assume SL hit for conservatism
                 exit_offset = tp_first_idx
                 exit_price = sl_price
                 exit_reason = "stop_loss_same_candle"
+                status = "Completed"
 
             exit_idx = start_idx + exit_offset
+            calc_exit_time = ohlcv_times[exit_idx]
+            
             exit_prices.append(exit_price)
-            exit_times.append(ohlcv_times[exit_idx])
+            exit_times.append(calc_exit_time)
             exit_reasons.append(exit_reason)
+            statuses.append(status)
+            valid_indices.append(entry_time)
+            last_exit_time = calc_exit_time
 
-        # Assign calculated exits to entries_df
-        entries_df = entries_df.copy()
+        # Assign calculated exits only to non-overlapping trades
+        entries_df = entries_df.loc[valid_indices].copy()
         entries_df["exit_price"] = exit_prices
         entries_df["exit_time"] = exit_times
         entries_df["exit_reason"] = exit_reasons
+        entries_df["status"] = statuses
 
-        self.logger.info(f"Exits determined for {len(entries_df)} trades.")
+        self.logger.info(f"Exits determined for {len(entries_df)} non-overlapping trades.")
         return entries_df
 
     
@@ -295,7 +320,8 @@ class BacktestingEngine:
         initial_balance = self.config["initial_balance"]
         
         # Vectorized cumulative sum of Net PnL added to the initial balance
-        entries_df["balance"] = initial_balance + entries_df["net_pnl"].cumsum()
+        entries_df["cumulative_pnl"] = entries_df["net_pnl"].cumsum()
+        entries_df["balance"] = initial_balance + entries_df["cumulative_pnl"]
         
         return entries_df
 
@@ -343,11 +369,11 @@ class BacktestingEngine:
         ledger_df = self.update_balance(entries_df)
 
         # Step 10: Clean up columns and save trade ledger to CSV
-        # Remove commission, slippage, gross_pnl, and dollar net_pnl from final ledger output
-        cols_to_drop = ["commission", "slippage", "gross_pnl", "net_pnl"]
+        # Remove commission, slippage, and gross_pnl from final ledger output (keep net_pnl)
+        cols_to_drop = ["commission", "slippage", "gross_pnl"]
         ledger_df.drop(columns=[c for c in cols_to_drop if c in ledger_df.columns], inplace=True)
 
-        desired_order = ["direction", "signal", "entry_price", "quantity", "take_profit", "stop_loss", "exit_price", "exit_time", "exit_reason", "perc_pnl", "balance"]
+        desired_order = ["direction", "signal", "entry_price", "quantity", "take_profit", "stop_loss", "exit_price", "exit_time", "exit_reason", "status", "net_pnl", "perc_pnl", "cumulative_pnl", "balance"]
         ordered_cols = [c for c in desired_order if c in ledger_df.columns] + [c for c in ledger_df.columns if c not in desired_order]
         ledger_df = ledger_df[ordered_cols]
 
