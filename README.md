@@ -21,6 +21,7 @@
 1. **Automated Data Ingestion**: Seamlessly connects to **Binance** and **Bybit**, fetching historical and real-time OHLCV (Open, High, Low, Close, Volume) data with smart gap detection against a **PostgreSQL** database.
 2. **Dynamic 158 TA-Lib Engine**: Harnesses Python magic methods to wrap all 158 TA-Lib technical indicators dynamically, supported by an institutional parameter hierarchy and interactive multi-panel Plotly charting.
 3. **YAML-Driven Quantitative Signal Pipeline**: Evaluates multi-indicator crossover conditions, tracks look-back persistence windows, and generates leak-free long/short trading signals automatically.
+4. **Vectorized 10-Step Backtesting Engine**: Executes ultra-fast historical simulations with realistic market friction modeling (broker commissions, price slippage), dynamic position sizing, automated Take-Profit/Stop-Loss scanning, and cumulative trade ledger accounting.
 
 ---
 
@@ -46,6 +47,12 @@ graph TD
         Engine -->|3-Tier Param Resolution| Signals["YAML Signal & Condition Evaluator"]
         Engine -->|One-Call Rendering| Dashboard["Interactive Plotly Dark Dashboard"]
     end
+
+    subgraph Backtesting & Simulation Layer
+        SQL_Check -->|Fast COPY Stream| Backtester["Vectorized Backtesting Engine"]
+        Signals -->|Shifted Signals| Backtester
+        Backtester -->|Friction Modeling & TP/SL| Ledger["Trade Ledger & PnL Accounting (CSV)"]
+    end
 ```
 
 ### 🧠 1. Smart Gap Ingestion & Zero-Redundancy Storage
@@ -64,6 +71,13 @@ Instead of hardcoding functions for 158 different indicators, CryptoSight utiliz
 The quantitative signal engine evaluates trading rules defined in human-readable YAML configuration files. To ensure realistic backtesting and live trading execution:
 - Conditions (such as moving average crossovers or RSI thresholds) are evaluated across configurable persistence windows.
 - Generated signals are automatically **shifted by 1 bar** so that a signal triggered by the close of Bar $T$ is executed at the open of Bar $T+1$.
+
+### 📈 5. Vectorized Backtesting & Realistic Friction Modeling
+To validate strategies before deployment, CryptoSight features a custom vectorized 10-step backtesting engine (`backtesting/backtest.py`):
+- **High-Speed Ingestion**: Pulls 1-minute OHLCV candles via PostgreSQL's fast `COPY` stream.
+- **Execution Pricing**: Models trade entries and exits at `next_open` or `current_close` to prevent look-ahead bias.
+- **Dynamic Risk & Order Management**: Automatically calculates position sizes based on capital percentages and vector-scans future candle highs/lows to detect Take-Profit (TP) and Stop-Loss (SL) triggers.
+- **Market Friction Modeling**: Incorporates broker commissions and execution slippage on both entry and exit legs, calculating accurate Gross PnL, Net PnL, and running account balances.
 
 ---
 
@@ -84,7 +98,7 @@ cryptosight/
 │   │   └── run_bybit.bat          # One-click Windows runner script for automated ingestion
 │   └── downloader.py              # Master orchestrator (run_pipeline, download, get_data, resample)
 ├── tal_Indicators/
-│   ├── config.py                  # Institutional catalog of 158 TA-Lib indicators & schema definitions
+│   ├── tal_ind_con.py             # Institutional catalog of 158 TA-Lib indicators & schema definitions
 │   └── indicators.py              # Dynamic Indicators class wrapper & Plotly master dashboard engine
 ├── signals/
 │   ├── strategy_config.yaml       # Quantitative strategy definitions (indicators, operators, and rules)
@@ -92,8 +106,9 @@ cryptosight/
 │   ├── rules.py                   # Generates integer trading signals (+1 Long, -1 Short, 0 Neutral)
 │   └── main.py                    # Master execution pipeline running indicators -> conditions -> signals
 ├── backtesting/
-│   ├── backtest.py                # Performance simulation and quantitative strategy backtesting engine
-│   └── backt_config.yaml          # YAML settings for backtest execution and fee structures
+│   ├── backtest.py                # Vectorized 10-step quantitative strategy backtesting engine
+│   ├── backt_config.yaml          # YAML settings for market selection, position sizing, fees & TP/SL
+│   └── backtest_ledger.csv        # Automated trade ledger output with detailed PnL accounting
 ├── logs/
 │   ├── binance.log                # Rotating log file tracking Binance API execution
 │   ├── bybit.log                  # Rotating log file tracking Bybit API execution
@@ -154,7 +169,20 @@ The quantitative signal module automatically loads synchronized market data from
 
 ---
 
-### Step 5: Rendering Interactive Visual Dashboards
+### Step 5: Running Quantitative Backtests & Performance Simulation
+
+Once your trading signals are generated, use the **Vectorized Backtesting Engine** to simulate historical trading performance with institutional accuracy:
+
+1. **Configure Simulation Parameters**: Open `backtesting/backt_config.yaml` to set your target exchange, coin symbol, date ranges, starting account balance (e.g., `$10,000`), position sizing percentage, and Take-Profit/Stop-Loss boundaries.
+2. **Execute the Backtest Engine**: Run `backtesting/backtest.py` from your terminal:
+   ```bash
+   python -m cryptosight.backtesting.backtest
+   ```
+3. **Review Audit Ledger & PnL Metrics**: The engine prints an instant performance showcase to your console (Total Trades, Final Balance, Net Profit) and exports a comprehensive trade ledger to `backtesting/backtest_ledger.csv`. Each trade entry records execution prices, exact TP/SL exit triggers, broker commissions, slippage friction, and running account balances.
+
+---
+
+### Step 6: Rendering Interactive Visual Dashboards
 
 When performing exploratory research or reviewing strategy performance, CryptoSight provides a built-in visualizer that renders multi-panel, dark-mode interactive charts directly in your web browser:
 
