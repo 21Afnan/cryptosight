@@ -12,10 +12,12 @@ logger = get_logger("SignalsMain")
 
 def run_signals_pipeline(
     config_path: str = None,
+    market_overrides: dict = None,
 ) -> pd.DataFrame:
     """
     Master signals pipeline: loads market configuration from YAML, fetches and resamples data,
     calculates indicators, evaluates conditions, and generates trading signals.
+    Accepts market_overrides dict to dynamically override start_time, end_time, symbol, or exchange.
     """
     if config_path is None:
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -30,6 +32,10 @@ def run_signals_pipeline(
         return pd.DataFrame()
 
     market_cfg = strat_file.get("market", {})
+    if market_overrides:
+        logger.info(f"Applying market config overrides from backtest: {market_overrides}")
+        market_cfg.update({k: v for k, v in market_overrides.items() if v is not None})
+
     indicator_config = strat_file.get("indicators", {})
     strategy_config = strat_file.get("strategy", {})
 
@@ -108,9 +114,9 @@ def run_signals_pipeline(
     return merged_df
 
 
-def run_pipeline_from_config(config_path: str = None) -> pd.DataFrame:
+def run_pipeline_from_config(config_path: str = None, market_overrides: dict = None) -> pd.DataFrame:
     """Reusable entry point — runs the entire pipeline from YAML config alone. Call from anywhere."""
-    return run_signals_pipeline(config_path=config_path)
+    return run_signals_pipeline(config_path=config_path, market_overrides=market_overrides)
 
 
 if __name__ == "__main__":

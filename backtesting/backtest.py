@@ -55,10 +55,18 @@ class BacktestingEngine:
     def run_signals(self, strategy_config_path: str = None) -> pd.DataFrame:
         """
         Executes the AI Quant signals pipeline.
+        Dynamically overrides strategy market parameters (start_time, end_time, symbol, exchange)
+        with values from backt_config.yaml so both pipelines are 100% synchronized.
         Returns a DataFrame containing only the signal column with the timestamp index.
         """
-        self.logger.info("Executing vectorized signals pipeline...")
-        full_df = run_signals_pipeline(config_path=strategy_config_path)
+        self.logger.info("Executing vectorized signals pipeline with config overrides from backtest...")
+        overrides = {
+            "start_time": self.config.get("start_time"),
+            "end_time": self.config.get("end_time"),
+            "symbol": self.config.get("symbol"),
+            "exchange": self.config.get("exchange"),
+        }
+        full_df = run_signals_pipeline(config_path=strategy_config_path, market_overrides=overrides)
         # Keeps timestamp as the index and returns only the 'signal' column
         return full_df[["signal"]]
 
