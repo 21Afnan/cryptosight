@@ -172,6 +172,14 @@ class Downloader:
         merged_df["volume"] = merged_df["volume"].fillna(0.0)
         merged_df[["open", "high", "low", "close"]] = merged_df[["open", "high", "low", "close"]].ffill().bfill()
 
+        # Step 7 — slice to requested start_time and end_time range
+        if start_time:
+            start_dt = pd.to_datetime(start_time, utc=True)
+            merged_df = merged_df[merged_df.index >= start_dt]
+        if end_time and end_time != "now":
+            end_dt = pd.to_datetime(end_time, utc=True)
+            merged_df = merged_df[merged_df.index <= end_dt]
+
         logger.info(f"get_data() ready --> {len(merged_df)} candles ({merged_df.index.min()} to {merged_df.index.max()})")
         return merged_df
 

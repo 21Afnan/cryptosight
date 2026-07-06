@@ -104,7 +104,8 @@ class BacktestingEngine:
         else:
             raise ValueError(f"Unsupported entry_price method: '{entry_method}' in config.")
 
-        entries_df = merged_df[merged_df["signal"] != 0]
+        entries_df = merged_df[merged_df["signal"] != 0].copy()
+        entries_df["direction"] = np.where(entries_df["signal"] == 1, "Long", "Short")
         entries_df["entry_price"] = entry_price_series.loc[entries_df.index]
         entries_df.dropna(subset=["entry_price"], inplace=True)
 
@@ -346,6 +347,10 @@ class BacktestingEngine:
         cols_to_drop = ["commission", "slippage", "gross_pnl", "net_pnl"]
         ledger_df.drop(columns=[c for c in cols_to_drop if c in ledger_df.columns], inplace=True)
 
+        desired_order = ["direction", "signal", "entry_price", "quantity", "take_profit", "stop_loss", "exit_price", "exit_time", "exit_reason", "perc_pnl", "balance"]
+        ordered_cols = [c for c in desired_order if c in ledger_df.columns] + [c for c in ledger_df.columns if c not in desired_order]
+        ledger_df = ledger_df[ordered_cols]
+
         output_csv = Path(__file__).resolve().parent / "backtest_ledger.csv"
         ledger_df.to_csv(output_csv)
         self.logger.info(f"Successfully saved trade ledger CSV to: {output_csv}")
@@ -377,7 +382,7 @@ if __name__ == "__main__":
         print("\n--- Last 5 rows of backtest ledger ---")
         pd.set_option('display.max_columns', None)
         pd.set_option('display.width', 1000)
-        print(ledger[["signal", "entry_price", "take_profit", "stop_loss", "exit_price", "exit_reason", "perc_pnl", "balance"]].tail(5))
+        print(ledger[["direction", "signal", "entry_price", "take_profit", "stop_loss", "exit_price", "exit_reason", "perc_pnl", "balance"]].tail(5))
     print("=" * 55)
 
     
