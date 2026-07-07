@@ -62,7 +62,9 @@ def get_logger(name: str) -> logging.Logger:
     ex = detect_exchange(name)
     ctx = (name + (sys.argv[0] if sys.argv else "")).lower()
 
-    if ex == "binance":
+    if "nlp" in ctx or "reddit" in ctx or "sentiment" in ctx or "bert" in ctx:
+        log_file = LOG_DIR / "nlp.log"
+    elif ex == "binance":
         log_file = LOG_DIR / "binance.log"
     elif ex == "bybit":
         log_file = LOG_DIR / "bybit.log"

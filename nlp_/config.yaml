@@ -1,0 +1,35 @@
+# ==============================================================================
+# CRYPTOSIGHT NLP & SENTIMENT PIPELINE CONFIGURATION
+# ==============================================================================
+# Simple, clean settings for fetching Reddit data and analyzing sentiment.
+# Everything here is explained clearly so anyone can understand and modify it!
+# ==============================================================================
+
+# List of cryptocurrency tickers to fetch Reddit discussions and sentiment for
+symbols:
+  - "BTC"
+  - "ADA"
+
+# Target Reddit community forums (subreddits) to scrape for public discussions
+subreddits:
+  - "Bitcoin"
+  - "cardano"
+
+# AI model settings for classifying text sentiment as Bullish, Bearish, or Neutral
+model:
+  # Hugging Face model name used for financial sentiment classification
+  name: "tabularisai/ModernFinBERT"
+  
+  # Minimum confidence score (0.0 to 1.0) required to accept the sentiment prediction
+  confidence_threshold: 0.60
+
+# Scraping limits to control data volume and prevent API overloading
+scraping:
+  # Number of top posts to fetch per symbol across all subreddits
+  posts_per_symbol: 50
+  
+  # Set to true to also download top discussion comments under each post
+  fetch_comments: true
+  
+  # Maximum number of top comments to grab per post
+  max_comments_per_post: 10
