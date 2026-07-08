@@ -1,7 +1,5 @@
 
-import psycopg2
 from psycopg2.extras import DictCursor
-from cryptosight.utils.db import get_connection
 from cryptosight.utils.logger import get_logger
 
 logger = get_logger("NLP_DB")
@@ -31,8 +29,7 @@ def init_nlp_tables(conn, symbols: list):
                     score BIGINT,
                     upvote_ratio NUMERIC(5, 2),
                     num_comments BIGINT,
-                    comments TEXT[],
-                    ingested_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                    comments TEXT[]
                 );
             """)
             
@@ -41,20 +38,16 @@ def init_nlp_tables(conn, symbols: list):
                 CREATE TABLE IF NOT EXISTS reddit_cleaned.{table_name} (
                     post_id VARCHAR(100) PRIMARY KEY,
                     created_utc TIMESTAMP WITH TIME ZONE NOT NULL,
-                    symbol VARCHAR(20) NOT NULL DEFAULT '{symbol.upper()}',
-                    cleaned_title TEXT,
-                    cleaned_body TEXT,
-                    cleaned_comments TEXT[],
+                    title TEXT,
+                    body TEXT,
+                    comments TEXT[],
                     sentiment VARCHAR(20) NOT NULL,
                     confidence NUMERIC(5, 4) NOT NULL,
-                    processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                    score BIGINT,
+                    upvote_ratio NUMERIC(5, 2),
+                    num_comments BIGINT
                 );
             """)
-            
-            # Dynamic migration: Add missing columns to existing tables if they don't exist
-            cursor.execute(f"ALTER TABLE reddit_raw.{table_name} ADD COLUMN IF NOT EXISTS ingested_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;")
-            cursor.execute(f"ALTER TABLE reddit_cleaned.{table_name} ADD COLUMN IF NOT EXISTS symbol VARCHAR(20) NOT NULL DEFAULT '{symbol.upper()}';")
-            cursor.execute(f"ALTER TABLE reddit_cleaned.{table_name} ADD COLUMN IF NOT EXISTS processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;")
             
     conn.commit()
     logger.info(f"Initialized schemas and tables for symbols: {[s.upper() for s in symbols]}")
@@ -73,8 +66,7 @@ def insert_raw_post(conn, symbol: str, post: dict):
             score = EXCLUDED.score,
             upvote_ratio = EXCLUDED.upvote_ratio,
             num_comments = EXCLUDED.num_comments,
-            comments = EXCLUDED.comments,
-            ingested_at = CURRENT_TIMESTAMP;
+            comments = EXCLUDED.comments;
     """
     with conn.cursor() as cursor:
         cursor.execute(sql, (
@@ -99,27 +91,30 @@ def insert_sentiment_result(conn, symbol: str, result: dict):
     table_name = symbol.lower()
     sql = f"""
         INSERT INTO reddit_cleaned.{table_name} 
-            (post_id, created_utc, symbol, cleaned_title, cleaned_body, cleaned_comments, sentiment, confidence)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            (post_id, created_utc, title, body, comments, sentiment, confidence, score, upvote_ratio, num_comments)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (post_id) DO UPDATE SET
-            symbol = EXCLUDED.symbol,
-            cleaned_title = EXCLUDED.cleaned_title,
-            cleaned_body = EXCLUDED.cleaned_body,
-            cleaned_comments = EXCLUDED.cleaned_comments,
+            title = EXCLUDED.title,
+            body = EXCLUDED.body,
+            comments = EXCLUDED.comments,
             sentiment = EXCLUDED.sentiment,
             confidence = EXCLUDED.confidence,
-            processed_at = CURRENT_TIMESTAMP;
+            score = EXCLUDED.score,
+            upvote_ratio = EXCLUDED.upvote_ratio,
+            num_comments = EXCLUDED.num_comments;
     """
     with conn.cursor() as cursor:
         cursor.execute(sql, (
             result["post_id"],
             result["created_utc"],
-            symbol.upper(),
-            result.get("cleaned_title", ""),
-            result.get("cleaned_body", ""),
-            result.get("cleaned_comments", []),
+            result.get("title", ""),
+            result.get("body", ""),
+            result.get("comments", []),
             result["sentiment"],
-            result["confidence"]
+            result["confidence"],
+            result.get("score"),
+            result.get("upvote_ratio"),
+            result.get("num_comments")
         ))
     conn.commit()
 
@@ -130,7 +125,7 @@ def fetch_unprocessed_posts(conn, symbol: str, limit: int) -> list:
     """
     table_name = symbol.lower()
     sql = f"""
-        SELECT r.post_id, r.created_utc, r.title, r.body, r.comments 
+        SELECT r.post_id, r.created_utc, r.title, r.body, r.comments, r.score, r.upvote_ratio, r.num_comments 
         FROM reddit_raw.{table_name} r
         LEFT JOIN reddit_cleaned.{table_name} c ON r.post_id = c.post_id
         WHERE c.post_id IS NULL

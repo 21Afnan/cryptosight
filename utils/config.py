@@ -1,7 +1,19 @@
 import yaml
+import os
 import pandas as pd
 from pathlib import Path
 from logging import Logger
+from dotenv import load_dotenv
+
+def load_environment() -> Path:
+    """
+    Loads environment variables from the .env file located at the cryptosight root.
+    Returns the path to the loaded .env file.
+    """
+    current_dir = Path(__file__).resolve().parent
+    env_path = current_dir.parent / ".env"
+    load_dotenv(dotenv_path=env_path)
+    return env_path
 
 def load_config(config_path: Path | str) -> dict:
     """

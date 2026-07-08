@@ -22,6 +22,7 @@
 2. **Dynamic 158 TA-Lib Engine**: Harnesses Python magic methods to wrap all 158 TA-Lib technical indicators dynamically, supported by an institutional parameter hierarchy and interactive multi-panel Plotly charting.
 3. **YAML-Driven Quantitative Signal Pipeline**: Evaluates multi-indicator crossover conditions, tracks look-back persistence windows, and generates leak-free long/short trading signals automatically.
 4. **Vectorized 10-Step Backtesting Engine**: Executes ultra-fast historical simulations with realistic market friction modeling (broker commissions, price slippage), dynamic position sizing, automated Take-Profit/Stop-Loss scanning, and cumulative trade ledger accounting.
+5. **AI Sentiment Ingestion & NLP Pipeline**: Scrapes real-time discussions from **Reddit**, processes text dynamically (unescaping HTML entities, expanding contractions, stripping punctuation/numbers), structures text with clear headers, and predicts sentiment (Bullish/Bearish/Neutral) using **Hugging Face FinBERT** (with chunk-averaging to bypass the 512-token limit).
 
 ---
 
@@ -34,12 +35,17 @@ graph TD
     subgraph Data Ingestion Layer
         API["Exchange APIs (Binance & Bybit)"] -->|Fetch Price Data| Fetcher["Exchange Downloaders"]
         Fetcher -->|Clean & Organize| Facade["Master Data Downloader"]
+        Reddit["Reddit API (PRAW Client)"] -->|Scrape Posts & Comments| RedditScraper["Reddit Scraper & Saver"]
     end
 
     subgraph Database & Storage Layer
         Facade -->|Check Last Saved Candle Date| SQL_Check[("PostgreSQL Database")]
         SQL_Check -->|Download Only Missing Data| Facade
         Facade -->|Fast Save & Remove Duplicates| SQL_Check
+        
+        RedditScraper -->|Save Raw Posts & Comments| SQL_Check
+        SQL_Check -->|Fetch Unprocessed Raw Posts| AI_Sentiment["AI Sentiment Pipeline"]
+        AI_Sentiment -->|Save Predict, Score & Ratio| SQL_Check
     end
 
     subgraph Indicators & Charting Layer
@@ -100,6 +106,10 @@ cryptosight/
 │   │   ├── main.py                # Single-call execution script for Bybit ingestion
 │   │   └── run_bybit.bat          # One-click Windows runner script for automated ingestion
 │   └── downloader.py              # Master orchestrator (run_pipeline, download, get_data, resample)
+├── sentiment/
+│   ├── config.yaml            # NLP configurations (symbols, subreddits, posts limit, model name)
+│   ├── db.py                  # Schema definitions (reddit_raw and reddit_cleaned) and insertion queries
+│   └── main.py                # PRAW client scraper, text preprocessor, and FinBERT analyzer
 ├── tal_Indicators/
 │   ├── tal_ind_con.py             # Institutional catalog of 158 TA-Lib indicators & schema definitions
 │   └── indicators.py              # Dynamic Indicators class wrapper & Plotly master dashboard engine
@@ -115,12 +125,13 @@ cryptosight/
 ├── logs/
 │   ├── binance.log                # Rotating log file tracking Binance API execution
 │   ├── bybit.log                  # Rotating log file tracking Bybit API execution
-│   └── db.log                     # Database connection and SQL query execution logs
+│   ├── db.log                     # Database connection and SQL query execution logs
+│   └── nlp.log                    # AI Sentiment and Reddit scraping logs
 ├── utils/
-│   ├── config.py                  # YAML loader and timestamp normalization utility
-│   ├── db.py                      # PostgreSQL schema, table creation, and bulk COPY loader
-│   └── logger.py                  # Rotating file and console logger configuration
-├── .env                           # Database environment variables (git-ignored)
+│   ├── config.py                  # YAML loader and centralized environment variable loading utility
+│   ├── db.py                      # PostgreSQL schema, connection pooling, and bulk COPY loader
+│   └── logger.py                  # Centralized logger config (non-propagating, sys.argv file categorization)
+├── .env                           # Database and Reddit API environment variables (git-ignored)
 ├── requirements.txt               # Python package dependencies
 └── README.md                      # Complete project documentation and operation guide
 ```
@@ -185,7 +196,31 @@ Once your trading signals are generated, use the **Vectorized Backtesting Engine
 
 ---
 
-### Step 6: Rendering Interactive Visual Dashboards
+### Step 6: Running the AI Sentiment & NLP Pipeline
+
+CryptoSight features a built-in NLP sentiment analysis engine to scrape Reddit discussions and evaluate market sentiment:
+
+1. **Reddit API Credentials**: Ensure your `.env` file includes Reddit credentials (get these from [Reddit Prefs Apps](https://www.reddit.com/prefs/apps)):
+   ```env
+   REDDIT_CLIENT_ID=your_client_id
+   REDDIT_CLIENT_SECRET=your_client_secret
+   REDDIT_USER_AGENT=Scraping
+   ```
+2. **Configure Pipeline Settings**: Open `sentiment/config.yaml` to specify target symbols (like `BTC`, `ADA`), target subreddits (like `Bitcoin`, `cardano`), scraper limits (`posts_per_symbol: 500`), and timeframe filters (`time_filter: "all"`).
+3. **Execute the Sentiment Pipeline**: Run the sentiment entry script from your terminal:
+   ```bash
+   python -m cryptosight.sentiment.main
+   ```
+4. **How Sentiment is Classified**:
+   * **Centralized Environmental Loading**: Automatically loads environment settings from the project root using a shared utility function.
+   * **Intelligent Text Cleansing**: Unescapes HTML entities, normalizes curly apostrophes, dynamically expands contractions (like `i've` to `i have`), translates emojis to text words, and strips all punctuation/numbers.
+   * **Excluding Bot Spam**: Automatically filters out stickied/automoderator posts and comments.
+   * **FinBERT Classification**: Structures text with tags (`title: <t>. body: <b>. comments: <c1>. <c2>`) and classifies sentiment (Bullish/Bearish/Neutral). Long texts are split into 500-character chunks to fit FinBERT's 512-token limit, and individual scores are averaged.
+   * **Database Layout**: Stores raw posts in the `reddit_raw` schema and clean results (along with `score`, `upvote_ratio`, and `num_comments` metrics) in the `reddit_cleaned` schema.
+
+---
+
+### Step 7: Rendering Interactive Visual Dashboards
 
 When performing exploratory research or reviewing strategy performance, CryptoSight provides a built-in visualizer that renders multi-panel, dark-mode interactive charts directly in your web browser:
 

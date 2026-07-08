@@ -60,7 +60,8 @@ def get_logger(name: str) -> logging.Logger:
     os.makedirs(LOG_DIR, exist_ok=True)
 
     ex = detect_exchange(name)
-    ctx = (name + (sys.argv[0] if sys.argv else "")).lower()
+    argv_str = " ".join(sys.argv) if hasattr(sys, "argv") else ""
+    ctx = (name + " " + argv_str).lower()
 
     if "nlp" in ctx or "reddit" in ctx or "sentiment" in ctx or "bert" in ctx:
         log_file = LOG_DIR / "nlp.log"
@@ -80,6 +81,7 @@ def get_logger(name: str) -> logging.Logger:
 
     # Avoid duplicate handlers if get_logger called multiple times
     if not logger.handlers:
+        logger.propagate = False
         formatter = logging.Formatter(
             fmt="[%(asctime)s] %(levelname)s [%(name)s:%(lineno)d] - %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S"

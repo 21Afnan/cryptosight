@@ -8,25 +8,31 @@
 # List of cryptocurrency tickers to fetch Reddit discussions and sentiment for
 symbols:
   - "BTC"
+  - "ETH"
+  - "SOL"
+  - "LTC"
+  - "DOGE"
+  - "MINA"
+  - "SUI"
   - "ADA"
 
 # Target Reddit community forums (subreddits) to scrape for public discussions
 subreddits:
   - "Bitcoin"
   - "cardano"
+  - "CryptoCurrency"
 
 # AI model settings for classifying text sentiment as Bullish, Bearish, or Neutral
 model:
   # Hugging Face model name used for financial sentiment classification
   name: "tabularisai/ModernFinBERT"
   
-  # Minimum confidence score (0.0 to 1.0) required to accept the sentiment prediction
-  confidence_threshold: 0.60
 
 # Scraping limits to control data volume and prevent API overloading
 scraping:
   # Number of top posts to fetch per symbol across all subreddits
-  posts_per_symbol: 50
+  posts_per_symbol: 1000
+  time_filter: "all"
   
   # Set to true to also download top discussion comments under each post
   fetch_comments: true

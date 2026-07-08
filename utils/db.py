@@ -5,13 +5,12 @@ import psycopg2
 from psycopg2.errors import UndefinedTable
 import pandas as pd
 from pathlib import Path
-from dotenv import load_dotenv
 from cryptosight.utils.logger import get_logger
+from cryptosight.utils.config import load_environment
 
 logger = get_logger("DBManager")
 
-current_dir = Path(__file__).resolve().parent
-load_dotenv(dotenv_path=current_dir.parent / ".env")
+load_environment()
 
 
 def get_connection():

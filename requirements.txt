@@ -17,3 +17,8 @@ python-dotenv>=1.0.1
 # Technical Analysis & Visualization
 TA-Lib>=0.4.28
 plotly>=5.18.0
+
+# Scrapping
+praw>=8.0.2     
+emoji>=2.15.0
+contractions>=0.2.1
