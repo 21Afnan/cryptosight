@@ -283,7 +283,7 @@ def analyze_text_sentiment(pipe, text: str) -> dict:
 # STEP 7: AI MODEL LOADING & PROCESSING UNPROCESSED POSTS WITH COMBINED TEXT
 # ------------------------------------------------------------------------------
 
-def run_sentiment_analysis_on_raw_data(conn, symbol: str, pipe):
+def run_sentiment_analysis_on_raw_data(conn, symbol: str, pipe, limit: int = 100):
     """
     Fetches raw unprocessed posts from reddit_raw.<symbol>, cleans title, body, and comments,
     combines them all into a single text block, analyzes the sentiment of the entire thread,
@@ -291,8 +291,8 @@ def run_sentiment_analysis_on_raw_data(conn, symbol: str, pipe):
     """
     logger.info(f"Running sentiment analysis for: {symbol}...")
     
-    # 1. Fetch up to 100 unprocessed posts for this symbol
-    posts = fetch_unprocessed_posts(conn, symbol, limit=100)
+    # 1. Fetch unprocessed posts for this symbol up to the limit
+    posts = fetch_unprocessed_posts(conn, symbol, limit=limit)
     if not posts:
         logger.info(f"No new unprocessed posts found for {symbol}.")
         return
@@ -430,7 +430,7 @@ def run_entire_nlp_pipeline(config_path: str = None):
         
         for symbol in symbols:
             # Fetch unprocessed posts from DB, clean them, and analyze sentiment
-            run_sentiment_analysis_on_raw_data(conn, symbol, pipe)
+            run_sentiment_analysis_on_raw_data(conn, symbol, pipe, limit=posts_limit)
             
         logger.info(" NLP SENTIMENT PIPELINE RUN COMPLETED")
         
