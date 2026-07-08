@@ -206,7 +206,7 @@ CryptoSight features a built-in NLP sentiment analysis engine to scrape Reddit d
    REDDIT_CLIENT_SECRET=your_client_secret
    REDDIT_USER_AGENT=Scraping
    ```
-2. **Configure Pipeline Settings**: Open `sentiment/config.yaml` to specify target symbols (like `BTC`, `ADA`), target subreddits (like `Bitcoin`, `cardano`), scraper limits (`posts_per_symbol: 500`), and timeframe filters (`time_filter: "all"`).
+2. **Configure Pipeline Settings**: Open `sentiment/config.yaml` to specify target symbols (like `BTC`, `ADA`), target subreddits (like `Bitcoin`, `cardano`, `CryptoCurrency`), scraper limits (`posts_per_symbol: 1000`), and timeframe filters (`time_filter: "all"`).
 3. **Execute the Sentiment Pipeline**: Run the sentiment entry script from your terminal:
    ```bash
    python -m cryptosight.sentiment.main
@@ -215,8 +215,8 @@ CryptoSight features a built-in NLP sentiment analysis engine to scrape Reddit d
    * **Centralized Environmental Loading**: Automatically loads environment settings from the project root using a shared utility function.
    * **Intelligent Text Cleansing**: Unescapes HTML entities, normalizes curly apostrophes, dynamically expands contractions (like `i've` to `i have`), translates emojis to text words, and strips all punctuation/numbers.
    * **Excluding Bot Spam**: Automatically filters out stickied/automoderator posts and comments.
-   * **FinBERT Classification**: Structures text with tags (`title: <t>. body: <b>. comments: <c1>. <c2>`) and classifies sentiment (Bullish/Bearish/Neutral). Long texts are split into 500-character chunks to fit FinBERT's 512-token limit, and individual scores are averaged.
-   * **Database Layout**: Stores raw posts in the `reddit_raw` schema and clean results (along with `score`, `upvote_ratio`, and `num_comments` metrics) in the `reddit_cleaned` schema.
+   * **FinBERT Classification**: Structures text with tags (`title: <t>. body: <b>. comments: <c1>. <c2>`) and classifies sentiment (Bullish/Bearish/Neutral). Long texts are split into 500-character chunks with a 100-character overlap (using a sliding-window algorithm) to preserve sentence context, and individual chunk scores are averaged dynamically.
+   * **Database Layout**: Stores raw posts in the `reddit_raw.<symbol>` table and clean results (along with `score`, `upvote_ratio`, and `num_comments` metrics, saved under clean headers `title`, `body`, `comments`) in the `reddit_cleaned.<symbol>` table.
 
 ---
 
