@@ -5,7 +5,7 @@ import yaml
 import html
 import emoji
 import praw
-import contractions
+import contractions 
 from pathlib import Path
 from datetime import datetime, timezone
 from cryptosight.utils.db import get_connection
