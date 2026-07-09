@@ -1,8 +1,8 @@
 # Backtest Configuration
 
 # Market Selection
-exchange: "binance"
-symbol: "BTC"
+exchange: "bybit"
+symbol: "btc"
 
 # Must always be 1m OHLCV
 timeframe: "1m"

@@ -2,7 +2,12 @@ import yaml
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from cryptosight.utils.db import get_connection, fetch_ohlcv
+from cryptosight.utils.db import (
+    get_connection, fetch_ohlcv,
+    create_backtest_schema_and_table, insert_backtest_ledger,
+    create_signals_schema_and_table, insert_signals,
+)
+from cryptosight.utils.metadata import upsert_strategy_data
 from cryptosight.utils.logger import get_logger
 from cryptosight.signals.main import run_signals_pipeline
 
@@ -67,7 +72,62 @@ class BacktestingEngine:
             "exchange": self.config.get("exchange"),
         }
         full_df = run_signals_pipeline(config_path=strategy_config_path, market_overrides=overrides)
+
+        # Compute strategy_id and save full signals DataFrame to DB
+        try:
+            from cryptosight.utils.config import load_config
+            from cryptosight.utils.metadata import generate_strategy_id
+            import os
+            cfg_path = strategy_config_path or os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "..", "signals", "strategy_config.yaml"
+            )
+            strat_cfg = load_config(cfg_path)
+            target_tf = strat_cfg.get("market", {}).get("target_timeframe", "1m")
+            indicators_cfg = strat_cfg.get("indicators", {})
+            strategy_cfg   = strat_cfg.get("strategy", {})
+            self.strategy_id = generate_strategy_id(
+                self.config["exchange"],
+                self.config["symbol"],
+                target_tf,
+                indicators_cfg
+            )
+        except Exception as e:
+            self.logger.warning(f"Could not compute strategy_id from config (using fallback): {e}")
+            self.strategy_id = f"{self.config['exchange'].lower()}_{self.config['symbol'].lower()}_{self.config['timeframe'].lower()}"
+
+        if not full_df.empty:
+            try:
+                conn = get_connection()
+                create_signals_schema_and_table(
+                    conn,
+                    exchange=self.config["exchange"],
+                    symbol=self.config["symbol"],
+                    target_timeframe=target_tf,
+                )
+                insert_signals(
+                    conn,
+                    exchange=self.config["exchange"],
+                    symbol=self.config["symbol"],
+                    target_timeframe=target_tf,
+                    df=full_df,
+                )
+                upsert_strategy_data(
+                    conn,
+                    exchange=self.config["exchange"],
+                    symbol=self.config["symbol"],
+                    target_timeframe=target_tf,
+                    indicators_config=indicators_cfg,
+                    strategy_config=strategy_cfg,
+                )
+                conn.close()
+                self.logger.info(f"Signals + strategy metadata saved to DB for [{self.strategy_id}].")
+            except Exception as e:
+                self.logger.warning(f"Could not save signals to DB (non-fatal): {e}")
+
         # Keeps timestamp as the index and returns only the 'signal' column
+        if full_df.empty or "signal" not in full_df.columns:
+            return pd.DataFrame(columns=["signal"])
         return full_df[["signal"]]
 
     def merge_data(self, ohlcv_df: pd.DataFrame, signals_df: pd.DataFrame) -> pd.DataFrame:
@@ -75,12 +135,16 @@ class BacktestingEngine:
         Merges 1-minute OHLCV data with the signal DataFrame.
         Fills missing signal values with 0 (No Signal/Hold).
         """
-        self.logger.info("Merging 1-minute OHLCV data with signals...")
+        # If no signals generated or signals_df is empty, fill all OHLCV bars with 0 (Hold)
+        if signals_df.empty or "signal" not in signals_df.columns:
+            merged_df = ohlcv_df.copy()
+            merged_df["signal"] = 0
+            return merged_df
 
         # Ensure indices are datetime with UTC timezone
         if ohlcv_df.index.tz is None:
             ohlcv_df.index = pd.to_datetime(ohlcv_df.index, utc=True)
-        if signals_df.index.tz is None:
+        if isinstance(signals_df.index, pd.DatetimeIndex) and signals_df.index.tz is None:
             signals_df.index = pd.to_datetime(signals_df.index, utc=True)
 
         # Left join 1m candles with signals
@@ -368,7 +432,7 @@ class BacktestingEngine:
         # Step 9: Update the account balance after each trade
         ledger_df = self.update_balance(entries_df)
 
-        # Step 10: Clean up columns and save trade ledger to CSV
+        # Step 10: Clean up columns
         # Remove commission, slippage, and gross_pnl from final ledger output (keep net_pnl)
         cols_to_drop = ["commission", "slippage", "gross_pnl"]
         ledger_df.drop(columns=[c for c in cols_to_drop if c in ledger_df.columns], inplace=True)
@@ -377,9 +441,43 @@ class BacktestingEngine:
         ordered_cols = [c for c in desired_order if c in ledger_df.columns] + [c for c in ledger_df.columns if c not in desired_order]
         ledger_df = ledger_df[ordered_cols]
 
-        output_csv = Path(__file__).resolve().parent / "backtest_ledger.csv"
-        ledger_df.to_csv(output_csv)
-        self.logger.info(f"Successfully saved trade ledger CSV to: {output_csv}")
+        strat_id = getattr(self, "strategy_id", f"{self.config['exchange'].lower()}_{self.config['symbol'].lower()}_{self.config['timeframe'].lower()}")
+
+        # Step 11: Save ledger to PostgreSQL (backtests.{strategy_id})
+        try:
+            conn = get_connection()
+            create_backtest_schema_and_table(
+                conn,
+                exchange=self.config["exchange"],
+                symbol=self.config["symbol"],
+                timeframe=self.config["timeframe"],
+                strategy_id=strat_id,
+            )
+            insert_backtest_ledger(
+                conn,
+                exchange=self.config["exchange"],
+                symbol=self.config["symbol"],
+                timeframe=self.config["timeframe"],
+                ledger_df=ledger_df,
+                strategy_id=strat_id,
+            )
+            
+            # Save high-level backtest config & summary results to metadata.backtest_data
+            try:
+                from cryptosight.utils.metadata import upsert_backtest_data
+                upsert_backtest_data(
+                    conn=conn,
+                    strategy_id=strat_id,
+                    backtest_config=self.config,
+                    ledger_df=ledger_df,
+                )
+            except Exception as meta_err:
+                self.logger.warning(f"Could not save backtest metadata (non-fatal): {meta_err}")
+
+            conn.close()
+            self.logger.info(f"Backtest ledger saved to DB table 'backtests.{strat_id}'.")
+        except Exception as e:
+            self.logger.warning(f"Could not save backtest ledger to DB (non-fatal): {e}")
 
         return ledger_df
 

@@ -7,6 +7,7 @@ from cryptosight.utils.db import (
 from cryptosight.data.binance.binance_client import BinanceClient
 from cryptosight.data.bybit.bybit_client import BybitClient
 from cryptosight.utils.config import normalize_timestamp
+from cryptosight.utils.metadata import upsert_market_data
 
 logger = get_logger("Downloader")
 
@@ -84,6 +85,7 @@ class Downloader:
                 df[cols] = df[cols].ffill().bfill()
 
             insert_ohlcv(conn, self.exchange, self.symbol, self.timeframe, list(df.itertuples(index=True, name=None)))
+            upsert_market_data(conn, self.exchange, self.symbol, self.timeframe)
 
         except Exception as e:
             logger.error(f"download() failed: {e}")

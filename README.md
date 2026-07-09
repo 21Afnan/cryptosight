@@ -20,8 +20,8 @@
 
 1. **Automated Data Ingestion**: Seamlessly connects to **Binance** and **Bybit**, fetching historical and real-time OHLCV (Open, High, Low, Close, Volume) data with smart gap detection against a **PostgreSQL** database.
 2. **Dynamic 158 TA-Lib Engine**: Harnesses Python magic methods to wrap all 158 TA-Lib technical indicators dynamically, supported by an institutional parameter hierarchy and interactive multi-panel Plotly charting.
-3. **YAML-Driven Quantitative Signal Pipeline**: Evaluates multi-indicator crossover conditions, tracks look-back persistence windows, and generates leak-free long/short trading signals automatically.
-4. **Vectorized 10-Step Backtesting Engine**: Executes ultra-fast historical simulations with realistic market friction modeling (broker commissions, price slippage), dynamic position sizing, automated Take-Profit/Stop-Loss scanning, and cumulative trade ledger accounting.
+3. **YAML-Driven Quantitative Signal Pipeline**: Evaluates multi-indicator crossover conditions, tracks look-back persistence windows, and generates leak-free long/short trading signals automatically in lightweight database tables.
+4. **Vectorized 10-Step Backtesting Engine**: Executes ultra-fast historical simulations with realistic market friction modeling (broker commissions, price slippage), dynamic position sizing, automated Take-Profit/Stop-Loss scanning, and stores the completed ledger directly in PostgreSQL.
 5. **AI Sentiment Ingestion & NLP Pipeline**: Scrapes real-time discussions from **Reddit**, processes text dynamically (unescaping HTML entities, expanding contractions, stripping punctuation/numbers), structures text with clear headers, and predicts sentiment (Bullish/Bearish/Neutral) using **Hugging Face FinBERT** (with chunk-averaging to bypass the 512-token limit).
 
 ---
@@ -60,7 +60,7 @@ graph TD
     subgraph Backtesting & Simulation Layer
         SQL_Check -->|Load 1m Price Candles| Backtester["Strategy Backtesting Engine"]
         Signals -->|Send Trading Signals| Backtester
-        Backtester -->|Simulate Trades, TP/SL & Fees| Ledger["Final Trade Report & PnL (CSV File)"]
+        Backtester -->|Simulate Trades, TP/SL & Fees| Ledger["Backtest Ledger Database Table"]
     end
 ```
 
@@ -80,13 +80,17 @@ Instead of hardcoding functions for 158 different indicators, CryptoSight utiliz
 The quantitative signal engine evaluates trading rules defined in human-readable YAML configuration files. To ensure realistic backtesting and live trading execution:
 - Conditions (such as moving average crossovers or RSI thresholds) are evaluated across configurable persistence windows.
 - Generated signals are automatically **shifted by 1 bar** so that a signal triggered by the close of Bar $T$ is executed at the open of Bar $T+1$.
+- **Lightweight Signals Schema**: Signals are saved in `signals.{exchange}_{symbol}_{target_timeframe}` containing only the `timestamp` and `signal` columns (dropping redundant OHLCV columns, indicators, and conditions) to keep the database extremely lightweight and fast.
 
-### 📈 5. Vectorized Backtesting & Realistic Friction Modeling
+### 📈 5. Vectorized Backtesting, Naming Rules & Metadata Tracking
 To validate strategies before deployment, CryptoSight features a custom vectorized 10-step backtesting engine (`backtesting/backtest.py`):
 - **High-Speed Ingestion**: Pulls 1-minute OHLCV candles via PostgreSQL's fast `COPY` stream.
 - **Execution Pricing**: Models trade entries and exits at `next_open` or `current_close` to prevent look-ahead bias.
 - **Dynamic Risk & Order Management**: Automatically calculates position sizes based on capital percentages and vector-scans future candle highs/lows to detect Take-Profit (TP) and Stop-Loss (SL) triggers.
 - **Market Friction Modeling**: Incorporates broker commissions and execution slippage on both entry and exit legs, calculating accurate Gross PnL, Net PnL, and running account balances.
+- **Strategy ID Integration**: Automatically creates a unique `strategy_id` based on the exchange, coin, timeframe, and sorted indicators + their periods (e.g. `binance_sol_1h_rsi_14`) to prevent naming collision and duplicate runs.
+- **Database-Only Storage**: The trade ledger is saved directly in PostgreSQL under the table name `backtests.{strategy_id}` (e.g., `backtests.binance_sol_1h_rsi_14`) instead of local CSV files.
+- **Metadata Configuration Tracking**: Saves high-level config snapshots and summary results (total trades, win rate, net PnL, final balance) into the relational table `metadata.backtest_data` connected via Foreign Key to `metadata.strategy_data(strategy_id)`.
 
 ---
 
@@ -120,8 +124,7 @@ cryptosight/
 │   └── main.py                    # Master execution pipeline running indicators -> conditions -> signals
 ├── backtesting/
 │   ├── backtest.py                # Vectorized 10-step quantitative strategy backtesting engine
-│   ├── backt_config.yaml          # YAML settings for market selection, position sizing, fees & TP/SL
-│   └── backtest_ledger.csv        # Automated trade ledger output with detailed PnL accounting
+│   └── backt_config.yaml          # YAML settings for market selection, position sizing, fees & TP/SL
 ├── logs/
 │   ├── binance.log                # Rotating log file tracking Binance API execution
 │   ├── bybit.log                  # Rotating log file tracking Bybit API execution
@@ -192,7 +195,7 @@ Once your trading signals are generated, use the **Vectorized Backtesting Engine
    ```bash
    python -m cryptosight.backtesting.backtest
    ```
-3. **Review Audit Ledger & PnL Metrics**: The engine prints an instant performance showcase to your console (Total Trades, Final Balance, Net Profit) and exports a comprehensive trade ledger to `backtesting/backtest_ledger.csv`. Each trade entry records execution prices, exact TP/SL exit triggers, broker commissions, slippage friction, and running account balances.
+3. **Review Audit Ledger & PnL Metrics**: The engine prints an instant performance showcase to your console (Total Trades, Final Balance, Net Profit) and saves the complete trade ledger inside your database under the table name `backtests.{strategy_id}` (e.g. `backtests.binance_sol_1h_rsi_14`). Each trade entry records execution prices, exact TP/SL exit triggers, broker commissions, slippage friction, net PnL, percentage PnL, cumulative PnL, and running account balances. High-level summary metrics and configurations are tracked in the `metadata.backtest_data` table.
 
 ---
 

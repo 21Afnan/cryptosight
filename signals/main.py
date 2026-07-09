@@ -5,6 +5,8 @@ from cryptosight.tal_Indicators.indicators import apply_indicators_from_config
 from cryptosight.signals.conditions import ConditionEvaluator
 from cryptosight.signals.rules import RulesEvaluator
 from cryptosight.utils.logger import get_logger
+from cryptosight.utils.db import get_connection, create_signals_schema_and_table, insert_signals
+from cryptosight.utils.metadata import upsert_strategy_data
 from cryptosight.data.downloader import Downloader
 
 logger = get_logger("SignalsMain")
@@ -111,6 +113,19 @@ def run_signals_pipeline(
 
     active_signals = (merged_df["signal"] != 0).sum()
     logger.info(f"Pipeline complete — {len(merged_df)} rows, {active_signals} active signals.")
+
+    # 8. Save to DB (only when running standalone — skip when called from backtester)
+    if not market_overrides:
+        try:
+            conn = get_connection()
+            create_signals_schema_and_table(conn, exchange, symbol, target_timeframe)
+            insert_signals(conn, exchange, symbol, target_timeframe, merged_df)
+            upsert_strategy_data(conn, exchange, symbol, target_timeframe, indicator_config, strategy_config)
+            conn.close()
+        except Exception as e:
+            logger.warning(f"Could not save signals/strategy metadata to DB (non-fatal): {e}")
+
+
     return merged_df
 
 

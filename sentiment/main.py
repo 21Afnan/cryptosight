@@ -12,6 +12,7 @@ from cryptosight.utils.db import get_connection
 from cryptosight.utils.logger import get_logger
 from cryptosight.utils.config import load_environment as central_load_env
 from cryptosight.sentiment.db import init_nlp_tables, insert_raw_post, fetch_unprocessed_posts, insert_sentiment_result
+from cryptosight.utils.metadata import upsert_sentiment_data
 
 # Initialize the central logger for this module
 logger = get_logger("NLP_MAIN")
@@ -431,6 +432,7 @@ def run_entire_nlp_pipeline(config_path: str = None):
         for symbol in symbols:
             # Fetch unprocessed posts from DB, clean them, and analyze sentiment
             run_sentiment_analysis_on_raw_data(conn, symbol, pipe, limit=posts_limit)
+            upsert_sentiment_data(conn, symbol)
             
         logger.info(" NLP SENTIMENT PIPELINE RUN COMPLETED")
         

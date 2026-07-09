@@ -1,8 +1,10 @@
 import os
 import csv
+import json
 from io import StringIO
 import psycopg2
 from psycopg2.errors import UndefinedTable
+from psycopg2.extras import execute_values
 import pandas as pd
 from pathlib import Path
 from cryptosight.utils.logger import get_logger
@@ -205,3 +207,226 @@ def fetch_ohlcv(conn, exchange: str, symbol: str, timeframe: str, start_time: st
     except Exception as error:
         logger.error(f"Error fetching data via COPY from '{full_table}': {error}")
         return pd.DataFrame()
+
+
+# ── SIGNALS ──────────────────────────────────────────────────────────────────
+
+def get_signals_table_names(exchange: str, symbol: str, target_timeframe: str):
+    """Returns standardized schema and table names for the signals schema."""
+    schema_name = "signals"
+    table_name  = f"{exchange.lower()}_{symbol.lower()}_{target_timeframe.lower()}"
+    return schema_name, table_name
+
+
+def create_signals_schema_and_table(conn, exchange: str, symbol: str, target_timeframe: str):
+    """Creates the 'signals' schema and a market-specific signal table if they don't exist."""
+    schema_name, table_name = get_signals_table_names(exchange, symbol, target_timeframe)
+
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS signals;"
+    create_table_sql  = f"""
+    CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (
+        timestamp    TIMESTAMP WITH TIME ZONE PRIMARY KEY,
+        signal       SMALLINT     NOT NULL DEFAULT 0
+    );
+    """
+    create_index_sql = f"""
+    CREATE INDEX IF NOT EXISTS idx_{table_name}_signal
+    ON {schema_name}.{table_name} (signal)
+    WHERE signal != 0;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT 1 FROM pg_tables WHERE schemaname = %s AND tablename = %s",
+                (schema_name, table_name)
+            )
+            table_exists = cursor.fetchone() is not None
+
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_table_sql)
+            cursor.execute(create_index_sql)
+            conn.commit()
+
+            if table_exists:
+                logger.info(f"Table '{schema_name}.{table_name}' verified.")
+            else:
+                logger.info(f"Table '{schema_name}.{table_name}' created.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating signals table '{schema_name}.{table_name}': {error}")
+        raise
+
+
+def insert_signals(conn, exchange: str, symbol: str, target_timeframe: str, df: pd.DataFrame):
+    """
+    Upserts all rows from the signals pipeline DataFrame into signals.{exchange}_{symbol}_{target_timeframe}.
+    Automatically packs columns prefixed with 'ind_' into the indicators JSONB column
+    and columns prefixed with 'long_cond_' / 'short_cond_' into the conditions JSONB column.
+    Uses execute_values for clean handling of JSONB types.
+    """
+    if df is None or df.empty:
+        return
+
+    schema_name, table_name = get_signals_table_names(exchange, symbol, target_timeframe)
+    full_table = f"{schema_name}.{table_name}"
+
+    rows = []
+    for ts, row in df.iterrows():
+        sig = int(row["signal"]) if "signal" in df.columns else 0
+        rows.append((
+            ts,
+            sig,
+        ))
+
+    upsert_sql = f"""
+        INSERT INTO {full_table} (timestamp, signal)
+        VALUES %s
+        ON CONFLICT (timestamp) DO UPDATE SET
+            signal       = EXCLUDED.signal;
+    """
+    try:
+        with conn.cursor() as cursor:
+            execute_values(cursor, upsert_sql, rows, page_size=500)
+        conn.commit()
+        active = sum(1 for r in rows if r[-1] != 0)
+        logger.info(f"Saved {len(rows)} signal rows ({active} active) to '{full_table}'.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error upserting signals into '{full_table}': {error}")
+        raise
+
+
+# ── BACKTESTS ─────────────────────────────────────────────────────────────────
+
+def get_backtest_table_names(exchange: str, symbol: str, timeframe: str, strategy_id: str = None):
+    """Returns standardized schema and table names for the backtests schema."""
+    schema_name = "backtests"
+    if strategy_id:
+        table_name = strategy_id.lower()
+    else:
+        table_name = f"{exchange.lower()}_{symbol.lower()}_{timeframe.lower()}"
+    return schema_name, table_name
+
+
+def create_backtest_schema_and_table(conn, exchange: str, symbol: str, timeframe: str, strategy_id: str = None):
+    """Creates the 'backtests' schema and a market/strategy-specific ledger table if they don't exist."""
+    schema_name, table_name = get_backtest_table_names(exchange, symbol, timeframe, strategy_id=strategy_id)
+
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS backtests;"
+    create_table_sql  = f"""
+    CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (
+        entry_time     TIMESTAMP WITH TIME ZONE PRIMARY KEY,
+        direction      VARCHAR(8)    NOT NULL,
+        signal         SMALLINT      NOT NULL,
+        entry_price    NUMERIC(18,8) NOT NULL,
+        quantity       NUMERIC(18,8) NOT NULL,
+        take_profit    NUMERIC(18,8) NOT NULL,
+        stop_loss      NUMERIC(18,8) NOT NULL,
+        exit_price     NUMERIC(18,8) NOT NULL,
+        exit_time      TIMESTAMP WITH TIME ZONE NOT NULL,
+        exit_reason    VARCHAR(32)   NOT NULL,
+        status         VARCHAR(16)   NOT NULL,
+        net_pnl        NUMERIC(18,8) NOT NULL,
+        perc_pnl       NUMERIC(10,6) NOT NULL,
+        cumulative_pnl NUMERIC(18,8) NOT NULL,
+        balance        NUMERIC(18,8) NOT NULL
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT 1 FROM pg_tables WHERE schemaname = %s AND tablename = %s",
+                (schema_name, table_name)
+            )
+            table_exists = cursor.fetchone() is not None
+
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_table_sql)
+            conn.commit()
+
+            if table_exists:
+                logger.info(f"Table '{schema_name}.{table_name}' verified.")
+            else:
+                logger.info(f"Table '{schema_name}.{table_name}' created.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating backtests table '{schema_name}.{table_name}': {error}")
+        raise
+
+
+def insert_backtest_ledger(conn, exchange: str, symbol: str, timeframe: str, ledger_df: pd.DataFrame, strategy_id: str = None):
+    """
+    Upserts all trade rows from the backtest ledger DataFrame into backtests.{strategy_id or exchange_symbol_timeframe}.
+    entry_time (the DataFrame index from run_pipeline) is used as the PRIMARY KEY.
+    Uses the same COPY + temp table approach as insert_ohlcv for maximum speed.
+    """
+    if ledger_df is None or ledger_df.empty:
+        return
+
+    schema_name, table_name = get_backtest_table_names(exchange, symbol, timeframe, strategy_id=strategy_id)
+    full_table = f"{schema_name}.{table_name}"
+    temp_table = f"temp_{table_name}"
+
+    ledger_cols = (
+        "entry_time", "direction", "signal", "entry_price", "quantity",
+        "take_profit", "stop_loss", "exit_price", "exit_time", "exit_reason",
+        "status", "net_pnl", "perc_pnl", "cumulative_pnl", "balance"
+    )
+
+    # Build tab-separated buffer — same approach as insert_ohlcv
+    buffer = StringIO()
+    writer = csv.writer(buffer, delimiter="\t")
+    for entry_time, row in ledger_df.iterrows():
+        writer.writerow([
+            entry_time,
+            row["direction"],
+            int(row["signal"]),
+            row["entry_price"],
+            row["quantity"],
+            row["take_profit"],
+            row["stop_loss"],
+            row["exit_price"],
+            row["exit_time"],
+            row["exit_reason"],
+            row["status"],
+            row["net_pnl"],
+            row["perc_pnl"],
+            row["cumulative_pnl"],
+            row["balance"],
+        ])
+    buffer.seek(0)
+
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(f"DROP TABLE IF EXISTS {temp_table};")
+            cursor.execute(f"""
+                CREATE TEMP TABLE {temp_table}
+                (LIKE {full_table} INCLUDING DEFAULTS) ON COMMIT DROP;
+            """)
+            cursor.copy_from(buffer, temp_table, sep="\t", columns=ledger_cols)
+            cursor.execute(f"""
+                INSERT INTO {full_table} ({', '.join(ledger_cols)})
+                SELECT DISTINCT ON (entry_time) {', '.join(ledger_cols)} FROM {temp_table}
+                ORDER BY entry_time ASC
+                ON CONFLICT (entry_time) DO UPDATE SET
+                    direction      = EXCLUDED.direction,
+                    signal         = EXCLUDED.signal,
+                    entry_price    = EXCLUDED.entry_price,
+                    quantity       = EXCLUDED.quantity,
+                    take_profit    = EXCLUDED.take_profit,
+                    stop_loss      = EXCLUDED.stop_loss,
+                    exit_price     = EXCLUDED.exit_price,
+                    exit_time      = EXCLUDED.exit_time,
+                    exit_reason    = EXCLUDED.exit_reason,
+                    status         = EXCLUDED.status,
+                    net_pnl        = EXCLUDED.net_pnl,
+                    perc_pnl       = EXCLUDED.perc_pnl,
+                    cumulative_pnl = EXCLUDED.cumulative_pnl,
+                    balance        = EXCLUDED.balance;
+            """)
+        conn.commit()
+        logger.info(f"Saved {len(ledger_df)} trade rows to '{full_table}' via COPY.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error inserting backtest ledger into '{full_table}': {error}")
+        raise
