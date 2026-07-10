@@ -23,6 +23,7 @@
 3. **YAML-Driven Quantitative Signal Pipeline**: Evaluates multi-indicator crossover conditions, tracks look-back persistence windows, and generates leak-free long/short trading signals automatically in lightweight database tables.
 4. **Vectorized 10-Step Backtesting Engine**: Executes ultra-fast historical simulations with realistic market friction modeling (broker commissions, price slippage), dynamic position sizing, automated Take-Profit/Stop-Loss scanning, and stores the completed ledger directly in PostgreSQL.
 5. **AI Sentiment Ingestion & NLP Pipeline**: Scrapes real-time discussions from **Reddit**, processes text dynamically (unescaping HTML entities, expanding contractions, stripping punctuation/numbers), structures text with clear headers, and predicts sentiment (Bullish/Bearish/Neutral) using **Hugging Face FinBERT** (with chunk-averaging to bypass the 512-token limit).
+6. **Quantitative ML Feature Engineering & Target Pipeline (`cryptosight.ML`)**: A pure in-memory, decoupled quant data pipeline that resamples raw market data to target timeframes (`15m`, `1h`), calculates multi-indicator technical features and candlestick patterns (`EMA`, `RSI`, `MACD`, `DOJI`, `ENGULFING`) via parameter shorthand translation, and generates multi-paradigm prediction targets (`Regression percentage returns`, `Classification directional thresholds`, `Time-Series shifts`) with zero-redundancy configuration loading and high-readability terminal verification.
 
 ---
 
@@ -62,6 +63,13 @@ graph TD
         Signals -->|Send Trading Signals| Backtester
         Backtester -->|Simulate Trades, TP/SL & Fees| Ledger["Backtest Ledger Database Table"]
     end
+
+    subgraph Machine Learning & Target Engineering Layer
+        SQL_Check -->|Resample 1m OHLCV| ML_Resample["Step 1: Market Data Downloader & Resampler"]
+        ML_Resample -->|Pass Resampled df| ML_Features["Step 2: Technical & Pattern Feature Builder"]
+        ML_Features -->|Inject Indicators & Patterns| ML_Target["Step 3: Multi-Paradigm Target Generator"]
+        ML_Target -->|Clean Output| ML_Dataset["Memory-Ready ML Datasets (Regression / Classification / TimeSeries)"]
+    end
 ```
 
 ### 🧠 1. Smart Gap Ingestion & Zero-Redundancy Storage
@@ -91,6 +99,18 @@ To validate strategies before deployment, CryptoSight features a custom vectoriz
 - **Strategy ID Integration**: Automatically creates a unique `strategy_id` based on the exchange, coin, timeframe, and sorted indicators + their periods (e.g. `binance_sol_1h_rsi_14`) to prevent naming collision and duplicate runs.
 - **Database-Only Storage**: The trade ledger is saved directly in PostgreSQL under the table name `backtests.{strategy_id}` (e.g., `backtests.binance_sol_1h_rsi_14`) instead of local CSV files.
 - **Metadata Configuration Tracking**: Saves high-level config snapshots and summary results (total trades, win rate, net PnL, final balance) into the relational table `metadata.backtest_data` connected via Foreign Key to `metadata.strategy_data(strategy_id)`.
+
+### 🧪 6. Decoupled Quantitative ML Pipeline (`cryptosight.ML`)
+To prepare clean, stationary, and leak-free datasets for advanced AI and machine learning training (e.g., XGBoost, LSTMs, PyTorch), CryptoSight includes an institutional quantitative ML data builder governed by the **Single Responsibility Principle**:
+- **Single Source of Truth (`main.py`)**: The central entry point (`ML/main.py`) exclusively handles disk I/O and configuration loading (`load_config`), passing a pre-loaded dictionary directly into the quantitative processing engine to eliminate redundant file reads (`DRY Principle`).
+- **3-Step In-Memory Quant Engine (`features.py`)**: `MLFeatureBuilder` executes a strictly ordered functional flow:
+  1. *Step 1 (Resampling)*: Dynamically converts raw `1m` OHLCV database candles into any configured `target_timeframe` (`15m`, `1h`, `4h`) via `Downloader`.
+  2. *Step 2 (Feature Engineering)*: Delegates all technical indicators and candlestick chart patterns directly to `Indicators.get_dataframe()`, utilizing an automatic parameter shorthand translator (`fast`, `slow`, `signal`) that bridges YAML configuration aliases cleanly to TA-Lib C schemas without errors.
+  3. *Step 3 (Target Generation)*: Computes exact prediction targets tailored for three distinct paradigms:
+     - `Regression`: Stationary simple percentage returns exactly `horizon` bars into the future (`(Close_future - Close_current) / Close_current`).
+     - `Classification`: Noise-filtered directional classes (`1` for Buy, `-1` for Sell, `0` for Hold) using a configurable `threshold` (`0.2%`) to ensure labels represent movements that exceed exchange commissions and slippage.
+     - `Time Series`: Shifting raw source price sequences by `horizon` bars for sequence-to-sequence deep forecasting.
+- **Automated Warm-up & Horizon Cleaning**: Automatically drops initial indicator warm-up `NaN` values and trailing unknown horizon rows, organizing the output DataFrame (`OHLCV + Target + Features`) for immediate institutional inspection.
 
 ---
 
@@ -125,6 +145,10 @@ cryptosight/
 ├── backtesting/
 │   ├── backtest.py                # Vectorized 10-step quantitative strategy backtesting engine
 │   └── backt_config.yaml          # YAML settings for market selection, position sizing, fees & TP/SL
+├── ML/
+│   ├── main.py                    # Single-call orchestrator handling disk config loading (`get_ml_dataset`)
+│   ├── features.py                # 3-Step in-memory quant engine (`MLFeatureBuilder`) for features & targets
+│   └── ml_config.yaml             # YAML specifications for timeframes, features, and target paradigms
 ├── logs/
 │   ├── binance.log                # Rotating log file tracking Binance API execution
 │   ├── bybit.log                  # Rotating log file tracking Bybit API execution
@@ -232,6 +256,22 @@ When performing exploratory research or reviewing strategy performance, CryptoSi
 3. Call the master dashboard plotting function to instantly launch an interactive visual suite featuring synchronized zooming, panning, and multi-panel indicator overlays.
 
 > **💡 Institutional Tip**: When analyzing large datasets with hundreds of thousands of candles, slice your data to the most recent 1,000 to 2,000 bars prior to visualization to ensure lightning-fast browser performance and smooth UI interaction.
+
+---
+
+### Step 8: Building Quantitative Machine Learning Datasets (`cryptosight.ML`)
+
+To prepare multi-indicator, target-labeled datasets ready for AI/ML training (`Regression`, `Classification`, or `TimeSeries`), run the unified ML pipeline orchestrator (`cryptosight.ML.main`):
+
+1. **Configure Your ML Pipeline**: Open `ML/ml_config.yaml` to specify target symbols (`symbols: ["BTC", "ETH"]`), `target_timeframe` (`15m`), enabled indicators (`EMA`, `RSI`, `MACD`, `DOJI`, `ENGULFING`), and target specifications (`model_type: "regression"`, `horizon: 1`, `threshold: 0.002`).
+2. **Execute the ML Dataset Engine**: Run the main module directly from your terminal:
+   ```bash
+   python -m cryptosight.ML.main
+   ```
+3. **Review Output & Verification Table**: The orchestrator returns clean, memory-ready DataFrames (`{"BTC": clean_df}`) and outputs a high-readability institutional verification table directly to your console:
+   - **OHLCV + Target Placement**: The `target` column sits directly beside `close` and `volume` for instant visual verification without horizontal scrolling.
+   - **Non-Wrapping Ellipsis Formatting**: Numbers are cleanly rounded to 4 decimals (`round(4)`), and horizontal display bounds are set (`display.max_columns=6, width=1000`) so columns are neatly condensed with ellipsis (`...`) on a single line without wrapping across rows.
+   - **Complete Column Checklist**: Below the compact preview table, the system prints the complete list of all engineered feature names (`['open', 'high', 'low', 'close', 'volume', 'target', 'ind_EMA_20'...]`) for 100% audit transparency.
 
 ---
 
