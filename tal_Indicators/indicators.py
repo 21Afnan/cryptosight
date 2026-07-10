@@ -36,8 +36,26 @@ class Indicators:
             final_params = {k: v["default"] for k, v in cfg.get("parameters", {}).items()}
             # 2. Override with global custom parameters passed at __init__
             final_params.update(self.custom_params.get(upper_name, {}))
-            # 3. Override with parameters passed directly in method call
-            final_params.update(params)
+            
+            # 3. Intelligently map shorthand YAML parameters (e.g. fast -> fastperiod, period -> timeperiod)
+            shorthand_map = {
+                "period": "timeperiod",
+                "fast": "fastperiod",
+                "slow": "slowperiod",
+                "signal": "signalperiod",
+                "std": "nbdevup",
+                "std_up": "nbdevup",
+                "std_down": "nbdevdn",
+            }
+            normalized_params = {}
+            for k, v in params.items():
+                target_key = shorthand_map.get(k.lower(), k.lower())
+                if target_key in cfg.get("parameters", {}):
+                    normalized_params[target_key] = v
+                elif k in cfg.get("parameters", {}):
+                    normalized_params[k] = v
+
+            final_params.update(normalized_params)
 
             # TA-Lib abstract interface directly computes on pandas DataFrames!
             res = abstract.Function(upper_name)(self.df, **final_params)
@@ -81,20 +99,62 @@ class Indicators:
             except Exception as e:
                 logger.warning(f"Skipped calculating {n}: {e}")
 
-        # 2. Process YAML configuration dictionary (uses custom config aliases)
+        # 2. Process YAML configuration dictionary (handles both 'indicators' and 'patterns' blocks)
         if indicator_config:
-            for ind_name, configs in indicator_config.items():
-                for cfg in configs:
-                    params = cfg.get("parameters", {})
-                    aliases_map = cfg.get("aliases", {})
+            ind_dict = indicator_config.get("indicators", indicator_config)
+            pat_dict = indicator_config.get("patterns", {})
+
+            # 2a. Calculate standard technical indicators (EMA, RSI, MACD, etc.)
+            if isinstance(ind_dict, dict):
+                for ind_name, configs in ind_dict.items():
+                    if isinstance(configs, dict):
+                        configs = [configs]
+                    if not isinstance(configs, list):
+                        continue
+                    for cfg in configs:
+                        params = cfg.get("parameters", {})
+                        aliases_map = cfg.get("aliases", {})
+                        try:
+                            caller = getattr(self, ind_name)
+                            res = caller(**params)
+                            for col in res.columns:
+                                col_name = aliases_map.get(col, f"ind_{ind_name.lower()}_{col.lower()}")
+                                result_df[col_name] = res[col]
+                        except Exception as e:
+                            logger.warning(f"Skipped calculating {ind_name}: {e}")
+
+            # 2b. Calculate chart patterns dynamically (DOJI -> CDLDOJI, ENGULFING -> CDLENGULFING, etc.)
+            if isinstance(pat_dict, dict):
+                for pat_name, pat_cfg in pat_dict.items():
+                    if isinstance(pat_cfg, list):
+                        pat_cfg = pat_cfg[0] if pat_cfg else {}
+                    aliases_map = pat_cfg.get("aliases", {})
+                    target_col = aliases_map.get("pattern") or (list(aliases_map.values())[0] if aliases_map else f"pat_{pat_name}")
+
+                    upper_name = pat_name.upper()
+                    base_name = upper_name.replace("BULLISH_", "").replace("BEARISH_", "")
+                    talib_name = None
+                    for candidate in [upper_name, f"CDL{upper_name}", base_name, f"CDL{base_name}"]:
+                        if hasattr(self, candidate):
+                            talib_name = candidate
+                            break
+
+                    if not talib_name:
+                        logger.warning(f"Chart pattern method for [{pat_name}] not found in TA-Lib.")
+                        continue
+
                     try:
-                        caller = getattr(self, ind_name)
-                        res = caller(**params)
-                        for col in res.columns:
-                            col_name = aliases_map.get(col, f"ind_{ind_name.lower()}_{col.lower()}")
-                            result_df[col_name] = res[col]
+                        caller = getattr(self, talib_name)
+                        res = caller()
+                        if not res.empty and "integer" in res.columns:
+                            col_data = res["integer"]
+                            if "BULLISH" in upper_name:
+                                col_data = col_data.apply(lambda x: 100 if x > 0 else 0)
+                            elif "BEARISH" in upper_name:
+                                col_data = col_data.apply(lambda x: -100 if x < 0 else 0)
+                            result_df[target_col] = col_data
                     except Exception as e:
-                        logger.warning(f"Skipped calculating {ind_name}: {e}")
+                        logger.warning(f"Skipped calculating pattern {pat_name}: {e}")
 
         return result_df
 

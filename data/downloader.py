@@ -167,8 +167,10 @@ class Downloader:
 
         # Step 5 — drop last candle (always unclosed / still forming)
         if len(merged_df) > 1:
-            merged_df = merged_df.iloc[:-1]
+            merged_df = merged_df.iloc[:-1].copy()
             logger.info("Dropped last candle (unclosed/live).")
+        else:
+            merged_df = merged_df.copy()
 
         # Step 6 — fill missing values
         merged_df["volume"] = merged_df["volume"].fillna(0.0)
@@ -177,10 +179,10 @@ class Downloader:
         # Step 7 — slice to requested start_time and end_time range
         if start_time:
             start_dt = pd.to_datetime(start_time, utc=True)
-            merged_df = merged_df[merged_df.index >= start_dt]
+            merged_df = merged_df[merged_df.index >= start_dt].copy()
         if end_time and end_time != "now":
             end_dt = pd.to_datetime(end_time, utc=True)
-            merged_df = merged_df[merged_df.index <= end_dt]
+            merged_df = merged_df[merged_df.index <= end_dt].copy()
 
         logger.info(f"get_data() ready --> {len(merged_df)} candles ({merged_df.index.min()} to {merged_df.index.max()})")
         return merged_df

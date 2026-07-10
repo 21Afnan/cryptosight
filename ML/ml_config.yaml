@@ -1,0 +1,73 @@
+# ==============================================================================
+# CRYPTOSIGHT ML MODULE — DATASET CONFIGURATION
+# ==============================================================================
+# Single configuration file for Regression, Classification, and Time Series.
+# Enable/disable sections independently (`enabled: true/false`) to customize datasets.
+# ==============================================================================
+
+model_type: regression  # Options: regression | classification | timeseries
+
+# --- 1. MARKET DATA (Base OHLCV Dataset) ---
+data:
+  enabled: false 
+  symbols:
+    - "BTC"
+    - "ADA"
+  exchange: "bybit"         # Options: "binance", "bybit", or a list like ["binance", "bybit"]
+  timeframe: "1m"             # Base timeframe or target timeframe (if target_timeframe is not specified)
+  target_timeframe: "15m"      # Resampled timeframe for feature engineering & ML training (e.g. "15m", "1h", "4h")
+  start_date: "2024-01-01"
+  end_date: "2026-06-30"
+  fill_method: "ffill"        
+  max_retries: 5
+  retry_delay: 3
+
+# --- 2. FEATURE ENGINEERING (Technical Indicators & Chart Patterns) ---
+features:
+  enabled: true
+  indicators:
+    EMA:
+      - parameters:
+          period: 20
+        aliases:
+          ema: ind_EMA_20
+      - parameters:
+          period: 50
+        aliases:
+          ema: ind_EMA_50
+    RSI:
+      - parameters:
+          period: 14
+        aliases:
+          rsi: ind_RSI_14
+    MACD:
+      - parameters:
+          fast: 12
+          slow: 26
+          signal: 9
+        aliases:
+          macd: ind_MACD_12_26_9
+          signal: ind_MACD_SIGNAL_12_26_9
+          histogram: ind_MACD_HIST_12_26_9
+
+  patterns:
+    DOJI:
+      aliases:
+        pattern: pat_DOJI
+    BULLISH_ENGULFING:
+      aliases:
+        pattern: pat_BULLISH_ENGULFING
+
+# --- 3. SENTIMENT DATA COLLECTION ---
+sentiment:
+  enabled: true
+  source:
+    - reddit
+  aliases:
+    sentiment: sen_MARKET
+
+# --- 4. PREDICTION TARGET GENERATION ---
+target:
+  source: close
+  horizon: 1              # Number of bars ahead to predict (e.g. 1 bar = 15m into future if target_timeframe is 15m)
+  threshold: 0.002        # For classification: minimum percentage return (0.2%) required to trigger Buy (1) or Sell (-1) above trading fees
