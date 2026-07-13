@@ -1,5 +1,6 @@
 from pathlib import Path
 import pandas as pd
+import numpy as np
 from cryptosight.utils.logger import get_logger
 from cryptosight.utils.config import load_config
 from cryptosight.data.downloader import Downloader
@@ -34,8 +35,6 @@ class MLFeatureBuilder:
         {"BTC": df_btc, "ETH": df_eth}.
         """
         data_cfg = self.config.get("data")
-        if not data_cfg.get("enabled"):
-            return {}
 
         cfg_exchange = data_cfg.get("exchange")
         exchange = cfg_exchange[0] if isinstance(cfg_exchange, list) else cfg_exchange
@@ -88,9 +87,10 @@ class MLFeatureBuilder:
         # 1. ONE intelligent call to get_dataframe for both standard indicators AND chart patterns!
         features_df = ind.get_dataframe(names=[], include_ohlcv=False, indicator_config=features_cfg)
 
-        # 2. Merge features onto OHLCV DataFrame and drop initial warm-up NaNs
-        merged_df = pd.concat([df, features_df], axis=1).dropna()
-        logger.info(f"Feature Engineering complete --> Added {len(features_df.columns)} features | {len(merged_df)} clean rows ready.")
+        # 2. Shift features by 1 (`.shift(1)`) to prevent Look-Ahead Bias, then merge onto OHLCV DataFrame and drop warm-up NaNs
+        shifted_features = features_df.shift(1)
+        merged_df = pd.concat([df, shifted_features], axis=1).dropna()
+        logger.info(f"Feature Engineering complete --> Added {len(features_df.columns)} features (shifted by 1) | {len(merged_df)} clean rows ready.")
         return merged_df
 
     def add_target(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -112,13 +112,12 @@ class MLFeatureBuilder:
             logger.warning(f"Target source column '{source_col}' not found in DataFrame. Skipping target generation.")
             return df
 
-        result_df = df.copy()
+        result_df = df
 
         if model_type == "regression":
-            # Percentage return exactly `horizon` bars into the future
-            # Bounded, stationary continuous return (`Quant State-of-the-Art`)
-            result_df["target"] = (result_df[source_col].shift(-horizon) - result_df[source_col]) / result_df[source_col]
-            logger.info(f"[Target: Regression] Generated {horizon}-bar future percentage return target.")
+            # Log return exactly `horizon` bars into the future (`Quant State-of-the-Art`)
+            result_df["target"] = np.log(result_df[source_col].shift(-horizon) / result_df[source_col])
+            logger.info(f"[Target: Regression] Generated {horizon}-bar future log return target.")
 
         elif model_type == "classification":
             # Threshold-filtered directional class: 1 (UP above fees), -1 (DOWN below fees), 0 (HOLD/NOISE)
@@ -134,8 +133,8 @@ class MLFeatureBuilder:
             logger.info(f"[Target: Time Series] Generated {horizon}-bar shifted raw sequence target.")
 
         else:
-            logger.warning(f"Unknown model_type '{model_type}'. Defaulting to regression percentage return.")
-            result_df["target"] = (result_df[source_col].shift(-horizon) - result_df[source_col]) / result_df[source_col]
+            logger.warning(f"Unknown model_type '{model_type}'. Defaulting to regression log return.")
+            result_df["target"] = np.log(result_df[source_col].shift(-horizon) / result_df[source_col])
 
         # Cleanly drop trailing unknown horizon rows and organize columns logically (`target` right next to OHLCV)
         clean_df = result_df.dropna(subset=["target"])
@@ -158,7 +157,24 @@ class MLFeatureBuilder:
             logger.info(f"--- Building Features & Target for [{sym}] ---")
             processed_df = self.add_technical_features(df)
             processed_df = self.add_target(processed_df)
+
+            # If `data.enabled` is false, drop base OHLCV columns (`open`, `high`, `low`, `close`, `volume`)
+            # so only the calculated indicators/patterns (and target) are shown in the final DataFrame.
+            if not self.config.get("data").get("enabled"):
+                ohlcv_cols = ["open", "high", "low", "close", "volume"]
+                cols_to_drop = [c for c in ohlcv_cols if c in processed_df.columns]
+                processed_df = processed_df.drop(columns=cols_to_drop)
+                logger.info(f"[{sym}] 'data.enabled' is false --> Dropped base OHLCV columns {cols_to_drop} from final dataset.")
+
             feature_data[sym] = processed_df
+
+            # Store CSV inside ML/datasets/ folder right now (`csv for nwo store ho ok`)
+            out_dir = Path(__file__).resolve().parent / "datasets"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            target_timeframe = self.config.get("data", {}).get("target_timeframe", "15m")
+            csv_path = out_dir / f"{sym.upper()}_{target_timeframe}_features.csv"
+            processed_df.to_csv(csv_path)
+            logger.info(f"[{sym}] Successfully saved final ML dataset to CSV: {csv_path}")
 
             logger.info(f"=== {sym} Ready [{str(self.config.get('model_type', 'regression')).upper()} | Shape: {processed_df.shape}] ===")
 

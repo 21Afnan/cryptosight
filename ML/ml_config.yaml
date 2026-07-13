@@ -5,15 +5,15 @@
 # Enable/disable sections independently (`enabled: true/false`) to customize datasets.
 # ==============================================================================
 
-model_type: regression  # Options: regression | classification | timeseries
+model_type: classification  # Options: regression | classification | timeseries
 
 # --- 1. MARKET DATA (Base OHLCV Dataset) ---
 data:
-  enabled: false 
+  enabled: true  
   symbols:
     - "BTC"
     - "ADA"
-  exchange: "bybit"         # Options: "binance", "bybit", or a list like ["binance", "bybit"]
+  exchange: "binance"         # Options: "binance", "bybit", or a list like ["binance", "bybit"]
   timeframe: "1m"             # Base timeframe or target timeframe (if target_timeframe is not specified)
   target_timeframe: "15m"      # Resampled timeframe for feature engineering & ML training (e.g. "15m", "1h", "4h")
   start_date: "2024-01-01"
@@ -28,23 +28,23 @@ features:
   indicators:
     EMA:
       - parameters:
-          period: 20
+          timeperiod: 20
         aliases:
           ema: ind_EMA_20
       - parameters:
-          period: 50
+          timeperiod: 50
         aliases:
           ema: ind_EMA_50
     RSI:
       - parameters:
-          period: 14
+          timeperiod: 14
         aliases:
           rsi: ind_RSI_14
     MACD:
       - parameters:
-          fast: 12
-          slow: 26
-          signal: 9
+          fastperiod: 12
+          slowperiod: 26
+          signalperiod: 9
         aliases:
           macd: ind_MACD_12_26_9
           signal: ind_MACD_SIGNAL_12_26_9

@@ -23,7 +23,7 @@
 3. **YAML-Driven Quantitative Signal Pipeline**: Evaluates multi-indicator crossover conditions, tracks look-back persistence windows, and generates leak-free long/short trading signals automatically in lightweight database tables.
 4. **Vectorized 10-Step Backtesting Engine**: Executes ultra-fast historical simulations with realistic market friction modeling (broker commissions, price slippage), dynamic position sizing, automated Take-Profit/Stop-Loss scanning, and stores the completed ledger directly in PostgreSQL.
 5. **AI Sentiment Ingestion & NLP Pipeline**: Scrapes real-time discussions from **Reddit**, processes text dynamically (unescaping HTML entities, expanding contractions, stripping punctuation/numbers), structures text with clear headers, and predicts sentiment (Bullish/Bearish/Neutral) using **Hugging Face FinBERT** (with chunk-averaging to bypass the 512-token limit).
-6. **Quantitative ML Feature Engineering & Target Pipeline (`cryptosight.ML`)**: A pure in-memory, decoupled quant data pipeline that resamples raw market data to target timeframes (`15m`, `1h`), calculates multi-indicator technical features and candlestick patterns (`EMA`, `RSI`, `MACD`, `DOJI`, `ENGULFING`) via parameter shorthand translation, and generates multi-paradigm prediction targets (`Regression percentage returns`, `Classification directional thresholds`, `Time-Series shifts`) with zero-redundancy configuration loading and high-readability terminal verification.
+6. **Quantitative ML Feature Engineering & Target Pipeline (`cryptosight.ML`)**: A pure in-memory, decoupled quant data pipeline (`MLFeatureBuilder`) that resamples raw market data to target timeframes (`15m`, `1h`), calculates multi-indicator technical features and candlestick patterns (`EMA`, `RSI`, `MACD`, `DOJI`, `ENGULFING`) with automatic **Look-Ahead Bias Prevention (`.shift(1)`)**, generates state-of-the-art **Log Return (`np.log`)** and **Threshold-Filtered Classification (`1/-1/0`)** targets, and automatically exports clean ML datasets directly to CSV inside `ML/datasets/`.
 
 ---
 
@@ -105,12 +105,13 @@ To prepare clean, stationary, and leak-free datasets for advanced AI and machine
 - **Single Source of Truth (`main.py`)**: The central entry point (`ML/main.py`) exclusively handles disk I/O and configuration loading (`load_config`), passing a pre-loaded dictionary directly into the quantitative processing engine to eliminate redundant file reads (`DRY Principle`).
 - **3-Step In-Memory Quant Engine (`features.py`)**: `MLFeatureBuilder` executes a strictly ordered functional flow:
   1. *Step 1 (Resampling)*: Dynamically converts raw `1m` OHLCV database candles into any configured `target_timeframe` (`15m`, `1h`, `4h`) via `Downloader`.
-  2. *Step 2 (Feature Engineering)*: Delegates all technical indicators and candlestick chart patterns directly to `Indicators.get_dataframe()`, utilizing an automatic parameter shorthand translator (`fast`, `slow`, `signal`) that bridges YAML configuration aliases cleanly to TA-Lib C schemas without errors.
+  2. *Step 2 (Feature Engineering & Look-Ahead Bias Prevention)*: Delegates all technical indicators and candlestick chart patterns directly to `Indicators.get_dataframe()`. All computed features are automatically **lagged by 1 period (`.shift(1)`)** prior to merging onto the OHLCV DataFrame, guaranteeing that models never peek into the current bar's closing price when making future predictions.
   3. *Step 3 (Target Generation)*: Computes exact prediction targets tailored for three distinct paradigms:
-     - `Regression`: Stationary simple percentage returns exactly `horizon` bars into the future (`(Close_future - Close_current) / Close_current`).
-     - `Classification`: Noise-filtered directional classes (`1` for Buy, `-1` for Sell, `0` for Hold) using a configurable `threshold` (`0.2%`) to ensure labels represent movements that exceed exchange commissions and slippage.
-     - `Time Series`: Shifting raw source price sequences by `horizon` bars for sequence-to-sequence deep forecasting.
-- **Automated Warm-up & Horizon Cleaning**: Automatically drops initial indicator warm-up `NaN` values and trailing unknown horizon rows, organizing the output DataFrame (`OHLCV + Target + Features`) for immediate institutional inspection.
+     - `Regression (Log Return)`: Quant state-of-the-art continuous log return (`np.log(Close_future / Close_current)`) exactly `horizon` bars into the future (`shift(-horizon)`), providing symmetric time-additivity and stationarity.
+     - `Classification (Threshold-Filtered Directional)`: 3-class target (`1` for Buy, `-1` for Sell, `0` for Hold/Noise) filtered by a configurable `threshold` (`0.2%` by default) so model labels only trigger on price movements that exceed exchange commissions and slippage.
+     - `Time Series (Raw Future Shifting)`: Shifting raw source price sequences by `horizon` bars (`shift(-horizon)`) for sequence-to-sequence deep forecasting models (LSTMs, GRUs, Transformers).
+- **Automatic CSV Exporter (`ML/datasets/`)**: Every execution of the ML pipeline automatically stores the final, clean, warm-up-dropped dataset as a CSV (`{SYM}_{timeframe}_features.csv`) directly inside `cryptosight/ML/datasets/`.
+- **Flexible OHLCV Filtering (`data.enabled: false`)**: If `data.enabled` is set to `false`, the pipeline still fetches raw candles to compute all technical features and targets cleanly, but automatically drops the base `open, high, low, close, volume` columns from the final output—leaving a pure feature matrix ready for custom AI models.
 
 ---
 
@@ -263,15 +264,21 @@ When performing exploratory research or reviewing strategy performance, CryptoSi
 
 To prepare multi-indicator, target-labeled datasets ready for AI/ML training (`Regression`, `Classification`, or `TimeSeries`), run the unified ML pipeline orchestrator (`cryptosight.ML.main`):
 
-1. **Configure Your ML Pipeline**: Open `ML/ml_config.yaml` to specify target symbols (`symbols: ["BTC", "ETH"]`), `target_timeframe` (`15m`), enabled indicators (`EMA`, `RSI`, `MACD`, `DOJI`, `ENGULFING`), and target specifications (`model_type: "regression"`, `horizon: 1`, `threshold: 0.002`).
+1. **Configure Your ML Pipeline**: Open `ML/ml_config.yaml` to specify target symbols (`symbols: ["BTC", "ADA"]`), `target_timeframe` (`15m`), enabled indicators (`EMA`, `RSI`, `MACD`, `DOJI`, `ENGULFING`), and target specifications (`model_type: "regression" | "classification" | "timeseries"`, `horizon: 1`, `threshold: 0.002`).
 2. **Execute the ML Dataset Engine**: Run the main module directly from your terminal:
    ```bash
    python -m cryptosight.ML.main
    ```
-3. **Review Output & Verification Table**: The orchestrator returns clean, memory-ready DataFrames (`{"BTC": clean_df}`) and outputs a high-readability institutional verification table directly to your console:
-   - **OHLCV + Target Placement**: The `target` column sits directly beside `close` and `volume` for instant visual verification without horizontal scrolling.
-   - **Non-Wrapping Ellipsis Formatting**: Numbers are cleanly rounded to 4 decimals (`round(4)`), and horizontal display bounds are set (`display.max_columns=6, width=1000`) so columns are neatly condensed with ellipsis (`...`) on a single line without wrapping across rows.
-   - **Complete Column Checklist**: Below the compact preview table, the system prints the complete list of all engineered feature names (`['open', 'high', 'low', 'close', 'volume', 'target', 'ind_EMA_20'...]`) for 100% audit transparency.
+3. **What the Pipeline Does Automatically**:
+   - **Resamples Data**: Loads exact raw DB candles and resamples them to your `target_timeframe`.
+   - **Prevents Look-Ahead Bias (`.shift(1)`)**: All calculated indicators and chart patterns are shifted by 1 bar (`.shift(1)`) so the model only uses historical feature information to predict future targets.
+   - **Computes Prediction Target (`.shift(-horizon)`)**:
+     - *Regression*: Computes continuous log returns (`np.log(future / current)`).
+     - *Classification*: Assigns `1` (Buy above fees), `-1` (Sell below fees), or `0` (Hold/Chop noise).
+     - *TimeSeries*: Predicts exact future dollar prices.
+   - **Drops Warm-Up NaNs**: Cleans up leading indicator warm-up rows and trailing unknown horizon rows.
+   - **Automatic CSV Export**: Saves the finalized dataset right inside `cryptosight/ML/datasets/{SYM}_{timeframe}_features.csv` (e.g. `BTC_15m_features.csv`).
+4. **Console Preview & Audit Table**: The orchestrator outputs a compact, high-readability terminal preview table with rounded 4-decimal values (`round(4)`), placing the `target` column directly beside `close` and `volume`, followed by a full checklist of all generated features (`['open', 'high', 'low', 'close', 'volume', 'target', 'ind_EMA_20'...]`).
 
 ---
 

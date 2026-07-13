@@ -8,66 +8,37 @@ logger = get_logger("Indicators")
 
 class Indicators:
     """
-    Magic class-based wrapper around every TA-Lib function (158 total).
-    Uses INDICATOR_CONFIG for default parameters and input validation.
-    Enables calling any indicator directly as a method using __getattr__!
+    Magic wrapper around TA-Lib (158 functions).
+    Resolves parameters from: INDICATOR_CONFIG defaults -> __init__ overrides -> method kwargs.
     e.g. ind.rsi(timeperiod=14) or ind.macd()
     """
 
     def __init__(self, df: pd.DataFrame, **custom_params):
-        # df must have lowercase columns: open, high, low, close, volume
         self.df = df
-        # Normalize custom parameter override keys to uppercase (e.g. rsi -> RSI)
         self.custom_params = {k.upper(): v for k, v in custom_params.items()}
 
     def __getattr__(self, name: str):
-        """
-        Magic method intercepting dynamic indicator calls like ind.rsi() or ind.macd().
-        Resolves defaults from INDICATOR_CONFIG -> class custom_params -> method call params.
-        """
         upper_name = name.upper()
         if upper_name not in INDICATOR_CONFIG:
-            raise AttributeError(f"'Indicators' object has no indicator '{name}' in config.")
+            raise AttributeError(f"'Indicators' object has no indicator '{name}'.")
 
         def caller(**params) -> pd.DataFrame:
             cfg = INDICATOR_CONFIG[upper_name]
+            allowed = cfg.get("parameters", {})
 
-            # 1. Start with default parameters from config
-            final_params = {k: v["default"] for k, v in cfg.get("parameters", {}).items()}
-            # 2. Override with global custom parameters passed at __init__
+            # 1. Defaults -> 2. __init__ overrides -> 3. Valid call-time kwargs
+            final_params = {k: v["default"] for k, v in allowed.items()}
             final_params.update(self.custom_params.get(upper_name, {}))
-            
-            # 3. Intelligently map shorthand YAML parameters (e.g. fast -> fastperiod, period -> timeperiod)
-            shorthand_map = {
-                "period": "timeperiod",
-                "fast": "fastperiod",
-                "slow": "slowperiod",
-                "signal": "signalperiod",
-                "std": "nbdevup",
-                "std_up": "nbdevup",
-                "std_down": "nbdevdn",
-            }
-            normalized_params = {}
-            for k, v in params.items():
-                target_key = shorthand_map.get(k.lower(), k.lower())
-                if target_key in cfg.get("parameters", {}):
-                    normalized_params[target_key] = v
-                elif k in cfg.get("parameters", {}):
-                    normalized_params[k] = v
+            final_params.update({k: v for k, v in params.items() if k in allowed})
 
-            final_params.update(normalized_params)
-
-            # TA-Lib abstract interface directly computes on pandas DataFrames!
             res = abstract.Function(upper_name)(self.df, **final_params)
 
-            # If multi-output (DataFrame), map column names to config; if single-output (Series), convert to DataFrame
             output_names = [o["name"] for o in cfg["outputs"]]
             if isinstance(res, pd.DataFrame):
                 res.columns = output_names
             else:
                 res = res.to_frame(name=output_names[0])
 
-            # Stash params/category — needed for column naming
             res.attrs["used_params"] = final_params
             res.attrs["category"] = cfg.get("category", "")
             return res
@@ -81,129 +52,69 @@ class Indicators:
         indicator_config: dict = None,
         **params_per_name
     ) -> pd.DataFrame:
-        """
-        ONE function to build any indicator DataFrame you need.
-        Accepts either a list of indicator names or a structured indicator_config dictionary.
-        """
-        names = names or []
-        result_df = self.df.copy() if include_ohlcv else pd.DataFrame(index=self.df.index)
+        """Builds a DataFrame containing requested indicators and/or patterns."""
+        result_df = self.df if include_ohlcv else pd.DataFrame(index=self.df.index)
 
-        # 1. Process explicit indicator names list (uses default naming)
-        for n in names:
+        # 1. Explicit indicator names list
+        for n in (names or []):
             try:
-                caller = getattr(self, n)
-                res = caller(**params_per_name.get(n, {}))
+                res = getattr(self, n)(**params_per_name.get(n, {}))
                 for col in res.columns:
-                    col_name = f"ind_{n.lower()}_{col.lower()}"
-                    result_df[col_name] = res[col]
+                    result_df[f"ind_{n.lower()}_{col.lower()}"] = res[col]
             except Exception as e:
-                logger.warning(f"Skipped calculating {n}: {e}")
+                logger.warning(f"Skipped {n}: {e}")
 
-        # 2. Process YAML configuration dictionary (handles both 'indicators' and 'patterns' blocks)
-        if indicator_config:
-            ind_dict = indicator_config.get("indicators", indicator_config)
-            pat_dict = indicator_config.get("patterns", {})
+        if not indicator_config:
+            return result_df
 
-            # 2a. Calculate standard technical indicators (EMA, RSI, MACD, etc.)
-            if isinstance(ind_dict, dict):
-                for ind_name, configs in ind_dict.items():
-                    if isinstance(configs, dict):
-                        configs = [configs]
-                    if not isinstance(configs, list):
-                        continue
-                    for cfg in configs:
-                        params = cfg.get("parameters", {})
-                        aliases_map = cfg.get("aliases", {})
-                        try:
-                            caller = getattr(self, ind_name)
-                            res = caller(**params)
-                            for col in res.columns:
-                                col_name = aliases_map.get(col, f"ind_{ind_name.lower()}_{col.lower()}")
-                                result_df[col_name] = res[col]
-                        except Exception as e:
-                            logger.warning(f"Skipped calculating {ind_name}: {e}")
+        ind_dict = indicator_config.get("indicators", indicator_config)
+        pat_dict = indicator_config.get("patterns", {})
 
-            # 2b. Calculate chart patterns dynamically (DOJI -> CDLDOJI, ENGULFING -> CDLENGULFING, etc.)
-            if isinstance(pat_dict, dict):
-                for pat_name, pat_cfg in pat_dict.items():
-                    if isinstance(pat_cfg, list):
-                        pat_cfg = pat_cfg[0] if pat_cfg else {}
-                    aliases_map = pat_cfg.get("aliases", {})
-                    target_col = aliases_map.get("pattern") or (list(aliases_map.values())[0] if aliases_map else f"pat_{pat_name}")
-
-                    upper_name = pat_name.upper()
-                    base_name = upper_name.replace("BULLISH_", "").replace("BEARISH_", "")
-                    talib_name = None
-                    for candidate in [upper_name, f"CDL{upper_name}", base_name, f"CDL{base_name}"]:
-                        if hasattr(self, candidate):
-                            talib_name = candidate
-                            break
-
-                    if not talib_name:
-                        logger.warning(f"Chart pattern method for [{pat_name}] not found in TA-Lib.")
-                        continue
-
+        # 2a. Standard technical indicators (from YAML config)
+        if isinstance(ind_dict, dict):
+            for ind_name, configs in ind_dict.items():
+                configs = [configs] if isinstance(configs, dict) else configs
+                for cfg in (configs if isinstance(configs, list) else []):
                     try:
-                        caller = getattr(self, talib_name)
-                        res = caller()
-                        if not res.empty and "integer" in res.columns:
-                            col_data = res["integer"]
-                            if "BULLISH" in upper_name:
-                                col_data = col_data.apply(lambda x: 100 if x > 0 else 0)
-                            elif "BEARISH" in upper_name:
-                                col_data = col_data.apply(lambda x: -100 if x < 0 else 0)
-                            result_df[target_col] = col_data
+                        res = getattr(self, ind_name)(**cfg.get("parameters", {}))
+                        for col in res.columns:
+                            col_name = cfg.get("aliases", {}).get(col, f"ind_{ind_name.lower()}_{col.lower()}")
+                            result_df[col_name] = res[col]
                     except Exception as e:
-                        logger.warning(f"Skipped calculating pattern {pat_name}: {e}")
+                        logger.warning(f"Skipped {ind_name}: {e}")
+
+        # 2b. Chart patterns (from YAML config)
+        if isinstance(pat_dict, dict):
+            for pat_name, pat_cfg in pat_dict.items():
+                pat_cfg = pat_cfg[0] if isinstance(pat_cfg, list) and pat_cfg else (pat_cfg if isinstance(pat_cfg, dict) else {})
+                upper_name = pat_name.upper()
+                base_name = upper_name.replace("BULLISH_", "").replace("BEARISH_", "")
+                talib_name = next((c for c in [upper_name, f"CDL{upper_name}", base_name, f"CDL{base_name}"] if hasattr(self, c)), None)
+
+                if not talib_name:
+                    continue
+
+                try:
+                    res = getattr(self, talib_name)(**pat_cfg.get("parameters", {}))
+                    if not res.empty and "integer" in res.columns:
+                        col_data = res["integer"]
+                        if "BULLISH" in upper_name:
+                            col_data = col_data.apply(lambda x: 100 if x > 0 else 0)
+                        elif "BEARISH" in upper_name:
+                            col_data = col_data.apply(lambda x: -100 if x < 0 else 0)
+                        aliases = pat_cfg.get("aliases", {})
+                        target_col = aliases.get("pattern") or (list(aliases.values())[0] if aliases else f"pat_{pat_name}")
+                        result_df[target_col] = col_data
+                except Exception as e:
+                    logger.warning(f"Skipped pattern {pat_name}: {e}")
 
         return result_df
 
+
 def apply_indicators_from_config(df: pd.DataFrame, indicator_config: dict) -> pd.DataFrame:
-    """
-    Helper function to calculate and merge all indicators based on the YAML config.
-    """
+    """Calculates, lags by 1 period (prevents Look-Ahead Bias), and merges indicators from YAML config."""
     ind = Indicators(df)
     indicator_df = ind.get_dataframe(names=[], include_ohlcv=False, indicator_config=indicator_config)
-    
-    # Shift entire indicators dataframe by 1 to prevent Look-Ahead Bias
-    # To ADD Look-Ahead Bias (NOT RECOMMENDED for live trading), remove the .shift(1)
-    shifted_indicators = indicator_df.shift(1)
-    
-    merged_df = pd.concat([df, shifted_indicators], axis=1)
-    
-    # Drop rows with NaN values caused by indicator calculation periods (e.g. first 200 rows for SMA200)
-    merged_df.dropna(inplace=True)
-    
-    return merged_df
+    merged_df = pd.concat([df, indicator_df.shift(1)], axis=1)
+    return merged_df.dropna()
 
-if __name__ == "__main__":
-    from cryptosight.data.downloader import Downloader
-    
-    print("=" * 60)
-    # 1. Load the 1h resampled data from the database
-    print("Loading 1h BTC data from DB...")
-    dl = Downloader(exchange="bybit", symbol="btc", timeframe="1h")
-    # Fetching starting from 2025-07-02 to now
-    df = dl.get_data(start_time="2025-07-02 00:00:00", end_time="now", max_retries=3, retry_delay=2)
-    
-    if df.empty:
-        print("[FAILED] No 1h data found in the DB. Please run the Binance ingestion pipeline first to store 1h candles.")
-    else:
-        print(f"[SUCCESS] Loaded {len(df)} candles from DB.")
-        
-        # 2. Initialize Indicators wrapper
-        ind = Indicators(df)
-        
-        # 3. Calculate SMA (Simple Moving Average)
-        print("Calculating SMA (20 period)...")
-        sma_df = ind.sma(timeperiod=20)
-        
-        # 4. Merge SMA and lag it by 1 row using .shift(1) (prevents Look-Ahead Bias)
-        df["ind_SMA_20"] = sma_df["sma"].shift(1)
-        # 6. Save the results to a CSV file
-        output_path = "btc_1h_indicators_bybit_with_bias.csv"
-        df.to_csv(output_path)
-        print(f"[SUCCESS] Saved resampled data with ind_SMA_20 (lagged) to: {output_path}")
-        print("\nLast 5 rows:")
-        print(df.tail(5))
-        print("=" * 60)
