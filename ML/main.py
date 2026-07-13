@@ -2,7 +2,7 @@ from pathlib import Path
 import pandas as pd
 from cryptosight.utils.logger import get_logger
 from cryptosight.utils.config import load_config
-from cryptosight.ML.features import MLFeatureBuilder
+from cryptosight.ml.features import MLFeatureBuilder
 logger = get_logger("MLMain")
 
 def get_ml_dataset(config_path: str | Path = None) -> dict[str, pd.DataFrame]:

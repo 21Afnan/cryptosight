@@ -1,0 +1,48 @@
+# ==============================================================================
+# PREPROCESSING CONFIGURATION (`pp.config.yaml`)
+# ==============================================================================
+# Easily switch any preprocessing technique without modifying your Python code.
+# ==============================================================================
+
+enabled: true
+
+# Select ONE method to apply to all features:
+# Options: 
+#   none | standard | minmax | robust | maxabs | quantile
+#   fracdiff | winsorize | log | gaussian
+#   rolling_zscore | yeo_johnson | mad_scaler | tanh_clean | kalman_filter
+method: "robust"
+
+# Parameters for methods that need custom settings:
+parameters:
+  frac_d: 0.35          # For 'fracdiff': degree of differencing (0.0 to 1.0)
+  winsor_limits: 0.01   # For 'winsorize': clip top/bottom 1% outliers
+  rolling_window: 100   # For 'rolling_zscore': lookback window size
+
+# Do NOT scale these columns (keep them original):
+exclude_columns:
+  - "timestamp"
+  - "target"
+
+# ==============================================================================
+# MACHINE LEARNING EVALUATION CONFIGURATION
+# ==============================================================================
+# Select models to evaluate (`xgboost`, `lightgbm`, or both as a list):
+models:
+  - "xgboost"
+  - "lightgbm"
+
+# Select preprocessing techniques to loop across and compare in benchmark table:
+methods_to_test:
+  - "none"
+  - "standard"
+  - "robust"
+  - "minmax"
+  - "fracdiff"
+  - "winsorize"
+  - "log"
+  - "rolling_zscore"
+  - "mad_scaler"
+  - "tanh_clean"
+
+
