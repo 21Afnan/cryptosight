@@ -23,7 +23,8 @@
 3. **YAML-Driven Quantitative Signal Pipeline**: Evaluates multi-indicator crossover conditions, tracks look-back persistence windows, and generates leak-free long/short trading signals automatically in lightweight database tables.
 4. **Vectorized 10-Step Backtesting Engine**: Executes ultra-fast historical simulations with realistic market friction modeling (broker commissions, price slippage), dynamic position sizing, automated Take-Profit/Stop-Loss scanning, and stores the completed ledger directly in PostgreSQL.
 5. **AI Sentiment Ingestion & NLP Pipeline**: Scrapes real-time discussions from **Reddit**, processes text dynamically (unescaping HTML entities, expanding contractions, stripping punctuation/numbers), structures text with clear headers, and predicts sentiment (Bullish/Bearish/Neutral) using **Hugging Face FinBERT** (with chunk-averaging to bypass the 512-token limit).
-6. **Quantitative ML Feature Engineering & Target Pipeline (`cryptosight.ML`)**: A pure in-memory, decoupled quant data pipeline (`MLFeatureBuilder`) that resamples raw market data to target timeframes (`15m`, `1h`), calculates multi-indicator technical features and candlestick patterns (`EMA`, `RSI`, `MACD`, `DOJI`, `ENGULFING`) with automatic **Look-Ahead Bias Prevention (`.shift(1)`)**, generates state-of-the-art **Log Return (`np.log`)** and **Threshold-Filtered Classification (`1/-1/0`)** targets, and automatically exports clean ML datasets directly to CSV inside `ML/datasets/`.
+6. **Quantitative ML Feature Engineering & Target Pipeline (`cryptosight.ml`)**: A pure in-memory, decoupled quant data pipeline (`MLFeatureBuilder`) that resamples raw market data to target timeframes (`15m`, `1h`), calculates multi-indicator technical features and candlestick patterns (`EMA`, `RSI`, `MACD`, `DOJI`, `ENGULFING`) with automatic **Look-Ahead Bias Prevention (`.shift(1)`)**, generates state-of-the-art **Log Return (`np.log`)** and **Threshold-Filtered Classification (`1/-1/0`)** targets, and automatically exports clean ML datasets directly to CSV inside `ml/datasets/`.
+7. **Quantitative Preprocessing & Backtesting Evaluation Pipeline (`cryptosight.preprocessing`)**: An institutional evaluation suite that checks feature stationarity (`ADF & KPSS tests`), executes raw unmodeled baseline backtests (`ACTUAL_DF_NO_MODEL` with threshold gates), benchmarks 6 quantitative preprocessing methods (`RobustScaler, MinMaxScaler, Winsorization, Fractional Differencing, Log, Gaussian`), cross-evaluates multi-task ML models (`Regression vs. Classification`), and generates a **Master Leaderboard & Trade Ledger Breakdown** directly via the quantitative `BacktestingEngine`.
 
 ---
 
@@ -70,6 +71,14 @@ graph TD
         ML_Features -->|Inject Indicators & Patterns| ML_Target["Step 3: Multi-Paradigm Target Generator"]
         ML_Target -->|Clean Output| ML_Dataset["Memory-Ready ML Datasets (Regression / Classification / TimeSeries)"]
     end
+
+    subgraph Preprocessing & Evaluation Leaderboard Layer
+        ML_Dataset -->|Stationarity Checks ADF/KPSS| PP_Stationarity["Stationarity & Trend Analyzer"]
+        PP_Stationarity -->|Apply 6 Transforms| PP_Methods["Robust | MinMax | FracDiff | Winsorize | Log | Gaussian"]
+        PP_Methods -->|Train LGBM / XGB / Linear| PP_Models["Multi-Model Cross-Evaluation"]
+        PP_Models -->|Send Signals (+1, 0, -1)| Backtester
+        Backtester -->|Leaderboard & PnL Table| PP_Leaderboard["Final Master Summary Table & Trade Ledger Analysis"]
+    end
 ```
 
 ### 🧠 1. Smart Gap Ingestion & Zero-Redundancy Storage
@@ -100,9 +109,9 @@ To validate strategies before deployment, CryptoSight features a custom vectoriz
 - **Database-Only Storage**: The trade ledger is saved directly in PostgreSQL under the table name `backtests.{strategy_id}` (e.g., `backtests.binance_sol_1h_rsi_14`) instead of local CSV files.
 - **Metadata Configuration Tracking**: Saves high-level config snapshots and summary results (total trades, win rate, net PnL, final balance) into the relational table `metadata.backtest_data` connected via Foreign Key to `metadata.strategy_data(strategy_id)`.
 
-### 🧪 6. Decoupled Quantitative ML Pipeline (`cryptosight.ML`)
+### 🧪 6. Decoupled Quantitative ML Pipeline (`cryptosight.ml`)
 To prepare clean, stationary, and leak-free datasets for advanced AI and machine learning training (e.g., XGBoost, LSTMs, PyTorch), CryptoSight includes an institutional quantitative ML data builder governed by the **Single Responsibility Principle**:
-- **Single Source of Truth (`main.py`)**: The central entry point (`ML/main.py`) exclusively handles disk I/O and configuration loading (`load_config`), passing a pre-loaded dictionary directly into the quantitative processing engine to eliminate redundant file reads (`DRY Principle`).
+- **Single Source of Truth (`main.py`)**: The central entry point (`ml/main.py`) exclusively handles disk I/O and configuration loading (`load_config`), passing a pre-loaded dictionary directly into the quantitative processing engine to eliminate redundant file reads (`DRY Principle`).
 - **3-Step In-Memory Quant Engine (`features.py`)**: `MLFeatureBuilder` executes a strictly ordered functional flow:
   1. *Step 1 (Resampling)*: Dynamically converts raw `1m` OHLCV database candles into any configured `target_timeframe` (`15m`, `1h`, `4h`) via `Downloader`.
   2. *Step 2 (Feature Engineering & Look-Ahead Bias Prevention)*: Delegates all technical indicators and candlestick chart patterns directly to `Indicators.get_dataframe()`. All computed features are automatically **lagged by 1 period (`.shift(1)`)** prior to merging onto the OHLCV DataFrame, guaranteeing that models never peek into the current bar's closing price when making future predictions.
@@ -110,8 +119,22 @@ To prepare clean, stationary, and leak-free datasets for advanced AI and machine
      - `Regression (Log Return)`: Quant state-of-the-art continuous log return (`np.log(Close_future / Close_current)`) exactly `horizon` bars into the future (`shift(-horizon)`), providing symmetric time-additivity and stationarity.
      - `Classification (Threshold-Filtered Directional)`: 3-class target (`1` for Buy, `-1` for Sell, `0` for Hold/Noise) filtered by a configurable `threshold` (`0.2%` by default) so model labels only trigger on price movements that exceed exchange commissions and slippage.
      - `Time Series (Raw Future Shifting)`: Shifting raw source price sequences by `horizon` bars (`shift(-horizon)`) for sequence-to-sequence deep forecasting models (LSTMs, GRUs, Transformers).
-- **Automatic CSV Exporter (`ML/datasets/`)**: Every execution of the ML pipeline automatically stores the final, clean, warm-up-dropped dataset as a CSV (`{SYM}_{timeframe}_features.csv`) directly inside `cryptosight/ML/datasets/`.
+- **Automatic CSV Exporter (`ml/datasets/`)**: Every execution of the ML pipeline automatically stores the final, clean, warm-up-dropped dataset as a CSV (`{SYM}_{timeframe}_features.csv`) directly inside `cryptosight/ml/datasets/`.
 - **Flexible OHLCV Filtering (`data.enabled: false`)**: If `data.enabled` is set to `false`, the pipeline still fetches raw candles to compute all technical features and targets cleanly, but automatically drops the base `open, high, low, close, volume` columns from the final output—leaving a pure feature matrix ready for custom AI models.
+
+### ⚖️ 7. Quantitative Preprocessing, Stationarity Testing & Threshold Optimization (`cryptosight.preprocessing`)
+To scientifically determine which feature scaling technique maximizes trading profitability and model accuracy, the preprocessing suite (`preprocessing/`) executes a rigorous empirical leaderboard loop:
+- **Mathematical Stationarity & Trend Decomposition (`stationarity.py`)**: Runs Augmented Dickey-Fuller (`ADF`) and Kwiatkowski-Phillips-Schmidt-Shin (`KPSS`) tests on raw features alongside rolling trend metrics to isolate non-stationary drift before training.
+- **Unmodeled Baseline Backtesting (`ACTUAL_DF_NO_MODEL`)**: Before evaluating complex ML algorithms, the pipeline runs a direct backtest on the raw price/target series using a configurable signal threshold (e.g. `0.20% / 0.002`). This establishes the true empirical benchmark for trade frequency, win rate, and baseline PnL.
+- **6-Paradigm Preprocessing Leaderboard (`preprocessor.py`)**: Systematically transforms out-of-sample test features using:
+  1. `RobustScaler` (Median and Interquartile Range based; impervious to extreme crypto spikes/outliers)
+  2. `MinMaxScaler` (Strict `[0, 1]` bounded scaling for neural networks and GRUs)
+  3. `Winsorize` (Empirical outlier clipping at top/bottom `1%` boundaries)
+  4. `Fractional Differencing` (`frac_d = 0.35` to make time series stationary while retaining memory and correlation)
+  5. `Log Transformation` & `Gaussian Quantile Mapping` (`Normal distribution transformation`)
+- **Multi-Task & Multi-Model Evaluation (`models.py`)**: Evaluates `LightGBM`, `XGBoost`, and `Linear Regression` across both **Classification (`+1, 0, -1`)** and **Regression (`Continuous log return prediction`)**.
+- **Continuous Return Threshold vs. Classification Noise**: Demonstrates why raw classification (`predict_proba() > 0.50`) causes excessive over-trading in choppy/sideways markets (`360+ trades losing $5,000+ in broker fees`). By switching to `Regression` and applying a continuous `regression_signal_threshold: 0.002` (`0.20% return gate`), models only execute trades when the predicted movement exceeds round-trip broker commissions (`0.14%`) and slippage (`0.06%`).
+- **Direct Engine Integration (`backtest_runner.py`)**: Passes all generated model signals (`+1, 0, -1`) and unscaled test prices directly into the built-in `BacktestingEngine` (`cryptosight.backtesting.backtest.BacktestingEngine`), generating a unified **Step 8 & 9 PnL Leaderboard** and **Step 10 Master Summary Table (`BTC_final_summary_master_table.csv`)**.
 
 ---
 
@@ -146,10 +169,19 @@ cryptosight/
 ├── backtesting/
 │   ├── backtest.py                # Vectorized 10-step quantitative strategy backtesting engine
 │   └── backt_config.yaml          # YAML settings for market selection, position sizing, fees & TP/SL
-├── ML/
+├── ml/
 │   ├── main.py                    # Single-call orchestrator handling disk config loading (`get_ml_dataset`)
 │   ├── features.py                # 3-Step in-memory quant engine (`MLFeatureBuilder`) for features & targets
 │   └── ml_config.yaml             # YAML specifications for timeframes, features, and target paradigms
+├── preprocessing/
+│   ├── pp.config.yaml             # YAML configurations for method selection, task type, models & thresholds
+│   ├── main.py                    # Single-call pipeline executing stationarity -> preprocessing -> leaderboard
+│   ├── preprocessor.py            # Encapsulates Robust, MinMax, Winsorize, FracDiff, Log & Gaussian scaling
+│   ├── stationarity.py            # Conducts Augmented Dickey-Fuller (ADF) & KPSS mathematical tests
+│   ├── models.py                  # Trains & evaluates LGBM, XGBoost & Linear models across prep methods
+│   ├── backtest_runner.py         # Interfaces model predictions with BacktestingEngine for PnL metrics
+│   └── analyze_backtest_ledger.py # Audits trade ledgers (Long/Short ratios, TP/SL hit rates, fee drag)
+├── csv_files/                     # Automated export directory for predictions, reports & master tables
 ├── logs/
 │   ├── binance.log                # Rotating log file tracking Binance API execution
 │   ├── bybit.log                  # Rotating log file tracking Bybit API execution
@@ -158,7 +190,7 @@ cryptosight/
 ├── utils/
 │   ├── config.py                  # YAML loader and centralized environment variable loading utility
 │   ├── db.py                      # PostgreSQL schema, connection pooling, and bulk COPY loader
-│   └── logger.py                  # Centralized logger config (non-propagating, sys.argv file categorization)
+│   └── logger.py                  # Centralized logger config (shared handlers, UTF-8 Windows encoding)
 ├── .env                           # Database and Reddit API environment variables (git-ignored)
 ├── requirements.txt               # Python package dependencies
 └── README.md                      # Complete project documentation and operation guide
@@ -168,20 +200,20 @@ cryptosight/
 
 ## 🛠️ Step-by-Step Guide: How to Run & Operate the Application
 
-CryptoSight is designed for seamless operation. You do not need to write code or scripts to run data ingestion, generate quantitative signals, or view interactive charts. Everything is controlled through simple configuration files and pre-built runners.
+CryptoSight is designed for seamless operation. You do not need to write code or scripts to run data ingestion, generate quantitative signals, evaluate preprocessing techniques, or view interactive charts. Everything is controlled through simple configuration files and pre-built runners.
 
 ### Step 1: Initial Environment Preparation
 
-1. **Virtual Environment**: Ensure Python 3.10+ is installed. Activate your project virtual environment from your system terminal or file explorer.
-2. **Dependencies**: Install the required packages listed in the project requirements file (includes database adapters, technical analysis libraries, and visualization suites).
+1. **Virtual Environment**: Ensure Python 3.10+ is installed. Activate your project virtual environment from your system terminal or file explorer (`venv\Scripts\activate`).
+2. **Dependencies**: Install the required packages listed in the project requirements file (`pip install -r requirements.txt`). Ensure `TA-Lib` is installed via pre-built Windows wheel if necessary.
 
 ---
 
 ### Step 2: Database Configuration
 
 Create a simple text file named `.env` inside the root workspace folder containing your PostgreSQL database connection details:
-- **Host**: Your local database address (usually localhost)
-- **Port**: Standard PostgreSQL port (5432)
+- **Host**: Your local database address (usually `localhost`)
+- **Port**: Standard PostgreSQL port (`5432`)
 - **Name**: Your target database name
 - **User & Password**: Your secure database credentials
 
@@ -196,7 +228,7 @@ You can configure which coin pairs to download (e.g., Bitcoin or Ethereum), the 
 | Execution Method | How to Run | Best For |
 | :--- | :--- | :--- |
 | **Option A: One-Click Windows Execution** | Simply navigate to the exchange folder inside your file explorer and **double-click** the pre-built batch file (`run_binance.bat` or `run_bybit.bat`). | Instant manual data updates without opening a terminal window. |
-| **Option B: Terminal Execution** | Run the exchange main module directly using your environment runner. | Developers and analysts executing pipelines within interactive terminal sessions. |
+| **Option B: Terminal Execution** | Run the exchange main module directly using your environment runner (`python -m cryptosight.data.binance.main`). | Developers and analysts executing pipelines within interactive terminal sessions. |
 | **Option C: 24/7 Automated Background Sync** | Open **Windows Task Scheduler**, create a hidden background task pointing to the batch file (`run_binance.bat`), and set the trigger to run **every 5 minutes**. | Hands-free, continuous live database synchronization. |
 
 ---
@@ -206,8 +238,8 @@ You can configure which coin pairs to download (e.g., Bitcoin or Ethereum), the 
 The quantitative signal module automatically loads synchronized market data from your database, calculates technical indicators, evaluates strategy rules, and generates trading signals.
 
 1. **Configure Your Strategy**: Open `signals/strategy_config.yaml` in any text editor to view or adjust moving average periods, RSI overbought/oversold boundaries, or logical combination rules.
-2. **Execute the Signal Pipeline**: Run the signals execution module (`signals/main.py`). The pipeline automatically handles parameter resolution and processes the entire dataset.
-3. **Review Results**: The system outputs a clean summary directly to your console and automatically generates a comprehensive CSV report containing the full historical price action alongside calculated indicators and active long/short trading signals inside the `signals/` directory (`signals_pipeline_output.csv`).
+2. **Execute the Signal Pipeline**: Run the signals execution module (`python -m cryptosight.signals.main`). The pipeline automatically handles parameter resolution and processes the entire dataset.
+3. **Review Results**: The system outputs a clean summary directly to your console and automatically generates a comprehensive CSV report inside the `signals/` directory (`signals_pipeline_output.csv`).
 
 ---
 
@@ -215,12 +247,12 @@ The quantitative signal module automatically loads synchronized market data from
 
 Once your trading signals are generated, use the **Vectorized Backtesting Engine** to simulate historical trading performance with institutional accuracy:
 
-1. **Configure Simulation Parameters**: Open `backtesting/backt_config.yaml` to set your target exchange, coin symbol, date ranges, starting account balance (e.g., `$10,000`), position sizing percentage, and Take-Profit/Stop-Loss boundaries.
+1. **Configure Simulation Parameters**: Open `backtesting/backt_config.yaml` to set your target exchange, coin symbol, date ranges, starting account balance (`$10,000`), position sizing percentage, and Take-Profit/Stop-Loss boundaries.
 2. **Execute the Backtest Engine**: Run `backtesting/backtest.py` from your terminal:
    ```bash
    python -m cryptosight.backtesting.backtest
    ```
-3. **Review Audit Ledger & PnL Metrics**: The engine prints an instant performance showcase to your console (Total Trades, Final Balance, Net Profit) and saves the complete trade ledger inside your database under the table name `backtests.{strategy_id}` (e.g. `backtests.binance_sol_1h_rsi_14`). Each trade entry records execution prices, exact TP/SL exit triggers, broker commissions, slippage friction, net PnL, percentage PnL, cumulative PnL, and running account balances. High-level summary metrics and configurations are tracked in the `metadata.backtest_data` table.
+3. **Review Audit Ledger & PnL Metrics**: The engine prints an instant performance showcase to your console (Total Trades, Final Balance, Net Profit) and saves the complete trade ledger inside your database under the table name `backtests.{strategy_id}` (`backtests.binance_sol_1h_rsi_14`).
 
 ---
 
@@ -228,23 +260,17 @@ Once your trading signals are generated, use the **Vectorized Backtesting Engine
 
 CryptoSight features a built-in NLP sentiment analysis engine to scrape Reddit discussions and evaluate market sentiment:
 
-1. **Reddit API Credentials**: Ensure your `.env` file includes Reddit credentials (get these from [Reddit Prefs Apps](https://www.reddit.com/prefs/apps)):
-   ```env
-   REDDIT_CLIENT_ID=your_client_id
-   REDDIT_CLIENT_SECRET=your_client_secret
-   REDDIT_USER_AGENT=Scraping
-   ```
-2. **Configure Pipeline Settings**: Open `sentiment/config.yaml` to specify target symbols (like `BTC`, `ADA`), target subreddits (like `Bitcoin`, `cardano`, `CryptoCurrency`), scraper limits (`posts_per_symbol: 1000`), and timeframe filters (`time_filter: "all"`).
+1. **Reddit API Credentials**: Ensure your `.env` file includes Reddit credentials (`REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT`).
+2. **Configure Pipeline Settings**: Open `sentiment/config.yaml` to specify target symbols (`BTC`, `ADA`), target subreddits (`Bitcoin`, `CryptoCurrency`), scraper limits (`posts_per_symbol: 1000`), and timeframe filters (`time_filter: "all"`).
 3. **Execute the Sentiment Pipeline**: Run the sentiment entry script from your terminal:
    ```bash
    python -m cryptosight.sentiment.main
    ```
 4. **How Sentiment is Classified**:
-   * **Centralized Environmental Loading**: Automatically loads environment settings from the project root using a shared utility function.
-   * **Intelligent Text Cleansing**: Unescapes HTML entities, normalizes curly apostrophes, dynamically expands contractions (like `i've` to `i have`), translates emojis to text words, and strips all punctuation/numbers.
-   * **Excluding Bot Spam**: Automatically filters out stickied/automoderator posts and comments.
-   * **FinBERT Classification**: Structures text with tags (`title: <t>. body: <b>. comments: <c1>. <c2>`) and classifies sentiment (Bullish/Bearish/Neutral). Long texts are split into 500-character chunks with a 100-character overlap (using a sliding-window algorithm) to preserve sentence context, and individual chunk scores are averaged dynamically.
-   * **Database Layout**: Stores raw posts in the `reddit_raw.<symbol>` table and clean results (along with `score`, `upvote_ratio`, and `num_comments` metrics, saved under clean headers `title`, `body`, `comments`) in the `reddit_cleaned.<symbol>` table.
+   - **Intelligent Text Cleansing**: Unescapes HTML entities, expands contractions (`i've` to `i have`), translates emojis to text words, and strips all punctuation/numbers.
+   - **Excluding Bot Spam**: Automatically filters out stickied/automoderator posts and comments.
+   - **FinBERT Classification**: Structures text with tags (`title: <t>. body: <b>. comments: <c1>. <c2>`) and classifies sentiment (Bullish/Bearish/Neutral). Long texts are split into 500-character chunks with a 100-character overlap using a sliding-window algorithm, and individual chunk scores are averaged dynamically.
+   - **Database Layout**: Stores raw posts in `reddit_raw.<symbol>` and clean results in `reddit_cleaned.<symbol>`.
 
 ---
 
@@ -252,22 +278,22 @@ CryptoSight features a built-in NLP sentiment analysis engine to scrape Reddit d
 
 When performing exploratory research or reviewing strategy performance, CryptoSight provides a built-in visualizer that renders multi-panel, dark-mode interactive charts directly in your web browser:
 
-1. Pass your loaded dataset into the dynamic indicators wrapper.
-2. Compute any required technical indicators dynamically by calling their names.
-3. Call the master dashboard plotting function to instantly launch an interactive visual suite featuring synchronized zooming, panning, and multi-panel indicator overlays.
+1. Pass your loaded dataset into the dynamic indicators wrapper (`Indicators(df)`).
+2. Compute any required technical indicators dynamically by calling their names (`ind.rsi(timeperiod=14)`).
+3. Call `ind.plot_interactive_chart()` to instantly launch an interactive visual suite featuring synchronized zooming, panning, and multi-panel indicator overlays.
 
-> **💡 Institutional Tip**: When analyzing large datasets with hundreds of thousands of candles, slice your data to the most recent 1,000 to 2,000 bars prior to visualization to ensure lightning-fast browser performance and smooth UI interaction.
+> **💡 Institutional Tip**: When analyzing large datasets with hundreds of thousands of candles, slice your data to the most recent 1,000 to 2,000 bars prior to visualization (`df.tail(2000)`) to ensure lightning-fast browser performance and smooth UI interaction.
 
 ---
 
-### Step 8: Building Quantitative Machine Learning Datasets (`cryptosight.ML`)
+### Step 8: Building Quantitative Machine Learning Datasets (`cryptosight.ml`)
 
-To prepare multi-indicator, target-labeled datasets ready for AI/ML training (`Regression`, `Classification`, or `TimeSeries`), run the unified ML pipeline orchestrator (`cryptosight.ML.main`):
+To prepare multi-indicator, target-labeled datasets ready for AI/ML training (`Regression`, `Classification`, or `TimeSeries`), run the unified ML pipeline orchestrator:
 
-1. **Configure Your ML Pipeline**: Open `ML/ml_config.yaml` to specify target symbols (`symbols: ["BTC", "ADA"]`), `target_timeframe` (`15m`), enabled indicators (`EMA`, `RSI`, `MACD`, `DOJI`, `ENGULFING`), and target specifications (`model_type: "regression" | "classification" | "timeseries"`, `horizon: 1`, `threshold: 0.002`).
+1. **Configure Your ML Pipeline**: Open `ml/ml_config.yaml` to specify target symbols (`symbols: ["BTC"]`), `target_timeframe` (`15m`), enabled indicators (`EMA`, `RSI`, `MACD`), and target specifications (`model_type: "regression" | "classification" | "timeseries"`, `horizon: 1`, `threshold: 0.002`).
 2. **Execute the ML Dataset Engine**: Run the main module directly from your terminal:
    ```bash
-   python -m cryptosight.ML.main
+   python -m cryptosight.ml.main
    ```
 3. **What the Pipeline Does Automatically**:
    - **Resamples Data**: Loads exact raw DB candles and resamples them to your `target_timeframe`.
@@ -276,9 +302,31 @@ To prepare multi-indicator, target-labeled datasets ready for AI/ML training (`R
      - *Regression*: Computes continuous log returns (`np.log(future / current)`).
      - *Classification*: Assigns `1` (Buy above fees), `-1` (Sell below fees), or `0` (Hold/Chop noise).
      - *TimeSeries*: Predicts exact future dollar prices.
-   - **Drops Warm-Up NaNs**: Cleans up leading indicator warm-up rows and trailing unknown horizon rows.
-   - **Automatic CSV Export**: Saves the finalized dataset right inside `cryptosight/ML/datasets/{SYM}_{timeframe}_features.csv` (e.g. `BTC_15m_features.csv`).
-4. **Console Preview & Audit Table**: The orchestrator outputs a compact, high-readability terminal preview table with rounded 4-decimal values (`round(4)`), placing the `target` column directly beside `close` and `volume`, followed by a full checklist of all generated features (`['open', 'high', 'low', 'close', 'volume', 'target', 'ind_EMA_20'...]`).
+   - **Automatic CSV Export**: Saves the finalized dataset right inside `cryptosight/ml/datasets/{SYM}_{timeframe}_features.csv`.
+4. **Console Preview & Audit Table**: Outputs a high-readability terminal preview table (`round(4)`), placing the `target` column directly beside `close` and `volume`.
+
+---
+
+### Step 9: Running the Quantitative Preprocessing & Backtest Leaderboard Pipeline (`cryptosight.preprocessing`)
+
+To scientifically evaluate which preprocessing transformation (`RobustScaler`, `MinMaxScaler`, `Winsorize`, `FracDiff`, `Log`, `Gaussian`) maximizes real-world trading PnL and directional accuracy:
+
+1. **Configure Evaluation Parameters**: Open `preprocessing/pp.config.yaml` to select your active preprocessing method (`method: "robust"`), `model_task` (`"regression"` or `"classification"`), `regression_signal_threshold` (`0.002`), and models to evaluate (`lightgbm`, `xgboost`, `linear_regression`). Ensure `ml/ml_config.yaml` has `model_type` matched to your task.
+2. **Execute the Preprocessing & Leaderboard Engine**: Run the pipeline entry point from your virtual environment terminal:
+   ```bash
+   python -m cryptosight.preprocessing.main
+   ```
+3. **What the Pipeline Does Automatically**:
+   - **Step 1 to 4 (Stationarity & Baseline Backtest)**: Runs ADF and KPSS stationarity tests, followed by an unmodeled raw target benchmark (`ACTUAL_DF_NO_MODEL`) to establish the true empirical baseline.
+   - **Step 5 to 7 (Multi-Method Preprocessing & ML Training)**: Loops through all configured preprocessing techniques (`methods_to_test`), fits the scalers on the training split without data leakage (`fit_transform(train)` -> `transform(test)`), and cross-evaluates all selected ML models.
+   - **Step 8 to 10 (Backtest Integration & Master Summary Table)**: Passes every model's test predictions directly into `BacktestingEngine.determine_entries()` and `.determine_exits()`, computing exact institutional metrics (`Total Trades, Win Rate %, Net PnL USD, Total Profit/Loss USD`). Automatically saves:
+     - `csv_files/BTC_preprocessing_benchmark_report.csv` (ML Statistical Metrics)
+     - `csv_files/BTC_final_summary_master_table.csv` (Combined ML + Backtest PnL Master Table)
+4. **Step 11 (Audit Trade Ledger & Noise Reduction Analysis)**: Run the institutional trade ledger analyzer to deep-dive into long/short win rates, Take-Profit vs. Stop-Loss hit ratios, and commission drag:
+   ```bash
+   python -m cryptosight.preprocessing.analyze_backtest_ledger
+   ```
+   - Outputs an exhaustive breakdown explaining how continuous regression thresholds (`0.20% / 0.002`) successfully filter out 90% of sideways market noise and eliminate excessive broker fee drag compared to raw classification coin-flips (`predict_proba > 0.50`).
 
 ---
 

@@ -1,3 +1,6 @@
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 import pandas as pd
 from pathlib import Path
 import yaml
@@ -5,8 +8,7 @@ from cryptosight.utils.logger import get_logger
 from cryptosight.ml.main import get_ml_dataset
 from cryptosight.preprocessing.models import CryptoMLClassifier
 from cryptosight.preprocessing.stationarity import StationarityAnalyzer
-from cryptosight.preprocessing.trend_preservation import TrendPreservationAnalyzer
-from cryptosight.preprocessing.backtest_runner import run_preprocessing_backtest_leaderboard
+from cryptosight.preprocessing.backtest_runner import run_preprocessing_backtest_leaderboard, run_actual_df_backtest
 
 
 logger = get_logger("PreprocessingMain")
@@ -79,8 +81,20 @@ def run_pipeline():
         print(f"\n [Symbol: {symbol.upper()}] Loaded {len(df)} candles | Target Distribution: {df['target'].value_counts().to_dict() if df['target'].nunique() < 10 else f'Continuous Range ({df.target.min():.4f} to {df.target.max():.4f})'}")
         logger.info(f"Starting Preprocessing vs ML Evaluation loop for symbol [{symbol.upper()}]...")
 
+        # 3.1 Run Direct Backtest on Actual DataFrame (`Without giving it to ML model`)
+        actual_backtest_df = run_actual_df_backtest(df, symbol=symbol, threshold=classifier.regression_signal_threshold)
+        if not actual_backtest_df.empty:
+            print("\n" + "=" * 115)
+            print(f"🎯 ACTUAL DATAFRAME DIRECT BACKTEST WITHOUT ML MODEL (`Raw DF Target / Rule-Based Benchmark`) FOR [{symbol.upper()}]")
+            print("=" * 115)
+            pd.set_option("display.max_columns", None)
+            pd.set_option("display.width", 1000)
+            print(actual_backtest_df.to_string(index=False))
+            print("=" * 115 + "\n")
+
         # 4. Run ML Evaluation, Leaderboard & Signal Generation (`PDF Step 6 & 7.1`)
         benchmark_df, preprocessed_dfs, predictions_dfs = classifier.run_preprocessing_comparison(df, symbol=symbol)
+
 
         # Display Final Benchmark Table (`PDF Step 6 Institutional Report`)
         print("\n" + "=" * 115)

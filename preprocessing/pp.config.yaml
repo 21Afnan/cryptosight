@@ -26,7 +26,7 @@ exclude_columns:
 # model_task: 'classification' or 'regression'
 # classification -> uses XGBClassifier/LGBMClassifier, metrics: Accuracy/F1/Precision
 # regression     -> uses LinearRegression/XGBRegressor, metrics: MAE/RMSE/R2/Directional Accuracy
-model_task: "classification"
+model_task: "regression"
 
 # Regression only: threshold to convert predicted log-return to +1/0/-1 signal
 # e.g. 0.002 means: if predicted_return > 0.2% -> Buy (+1), < -0.2% -> Sell (-1), else Hold (0)

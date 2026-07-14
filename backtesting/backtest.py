@@ -257,7 +257,7 @@ class BacktestingEngine:
         for entry_time, row in entries_df.iterrows():
             if max_open == 1 and last_exit_time is not None:
                 if entry_time <= last_exit_time:
-                    self.logger.info(f"Skipping signal at {entry_time} — previous trade open until {last_exit_time}")
+                    self.logger.debug(f"Skipping signal at {entry_time} — previous trade open until {last_exit_time}")
                     continue
 
             entry_price = row["entry_price"]

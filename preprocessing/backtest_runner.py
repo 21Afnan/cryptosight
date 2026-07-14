@@ -190,3 +190,45 @@ def run_preprocessing_backtest_leaderboard(raw_df: pd.DataFrame, predictions_dfs
             logger.warning(f"Could not save leaderboard CSV: {e}")
 
     return leaderboard_df
+
+
+def run_actual_df_backtest(raw_df: pd.DataFrame, symbol: str, threshold: float) -> pd.DataFrame:
+    """
+    Runs the built-in BacktestingEngine directly on the actual DataFrame (`raw_df`)
+    WITHOUT giving it to any ML model!
+    Evaluates both the Out-of-Sample Test Split (20%) and Full Dataset (100%) using
+    the raw dataframe target/signals directly as a benchmark.
+    """
+    logger.info(f"[{symbol.upper()}] Running Direct Backtest on Actual DataFrame WITHOUT ML Model...")
+    if raw_df is None or raw_df.empty:
+        logger.error("Raw DataFrame is empty or None.")
+        return pd.DataFrame()
+
+    actual_dict = {}
+    splits = {
+        "ACTUAL_DF_NO_MODEL (Test Split 20%)": raw_df.iloc[int(len(raw_df) * 0.80):].copy(),
+        "ACTUAL_DF_NO_MODEL (Full Data 100%)": raw_df.copy()
+    }
+
+    for label, view in splits.items():
+        if view.empty:
+            continue
+        if "signal" in view.columns:
+            view["signal"] = view["signal"].fillna(0).astype(int)
+        elif "target" in view.columns:
+            unique_targets = set(view["target"].dropna().unique())
+            if unique_targets.issubset({-1, 0, 1, -1.0, 0.0, 1.0}):
+                view["signal"] = view["target"].fillna(0).astype(int)
+            else:
+                view["signal"] = np.where(view["target"] > threshold, 1, np.where(view["target"] < -threshold, -1, 0))
+        else:
+            logger.warning(f"No signal or target column found in raw_df for {label}.")
+            continue
+        actual_dict[label] = view
+
+    if not actual_dict:
+        logger.warning("Could not construct signal dictionary from actual df.")
+        return pd.DataFrame()
+
+    leaderboard_df = run_preprocessing_backtest_leaderboard(raw_df, actual_dict, symbol=symbol)
+    return leaderboard_df
