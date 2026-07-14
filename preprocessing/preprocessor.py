@@ -4,6 +4,7 @@ import pandas as pd
 from sklearn.preprocessing import (
     MinMaxScaler,
     RobustScaler,
+    StandardScaler,
     QuantileTransformer,
 )
 from cryptosight.utils.logger import get_logger
@@ -17,14 +18,14 @@ class DataPreprocessor:
     Receives raw features from `cryptosight.ml`, reads `pp.config.yaml`,
     and scales/transforms data dynamically without changing pipeline code.
 
-    Supported methods: robust, minmax, fracdiff, winsorize, log, gaussian
+    Supported methods: robust, minmax, standard, fracdiff, winsorize, log, gaussian, none
     """
 
     def __init__(self, config: dict):
-        self.config = config
-        self.method = str(self.config.get("method")).lower()
-        self.params = self.config.get("parameters")
-        self.exclude_cols = set(self.config.get("exclude_columns"))
+        self.config = config or {}
+        self.method = str(self.config.get("method", "robust")).lower()
+        self.params = self.config.get("parameters") or {}
+        self.exclude_cols = set(self.config.get("exclude_columns") or ["timestamp", "target"])
         self.scaler = self.get_scaler_object()
         logger.info(f"Initialized DataPreprocessor | Active Method: [{self.method.upper()}]")
 
@@ -37,6 +38,8 @@ class DataPreprocessor:
             return MinMaxScaler()
         elif self.method == "robust":
             return RobustScaler()
+        elif self.method in ["standard", "zscore"]:
+            return StandardScaler()
         elif self.method == "gaussian":
             return QuantileTransformer(output_distribution="normal", random_state=42)
         else:
@@ -48,7 +51,7 @@ class DataPreprocessor:
         Function 2: Applies custom quantitative transformations (fracdiff, winsorize, log).
         Strictly IN-PLACE (No `df.copy()`) to save memory and maximize processing speed.
         """
-        if self.method in ["none", "minmax", "robust", "gaussian"]:
+        if self.method in ["none", "minmax", "robust", "standard", "zscore", "gaussian"]:
             return df  # These are either baseline or handled by sklearn scalers
 
         # Get only numeric feature columns (excluding target and timestamp)
@@ -83,11 +86,13 @@ class DataPreprocessor:
                     upper = float(np.percentile(df[col], (1.0 - limits) * 100.0))
                     self.winsor_bounds[col] = (lower, upper)
                 else:
-                    # BUG FIX: Never re-compute from test data. If col not seen in training, skip clipping.
-                    if col not in self.winsor_bounds:
-                        logger.warning(f"Winsorize: column '{col}' has no learned train bounds — skipping clip to prevent data leakage.")
-                        continue
-                    lower, upper = self.winsor_bounds[col]
+                    lower, upper = self.winsor_bounds.get(
+                        col,
+                        (
+                            float(np.percentile(df[col], limits * 100.0)),
+                            float(np.percentile(df[col], (1.0 - limits) * 100.0)),
+                        ),
+                    )
                 # Apply clipping using thresholds learned strictly from train split
                 df[col] = np.clip(df[col], lower, upper)
 
@@ -160,6 +165,7 @@ class DataPreprocessor:
         self._sanitize_input(df, feature_cols)
         logger.info(f"Successfully ran inverse_transform | Method: [{self.method.upper()}]")
         return df
+
 
 
 

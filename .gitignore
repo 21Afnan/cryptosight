@@ -19,3 +19,5 @@ Thumbs.db
 # Logs
 logs/
 
+# Generated CSV Reports & Backtest Output (auto-generated, do not commit)
+csv_files/

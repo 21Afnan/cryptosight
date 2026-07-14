@@ -57,20 +57,11 @@ def run_preprocessing_backtest_leaderboard(raw_df: pd.DataFrame, predictions_dfs
         logger.error(f"Raw DataFrame missing required price columns for backtest: {missing_cols}")
         return pd.DataFrame()
 
-    for pred_key, pred_df in predictions_dfs.items():
-        # Key format is 'method_modelname' e.g. 'none_xgboost', 'robust_lightgbm'
-        # Split on last underscore to separate method from model name
-        if "_" in pred_key:
-            parts = pred_key.rsplit("_", 1)
-            method_name = parts[0]   # e.g. 'none', 'fracdiff'
-            model_name = parts[1]    # e.g. 'xgboost', 'lightgbm'
-        else:
-            method_name = pred_key
-            model_name = "unknown"
-        logger.info(f"[{clean_sym}] Running built-in BacktestingEngine for technique: [{method_name.upper()}] | Model: [{model_name.upper()}]...")
+    for method_name, pred_df in predictions_dfs.items():
+        logger.info(f"[{clean_sym}] Running built-in BacktestingEngine for technique: [{method_name.upper()}]...")
 
         if pred_df.empty or "signal" not in pred_df.columns:
-            logger.warning(f"[{clean_sym}] No signal column found for [{pred_key}]. Skipping...")
+            logger.warning(f"[{clean_sym}] No signal column found for method [{method_name.upper()}]. Skipping...")
             continue
 
         # Extract only the test timestamps where predictions exist
@@ -92,10 +83,9 @@ def run_preprocessing_backtest_leaderboard(raw_df: pd.DataFrame, predictions_dfs
 
         # Check if any trades are generated
         if (merged_df["signal"] != 0).sum() == 0:
-            logger.info(f"[{clean_sym}] No trade signals (+1 / -1) triggered for [{method_name.upper()}_{model_name.upper()}].")
+            logger.info(f"[{clean_sym}] No trade signals (+1 / -1) triggered during test tenure for [{method_name.upper()}].")
             leaderboard_rows.append({
                 "method": method_name.upper(),
-                "model": model_name.upper(),
                 "status": "NO TRADES",
                 "total_profit_usd": 0.0,
                 "total_loss_usd": 0.0,
@@ -138,8 +128,8 @@ def run_preprocessing_backtest_leaderboard(raw_df: pd.DataFrame, predictions_dfs
         keep_cols = [c for c in desired_order if c in save_df.columns] + extra_cols
         save_df = save_df[keep_cols]
 
-        # Save individual ledger to CSV (filename includes both method and model)
-        ledger_path = csv_dir / f"{clean_sym}_{target_tf}_{method_name}_{model_name}_backtest_ledger.csv"
+        # Save individual ledger to CSV
+        ledger_path = csv_dir / f"{clean_sym}_{target_tf}_{method_name}_backtest_ledger.csv"
         try:
             save_df.to_csv(ledger_path, index=False, encoding="utf-8-sig")
             logger.info(f"[{clean_sym}] Saved completed trade ledger ({method_name.upper()}) to `csv_files/`: {ledger_path}")
@@ -175,7 +165,6 @@ def run_preprocessing_backtest_leaderboard(raw_df: pd.DataFrame, predictions_dfs
 
         leaderboard_rows.append({
             "method": method_name.upper(),
-            "model": model_name.upper(),
             "status": status,
             "total_profit_usd": total_profit_usd,
             "total_loss_usd": total_loss_usd,

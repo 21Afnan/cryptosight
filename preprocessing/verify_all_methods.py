@@ -33,6 +33,8 @@ logger = get_logger("VerifyAllMethods")
 REVERSIBLE_METHODS = {
     "minmax",
     "robust",
+    "standard",
+    "zscore",
     "log",
     "gaussian",
 }

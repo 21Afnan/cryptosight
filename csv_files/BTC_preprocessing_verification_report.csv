@@ -1,8 +1,0 @@
-﻿method,leakage_check,reversibility_check,edge_case_check,overall_status
-NONE,Pass (Isolated Fit),Pass (Identity),"Pass (0 NaN, 0 Inf)",PASS (VERIFIED ✅)
-ROBUST,Pass (Isolated Fit),Pass (Diff: 7.3e-12),"Pass (0 NaN, 0 Inf)",PASS (VERIFIED ✅)
-MINMAX,Pass (Isolated Fit),Pass (Diff: 1.5e-11),"Pass (0 NaN, 0 Inf)",PASS (VERIFIED ✅)
-FRACDIFF,Pass (Isolated Fit),By Design (Differencing),"Pass (0 NaN, 0 Inf)",PASS (VERIFIED ✅)
-WINSORIZE,Pass (Isolated Fit),By Design (Outlier Clip),"Pass (0 NaN, 0 Inf)",PASS (VERIFIED ✅)
-LOG,Pass (Isolated Fit),Pass (Diff: 1.2e-10),"Pass (0 NaN, 0 Inf)",PASS (VERIFIED ✅)
-GAUSSIAN,Pass (Isolated Fit),Pass (Quantile Grid Map),"Pass (0 NaN, 0 Inf)",PASS (VERIFIED ✅)

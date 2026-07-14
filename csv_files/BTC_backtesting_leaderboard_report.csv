@@ -1,8 +1,0 @@
-﻿method,status,total_profit_usd,total_loss_usd,net_profit_usd,return_pct,win_rate_pct,total_trades,winning_trades,losing_trades
-NONE,LOSS ❌,613.67,-786.37,-172.69,-1.73,32.35,102,33,69
-LOG,LOSS ❌,557.89,-797.71,-239.82,-2.4,30.0,100,30,70
-GAUSSIAN,LOSS ❌,483.43,-729.26,-245.83,-2.46,28.89,90,26,64
-ROBUST,LOSS ❌,464.87,-752.08,-287.2,-2.87,27.47,91,25,66
-MINMAX,LOSS ❌,483.49,-797.71,-314.22,-3.14,27.08,96,26,70
-FRACDIFF,LOSS ❌,613.84,-934.59,-320.75,-3.21,28.7,115,33,82
-WINSORIZE,LOSS ❌,427.62,-843.25,-415.63,-4.16,23.71,97,23,74
