@@ -138,7 +138,13 @@ class MLFeatureBuilder:
 
         # Cleanly drop trailing unknown horizon rows and organize columns logically (`target` right next to OHLCV)
         clean_df = result_df.dropna(subset=["target"])
-        base_cols = [c for c in ["open", "high", "low", "close", "volume", "target"] if c in clean_df.columns]
+        if "timestamp" not in clean_df.columns:
+            if clean_df.index.name == "timestamp" or isinstance(clean_df.index, pd.DatetimeIndex):
+                clean_df = clean_df.reset_index()
+                if "index" in clean_df.columns and "timestamp" not in clean_df.columns:
+                    clean_df = clean_df.rename(columns={"index": "timestamp"})
+
+        base_cols = [c for c in ["timestamp", "target", "open", "high", "low", "close", "volume"] if c in clean_df.columns]
         other_cols = [c for c in clean_df.columns if c not in base_cols]
         clean_df = clean_df[base_cols + other_cols]
 
@@ -168,20 +174,20 @@ class MLFeatureBuilder:
 
             feature_data[sym] = processed_df
 
-            # Store CSV inside ML/datasets/ folder right now (`csv for nwo store ho ok`)
-            out_dir = Path(__file__).resolve().parent / "datasets"
+            # Store CSV inside root `csv_files/` folder (`as requested by user`)
+            out_dir = Path(__file__).resolve().parent.parent / "csv_files"
             out_dir.mkdir(parents=True, exist_ok=True)
             target_timeframe = self.config.get("data", {}).get("target_timeframe", "15m")
             clean_sym = str(sym).upper().replace("/", "_").replace(":", "_").replace("\\", "_").replace("?", "").replace("*", "").strip()
             clean_tf = str(target_timeframe).replace("/", "_").replace(":", "_").strip()
             csv_path = out_dir / f"{clean_sym}_{clean_tf}_features.csv"
             try:
-                processed_df.to_csv(csv_path, encoding="utf-8")
+                processed_df.to_csv(csv_path, index=False, encoding="utf-8")
                 logger.info(f"[{sym}] Successfully saved final ML dataset to CSV: {csv_path}")
             except OSError as e:
                 logger.warning(f"[{sym}] Could not save CSV to {csv_path} ({e}). Saving to temporary clean filename...")
                 fallback_path = out_dir / f"dataset_{clean_sym}.csv"
-                processed_df.to_csv(fallback_path, encoding="utf-8")
+                processed_df.to_csv(fallback_path, index=False, encoding="utf-8")
                 logger.info(f"[{sym}] Saved fallback dataset to: {fallback_path}")
 
             logger.info(f"=== {sym} Ready [{str(self.config.get('model_type', 'regression')).upper()} | Shape: {processed_df.shape}] ===")

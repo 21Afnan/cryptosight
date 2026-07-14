@@ -8,16 +8,13 @@ enabled: true
 
 # Select ONE method to apply to all features:
 # Options: 
-#   none | standard | minmax | robust | maxabs | quantile
-#   fracdiff | winsorize | log | gaussian
-#   rolling_zscore | yeo_johnson | mad_scaler | tanh_clean | kalman_filter
+#   none | robust | minmax | fracdiff | winsorize | log | gaussian
 method: "robust"
 
 # Parameters for methods that need custom settings:
 parameters:
   frac_d: 0.35          # For 'fracdiff': degree of differencing (0.0 to 1.0)
   winsor_limits: 0.01   # For 'winsorize': clip top/bottom 1% outliers
-  rolling_window: 100   # For 'rolling_zscore': lookback window size
 
 # Do NOT scale these columns (keep them original):
 exclude_columns:
@@ -34,15 +31,12 @@ models:
 
 # Select preprocessing techniques to loop across and compare in benchmark table:
 methods_to_test:
-  - "none"
-  - "standard"
-  - "robust"
-  - "minmax"
-  - "fracdiff"
-  - "winsorize"
-  - "log"
-  - "rolling_zscore"
-  - "mad_scaler"
-  - "tanh_clean"
+  - "none"       # Baseline (No preprocessing)
+  - "robust"     # 1. RobustScaler (Median/IQR based, outlier-proof)
+  - "minmax"     # 3. MinMaxScaler (Bounded transform for LSTM/GRU)
+  - "fracdiff"   # 4. Fractional Differencing (Stationary + memory preserved)
+  - "winsorize"  # 6. Winsorize (Outlier clipping 1st/99th percentile on train split)
+  - "log"        # 7. Log Transform (Sign-preserving math transform, zero leakage)
+  - "gaussian"   # 8. Gaussian Quantile Transform (Taming fat tails, fit on train)
 
 

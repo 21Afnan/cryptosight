@@ -1,6 +1,7 @@
 
 import numpy as np
 import pandas as pd
+from pathlib import Path
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from sklearn.metrics import accuracy_score, f1_score, log_loss
@@ -62,49 +63,97 @@ class CryptoMLClassifier:
         X_test: pd.DataFrame,
         y_test: pd.Series,
         method_name: str,
-    ) -> dict:
+        model_name: str = "UNKNOWN",
+        scaled_test: pd.DataFrame = None,
+    ) -> tuple[dict, pd.DataFrame]:
         """
-        Function 2: Fits the classifier and computes classification metrics (Accuracy, F1, Log-Loss).
+        Function 2: Fits the classifier, computes classification metrics, and generates side-by-side
+        trading signals (`+1 Buy, -1 Sell, 0 Hold`) and actual vs predicted evaluation DataFrame.
         """
         # 0. Map [-1, 0, 1] -> [0, 1, 2] for strict XGBoost / LightGBM compatibility
-        y_train_fit = np.where(y_train == -1, 0, np.where(y_train == 0, 1, np.where(y_train == 1, 2, y_train)))
-        y_test_fit = np.where(y_test == -1, 0, np.where(y_test == 0, 1, np.where(y_test == 1, 2, y_test)))
+        unique_classes = np.unique(y_train)
+        is_ternary = (-1 in unique_classes and 1 in unique_classes and 0 in unique_classes) or len(unique_classes) == 3
+
+        if is_ternary:
+            y_train_fit = np.where(y_train == -1, 0, np.where(y_train == 0, 1, np.where(y_train == 1, 2, y_train)))
+            y_test_fit = np.where(y_test == -1, 0, np.where(y_test == 0, 1, np.where(y_test == 1, 2, y_test)))
+        else:
+            # Binary mapping [-1, 1] -> [0, 1] if needed
+            y_train_fit = np.where(y_train == -1, 0, y_train)
+            y_test_fit = np.where(y_test == -1, 0, y_test)
 
         # 1. Fit model strictly on Training Data (`No Look-Ahead bias`)
         model.fit(X_train, y_train_fit)
 
         # 2. Predict classes and probabilities on unseen Test Data
-        y_pred = model.predict(X_test)
-        y_prob = model.predict_proba(X_test)
+        y_pred_fit = model.predict(X_test)
+        y_prob_matrix = model.predict_proba(X_test)
+        y_prob_max = np.max(y_prob_matrix, axis=1)
+
+        # Map predictions back to original domain (`actual_target vs predicted_target`)
+        if is_ternary:
+            y_pred = np.where(y_pred_fit == 0, -1, np.where(y_pred_fit == 1, 0, np.where(y_pred_fit == 2, 1, y_pred_fit)))
+        else:
+            y_pred = np.where(y_pred_fit == 0, -1, y_pred_fit)
 
         # 3. Calculate Institutional Metrics (`PDF Step 5/6`)
-        acc = accuracy_score(y_test_fit, y_pred) * 100.0
-        f1 = f1_score(y_test_fit, y_pred, average="weighted") * 100.0
-        loss = log_loss(y_test_fit, y_prob)
+        acc = accuracy_score(y_test_fit, y_pred_fit) * 100.0
+        from sklearn.metrics import precision_score
+        prec = precision_score(y_test_fit, y_pred_fit, average="weighted", zero_division=0) * 100.0
+        f1 = f1_score(y_test_fit, y_pred_fit, average="weighted") * 100.0
+        loss = log_loss(y_test_fit, y_prob_matrix)
 
-        correct_count = int(np.sum(y_test_fit == y_pred))
+        correct_count = int(np.sum(y_test_fit == y_pred_fit))
         total_count = int(len(y_test_fit))
         wrong_count = total_count - correct_count
 
         metrics = {
             "method": method_name.upper(),
+            "model": model_name.upper(),
             "accuracy_pct": round(acc, 2),
+            "precision_pct": round(prec, 2),
+            "f1_score_pct": round(f1, 2),
             "correct_predictions": f"{correct_count} / {total_count}",
             "wrong_predictions": wrong_count,
-            "f1_score_pct": round(f1, 2),
             "log_loss": round(loss, 4),
         }
         logger.info(
             f"Evaluated [{method_name.upper()}] | Acc: {metrics['accuracy_pct']}% ({correct_count}/{total_count}) | F1: {metrics['f1_score_pct']}% | Loss: {metrics['log_loss']}"
         )
-        return metrics
 
-    def run_preprocessing_comparison(self, df: pd.DataFrame) -> pd.DataFrame:
+        # 4. Generate Side-by-Side Prediction & Trading Signal DataFrame (`PDF Step 7 Signal Generation`)
+        prediction_df = scaled_test.copy() if scaled_test is not None else X_test.copy()
+        if "timestamp" not in prediction_df.columns:
+            if prediction_df.index.name == "timestamp" or isinstance(prediction_df.index, pd.DatetimeIndex):
+                prediction_df = prediction_df.reset_index()
+                if "index" in prediction_df.columns and "timestamp" not in prediction_df.columns:
+                    prediction_df = prediction_df.rename(columns={"index": "timestamp"})
+
+        prediction_df["actual_target"] = y_test
+        prediction_df["predicted_target"] = y_pred
+        prediction_df["predicted_prob"] = np.round(y_prob_max, 4)
+        prediction_df["is_correct"] = (prediction_df["actual_target"] == prediction_df["predicted_target"])
+
+        # Map to Quantitative Trading Signal (`+1 Buy/Long, -1 Sell/Short, 0 Hold/Neutral`)
+        prediction_df["signal"] = np.where(y_pred == 1, 1, np.where(y_pred == -1, -1, 0))
+
+        # Order key evaluation columns right at the front for crystal-clear visual inspection
+        front_cols = [c for c in ["timestamp", "actual_target", "predicted_target", "is_correct", "predicted_prob", "signal", "open", "high", "low", "close", "volume"] if c in prediction_df.columns]
+        other_cols = [c for c in prediction_df.columns if c not in front_cols and c != "target"]
+        prediction_df = prediction_df[front_cols + other_cols]
+
+        return metrics, prediction_df
+
+    def run_preprocessing_comparison(self, df: pd.DataFrame, symbol: str = "BTC") -> tuple[pd.DataFrame, dict, dict]:
         """
-        Function 3: Splits data chronologically (80/20), loops across selected models and all 
-        preprocessing techniques dynamically from `config`, and returns a benchmark DataFrame table.
+        Function 3: Splits data chronologically (80/20), loops across all preprocessing techniques,
+        saves each preprocessed DataFrame to root `csv_files/` folder (excluding timestamp/target from transformation),
+        and evaluates selected models to return a benchmark DataFrame table, full preprocessed splits, and model prediction evaluation splits.
         """
         methods_list = self.config.get("methods_to_test")
+        if not methods_list:
+            logger.error("No `methods_to_test` configured!")
+            return pd.DataFrame(), {}, {}
 
         # 1. Institutional Time-Series Split (`80% Train / 20% Test`, No Shuffling!)
         split_idx = int(len(df) * 0.80)
@@ -115,24 +164,44 @@ class CryptoMLClassifier:
         y_train = train_df["target"].values
         y_test = test_df["target"].values
 
+        # Pre-calculate scaled splits & store full preprocessed datasets for main.py to save
+        preprocessed_splits = {}
+        full_dfs = {}
+        for method in methods_list:
+            pp_config = {
+                "method": method,
+                "parameters": self.config.get("parameters"),
+                "exclude_columns": self.config.get("exclude_columns"),
+            }
+            preprocessor = DataPreprocessor(pp_config)
+            scaled_train = preprocessor.fit_transform(train_df.copy())
+            scaled_test = preprocessor.transform(test_df.copy())
+            preprocessed_splits[method] = (scaled_train, scaled_test)
+
+            # Reconstruct full dataset chronologically (`timestamp and target intact, features scaled/transformed`)
+            full_preprocessed_df = pd.concat([scaled_train, scaled_test], axis=0)
+            if "timestamp" not in full_preprocessed_df.columns:
+                if full_preprocessed_df.index.name == "timestamp" or isinstance(full_preprocessed_df.index, pd.DatetimeIndex):
+                    full_preprocessed_df = full_preprocessed_df.reset_index()
+                    if "index" in full_preprocessed_df.columns and "timestamp" not in full_preprocessed_df.columns:
+                        full_preprocessed_df = full_preprocessed_df.rename(columns={"index": "timestamp"})
+
+            # Guarantee timestamp and target are clearly ordered right at the front
+            front_cols = [c for c in ["timestamp", "target"] if c in full_preprocessed_df.columns]
+            other_cols = [c for c in full_preprocessed_df.columns if c not in front_cols]
+            full_preprocessed_df = full_preprocessed_df[front_cols + other_cols]
+            full_dfs[method] = full_preprocessed_df
+
         results = []
+        predictions_dfs = {}
 
         # 2. Loop across Models loaded dynamically from config (`self.models_list`)
         for model_name in self.models_list:
             logger.info(f"=== Starting Evaluation Loop for Model: [{model_name.upper()}] ===")
 
-            # 3. Loop across Preprocessing Methods loaded from config
+            # 3. Loop across Preprocessing Methods using pre-calculated zero-leakage splits
             for method in methods_list:
-                pp_config = {
-                    "method": method,
-                    "parameters": self.config.get("parameters"),
-                    "exclude_columns": self.config.get("exclude_columns"),
-                }
-                preprocessor = DataPreprocessor(pp_config)
-
-                # Fit-transform strictly on Train data, and transform on Test data (`0% Leakage`)
-                scaled_train = preprocessor.fit_transform(train_df.copy())
-                scaled_test = preprocessor.transform(test_df.copy())
+                scaled_train, scaled_test = preprocessed_splits[method]
 
                 # Drop non-feature columns (`target` and `timestamp`)
                 X_train = scaled_train.drop(columns=["timestamp", "target"], errors="ignore")
@@ -141,15 +210,21 @@ class CryptoMLClassifier:
                 # Build Model & Evaluate
                 model_obj = self.build_model_object(model_name)
                 if model_obj is not None:
-                    metrics = self.fit_and_evaluate(model_obj, X_train, y_train, X_test, y_test, method)
-                    metrics["model"] = model_name.upper()
+                    metrics, prediction_df = self.fit_and_evaluate(
+                        model_obj, X_train, y_train, X_test, y_test, method,
+                        model_name=model_name, scaled_test=scaled_test
+                    )
                     results.append(metrics)
+                    # Key by `method_modelname` so XGBoost & LightGBM signals are BOTH stored
+                    # and both get separately backtested (Bug #2 fix)
+                    pred_key = f"{method}_{model_name.lower()}"
+                    predictions_dfs[pred_key] = prediction_df
 
-        # 4. Return Final Benchmark Table sorted by Accuracy
+        # 4. Return Final Benchmark Table sorted by Accuracy along with full preprocessed datasets & evaluation splits
         benchmark_df = pd.DataFrame(results)
         if not benchmark_df.empty:
             benchmark_df = benchmark_df.sort_values(by="accuracy_pct", ascending=False).reset_index(drop=True)
-        return benchmark_df
+        return benchmark_df, full_dfs, predictions_dfs
 
 
 
