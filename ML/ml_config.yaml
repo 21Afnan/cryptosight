@@ -5,7 +5,7 @@
 # Enable/disable sections independently (`enabled: true/false`) to customize datasets.
 # ==============================================================================
 
-model_type: regression  # Options: regression | classification | timeseries
+model_type: classification  # Options: regression | classification | timeseries
 
 # --- 1. MARKET DATA (Base OHLCV Dataset) ---
 data:

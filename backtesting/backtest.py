@@ -479,6 +479,10 @@ class BacktestingEngine:
         except Exception as e:
             self.logger.warning(f"Could not save backtest ledger to DB (non-fatal): {e}")
 
+        # Step 12: Save physical CSV and return DataFrame cleanly
+        csv_path = Path(__file__).resolve().parent / "backtest_ledger.csv"
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        ledger_df.to_csv(csv_path)
         return ledger_df
 
 

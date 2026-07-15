@@ -15,7 +15,7 @@ exclude_columns:
   - "timestamp"
   - "target"
 
-model_task: "regression"
+model_task: "classification"
 
 # Select models to evaluate based on model_task:
 models:

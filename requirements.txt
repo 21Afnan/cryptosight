@@ -17,6 +17,7 @@ python-dotenv>=1.0.1
 # Technical Analysis & Visualization
 TA-Lib>=0.4.28
 plotly>=5.18.0
+quantstats>=0.0.62
 
 # Scrapping
 praw>=8.0.2     
