@@ -1,8 +1,9 @@
+<div id="top"></div>
 <div align="center">
 
 # 🚀 CryptoSight: Enterprise Quantitative Data & Technical Analysis Engine
 
-[![Built by Afnan Shoukat](https://img.shields.io/badge/Built%20by-Afnan%20Shoukat-00E676?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/afnan-shoukat/)
+[![Built by Afnan Shoukat](https://img.shields.io/badge/Built%20by-Afnan%20Shoukat-00E676?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/afnanshoukat)
 [![GitHub Profile](https://img.shields.io/badge/GitHub-21Afnan-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/21Afnan)
 [![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Enterprise%20Storage-316192?style=for-the-badge&logo=postgresql&logoColor=white)](https://postgresql.org)
@@ -11,28 +12,37 @@
 
 **An institutional, production-grade cryptocurrency data ingestion, dynamic technical analysis, ML feature engineering, and statistical analytics framework built for quantitative analysts and financial engineers.**
 
-[🌟 Key Features](#-8-quantitative-pillars--core-architecture) • [🏗️ System Flowchart](#-system-architecture--pipeline-flowchart) • [⚡ Quick Start Guide](#-step-by-step-quick-start--execution-guide) • [📁 Repository Structure](#-complete-repository-structure) • [👨‍💻 Author](#-built--engineered-by-afnan-shoukat)
+[🌟 Key Features](#features) • [🏗️ System Flowchart](#flowchart) • [⚡ Quick Start Guide](#quickstart) • [📁 Repository Structure](#structure) • [👨‍💻 Author](#author)
 
 </div>
 
 ---
 
-## 🌟 Executive Summary
+<div id="features"></div>
+
+## 🌟 Executive Summary & 8 Quantitative Pillars
 
 **CryptoSight** bridges the gap between raw exchange data feeds and institutional quantitative strategies. It eliminates boilerplate data cleaning, API pagination headaches, and indicator mapping complexities by providing an end-to-end automated framework organized into **8 Quantitative Pillars**:
 
-| Pillar | Module | High-Level Functionality |
-| :--- | :--- | :--- |
-| **1. Ingestion** | `cryptosight.data` | **Binance & Bybit Ingestion** with smart SQL gap-fill & live candle stripping (`latest_ts` synchronization). |
-| **2. TA Engine** | `cryptosight.tal_Indicators` | **Dynamic 158 TA-Lib Wrapper** utilizing Python `__getattr__` interception with parameter hierarchy & dark-mode charts. |
-| **3. Signals** | `cryptosight.signals` | **YAML-Driven Signal Pipeline** with look-back persistence windows and automatic `.shift(1)` look-ahead bias prevention. |
-| **4. Backtester** | `cryptosight.backtesting` | **Vectorized 10-Step Backtesting Engine** simulating realistic commissions, slippage, dynamic TP/SL, and SQL ledger storage. |
-| **5. Sentiment** | `cryptosight.sentiment` | **Reddit NLP Pipeline** with HTML/contraction cleaning, bot filtering, and **Hugging Face FinBERT** chunk-averaging. |
-| **6. ML Data** | `cryptosight.ml` | **Quant ML Feature Builder** generating lag-free features (`.shift(1)`), Log Return (`np.log`), and 3-class target matrices. |
-| **7. Evaluation** | `cryptosight.preprocessing` | **Institutional Preprocessing & Leaderboard** testing ADF/KPSS stationarity across `Robust, MinMax, FracDiff, Winsorize, Log, Gaussian`. |
-| **8. Analytics** | `cryptosight.stats` | **QuantStats Analytics & Frontend Charts Engine** computing 59+ ratios (`CAGR, Sharpe, Calmar`) and exporting `all_charts.json`. |
+| Status | Pillar | Module | High-Level Institutional Functionality |
+| :---: | :--- | :--- | :--- |
+| 🟢 **LIVE** | **1. Ingestion** | `cryptosight.data` | **Binance & Bybit Ingestion** with smart SQL gap-fill & live candle stripping (`latest_ts` synchronization). |
+| ⚡ **FAST** | **2. TA Engine** | `cryptosight.tal_Indicators` | **Dynamic 158 TA-Lib Wrapper** utilizing Python `__getattr__` interception with parameter hierarchy & dark-mode charts. |
+| 🎯 **RULES** | **3. Signals** | `cryptosight.signals` | **YAML-Driven Signal Pipeline** with look-back persistence windows and automatic `.shift(1)` look-ahead bias prevention. |
+| 🧪 **QUANT** | **4. Backtester** | `cryptosight.backtesting` | **Vectorized 10-Step Backtesting Engine** simulating realistic commissions (`0.14%`), slippage (`0.06%`), and dynamic TP/SL. |
+| 🧠 **NLP** | **5. Sentiment** | `cryptosight.sentiment` | **Reddit NLP Pipeline** with HTML/contraction cleaning, bot filtering, and **Hugging Face FinBERT** chunk-averaging. |
+| 🛡️ **CLEAN** | **6. ML Data** | `cryptosight.ml` | **Quant ML Feature Builder** generating lag-free features (`.shift(1)`), Log Return (`np.log`), and 3-class target matrices. |
+| 📊 **BENCH** | **7. Evaluation** | `cryptosight.preprocessing` | **Institutional Preprocessing & Leaderboard** testing ADF/KPSS stationarity across `Robust, MinMax, FracDiff, Winsorize, Log, Gaussian`. |
+| 📉 **METRICS** | **8. Analytics** | `cryptosight.stats` | **QuantStats Analytics & Frontend Charts Engine** computing 59+ ratios (`CAGR, Sharpe, Calmar`) and exporting `all_charts.json`. |
+
+> [!IMPORTANT]
+> **Zero Data Leakage Guarantee (`.shift(1)`)**: Every single technical indicator, moving average, and pattern calculated inside CryptoSight is explicitly shifted forward by 1 period (`Bar T -> Bar T+1`) before generating target labels or execution signals. This mathematically prevents future look-ahead bias during historical backtests and ML cross-validation.
+
+<div align="right"><a href="#top">⬆️ Back to Top</a></div>
 
 ---
+
+<div id="flowchart"></div>
 
 ## 🏗️ System Architecture & Pipeline Flowchart
 
@@ -92,11 +102,13 @@ graph TD
     end
 ```
 
+<div align="right"><a href="#top">⬆️ Back to Top</a></div>
+
 ---
 
-## 🛠️ 8 Quantitative Pillars & Core Architecture
+## 🛠️ Deep-Dive Architectural Specifications
 
-Click on any section below to expand and inspect the complete mathematical, architectural, and engineering deep-dive:
+Click on any expandable card below to inspect the complete mathematical, architectural, and engineering design of each pillar:
 
 <details>
 <summary><b>1️⃣ Smart Gap Ingestion & Live Candle Protection (Data Engine)</b></summary>
@@ -186,7 +198,11 @@ Click on any section below to expand and inspect the complete mathematical, arch
   * `"raw_values"`: Direct JSON arrays (`[{"time": "...", "value": 1.8614}, ...]`) for Chart.js, Recharts, or custom React/Vue UI cards without parsing Plotly structures.
 </details>
 
+<div align="right"><a href="#top">⬆️ Back to Top</a></div>
+
 ---
+
+<div id="quickstart"></div>
 
 ## ⚡ Step-by-Step Quick Start & Execution Guide
 
@@ -205,7 +221,11 @@ All modules can be executed with single commands from your terminal within the a
 | **9. Trade Ledger Audit** | `python -m cryptosight.preprocessing.analyze_backtest_ledger` | Audits win rates, TP/SL hit ratios, and commission drag across models. |
 | **10. Stats & Analytics** | `python -m cryptosight.stats.main` | Computes 59+ QuantStats metrics (`metrics_report.json`) and exports 6 charts (`all_charts.json`). |
 
+<div align="right"><a href="#top">⬆️ Back to Top</a></div>
+
 ---
+
+<div id="structure"></div>
 
 ## 📁 Complete Repository Structure
 
@@ -244,15 +264,18 @@ cryptosight/
 └── requirements.txt               # Python package dependencies
 ```
 
+<div align="right"><a href="#top">⬆️ Back to Top</a></div>
+
 ---
 
+<div id="author"></div>
 <div align="center">
 
 ## 👨‍💻 Built & Engineered by Afnan Shoukat
 
 **Full-Stack Quantitative Engineer • Financial Data Scientist • Algorithmic Systems Architect**
 
-[![Connect on LinkedIn](https://img.shields.io/badge/Connect%20on-LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/afnan-shoukat/)
+[![Connect on LinkedIn](https://img.shields.io/badge/Connect%20on-LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/afnanshoukat)
 [![Follow on GitHub](https://img.shields.io/badge/Follow%20on-GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/21Afnan)
 
 *Designed with enterprise precision, zero data leakage, and institutional quantitative rigor.*
