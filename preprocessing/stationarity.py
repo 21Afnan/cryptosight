@@ -1,165 +1,198 @@
-# ==============================================================================
-# CRYPTOSIGHT QUANTITATIVE STATIONARITY & MEMORY ANALYZER (`stationarity.py`)
-# ==============================================================================
-# PDF Step 4: Formal statistical time-series evaluation for quantitative finance.
-# Evaluates whether each preprocessing technique achieves stationarity while preserving memory.
-# NOTE: Pure computational module — all CSV exporting is centralized inside `main.py`.
-# ==============================================================================
-
 import numpy as np
 import pandas as pd
-try:
-    from statsmodels.tsa.stattools import adfuller, kpss
-    HAS_STATSMODELS = True
-except ImportError:
-    HAS_STATSMODELS = False
-    adfuller, kpss = None, None
+from statsmodels.tsa.stattools import adfuller, kpss
 from cryptosight.utils.logger import get_logger
 
-logger = get_logger("StationarityAnalyzer")
+logger = get_logger("PPStationarity")
 
 
 class StationarityAnalyzer:
     """
-    Step 4: Evaluates time-series stationarity and memory retention across preprocessing techniques.
-    
-    Statistical Tests Applied:
-    1. Augmented Dickey-Fuller (ADF): Null Hypothesis = Series has a Unit Root (Non-Stationary).
-       - p-value < 0.05 => Reject Null (STATIONARY).
-    2. KPSS Test: Null Hypothesis = Series is Trend-Stationary.
-       - p-value > 0.05 => Fail to Reject Null (STATIONARY).
-    3. Autocorrelation (Lag 1 & 5): Measures serial correlation / memory preservation (`Holy Grail for FracDiff`).
+    Intelligent Quantitative Stationarity & Trend Preservation Suite.
+    Executes ADF, KPSS, Autocorrelation, Half-Life of Mean Reversion,
+    and automatically discovers the optimal Fractional Differencing order (`d`).
     """
 
-    def __init__(self, config: dict = None):
-        self.config = config or {}
-        self.exclude_cols = set(self.config.get("exclude_columns", ["timestamp", "target"]))
-        logger.info("Initialized StationarityAnalyzer (`ADF`, `KPSS`, `Autocorrelation`)")
+    def __init__(self, exclude_cols: set = None):
+        self.exclude_cols = exclude_cols or {"timestamp", "target"}
+        logger.info("Initialized StationarityAnalyzer Suite")
 
-    def analyze_series(self, series: pd.Series) -> dict:
+    def run_adf_test(self, series: pd.Series) -> dict:
         """
-        Function 1: Runs ADF, KPSS, and Autocorrelation tests on a single 1D numerical series.
-        Returns exact p-values, t-statistics, and lag correlations.
+        Augmented Dickey-Fuller (ADF) Test for Unit Root Stationarity.
+        Null Hypothesis (H0): Series possesses a unit root (Non-Stationary).
+        If p_value < 0.05, we reject H0 and confirm Stationarity.
         """
-        # Clean series: remove NaNs/Infs before feeding to statsmodels
-        clean_s = series.ffill().bfill().fillna(0.0).to_numpy(dtype=float, copy=True)
-        clean_s = clean_s[np.isfinite(clean_s)]
+        clean_series = series.dropna()
+        if len(clean_series) < 20 or np.var(clean_series) < 1e-12:
+            return {"adf_stat": 0.0, "p_value": 1.0, "is_stationary": False}
 
-        if len(clean_s) < 30 or np.std(clean_s) < 1e-12:
+        try:
+            res = adfuller(clean_series, autolag="AIC")
+            p_val = float(res[1])
             return {
-                "adf_pvalue": 1.0,
-                "kpss_pvalue": 0.0,
-                "autocorr_lag1": 0.0,
-                "autocorr_lag5": 0.0,
-                "is_stationary": False
+                "adf_stat": float(res[0]),
+                "p_value": p_val,
+                "is_stationary": p_val < 0.05,
             }
-
-        # 1. Augmented Dickey-Fuller (ADF) Test
-        try:
-            adf_res = adfuller(clean_s, autolag="AIC")
-            adf_pvalue = float(adf_res[1])
         except Exception as e:
-            logger.debug(f"ADF test convergence issue: {e}")
-            adf_pvalue = 1.0
+            logger.debug(f"ADF test failed for series ({e}). Defaulting to non-stationary.")
+            return {"adf_stat": 0.0, "p_value": 1.0, "is_stationary": False}
 
-        # 2. KPSS Test (`c` = level stationary)
+    def run_kpss_test(self, series: pd.Series) -> dict:
+        """
+        Kwiatkowski-Phillips-Schmidt-Shin (KPSS) Test for Trend Stationarity.
+        Null Hypothesis (H0): Series is stationary around a deterministic trend.
+        If p_value > 0.05, we fail to reject H0 and confirm Stationarity.
+        """
+        clean_series = series.dropna()
+        if len(clean_series) < 20 or np.var(clean_series) < 1e-12:
+            return {"kpss_stat": 0.0, "p_value": 0.0, "is_stationary": False}
+
         try:
-            # Suppress statsmodels interpolation warnings during KPSS calculation
-            import warnings
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                kpss_res = kpss(clean_s, regression="c", nlags="auto")
-                kpss_pvalue = float(kpss_res[1])
+            res = kpss(clean_series, regression="c", nlags="auto")
+            p_val = float(res[1])
+            return {
+                "kpss_stat": float(res[0]),
+                "p_value": p_val,
+                "is_stationary": p_val > 0.05,
+            }
         except Exception as e:
-            logger.debug(f"KPSS test convergence issue: {e}")
-            kpss_pvalue = 0.0
+            logger.debug(f"KPSS test failed for series ({e}). Defaulting to non-stationary.")
+            return {"kpss_stat": 0.0, "p_value": 0.0, "is_stationary": False}
 
-        # 3. Autocorrelation Analysis (`Memory Preservation at Lag 1 & 5`)
+    def calculate_autocorrelation(self, series: pd.Series, lag: int = 1) -> dict:
+        """
+        Computes Autocorrelation coefficient (`rho`) at specified lag
+        and calculates the Ornstein-Uhlenbeck Half-Life of Mean Reversion.
+        Half-Life = -ln(2) / ln(|rho|) bars.
+        """
+        clean_series = series.dropna()
+        if len(clean_series) < lag + 10 or np.var(clean_series) < 1e-12:
+            return {"autocorr_lag1": 0.0, "half_life_bars": 0.0}
+
         try:
-            s_obj = pd.Series(clean_s)
-            ac_lag1 = float(s_obj.autocorr(lag=1)) if len(clean_s) > 1 else 0.0
-            ac_lag5 = float(s_obj.autocorr(lag=5)) if len(clean_s) > 5 else 0.0
-            if np.isnan(ac_lag1): ac_lag1 = 0.0
-            if np.isnan(ac_lag5): ac_lag5 = 0.0
+            rho = float(clean_series.autocorr(lag=lag))
+            if np.isnan(rho):
+                rho = 0.0
+
+            if 0.0 < abs(rho) < 1.0:
+                half_life = float(-np.log(2.0) / np.log(abs(rho)))
+            else:
+                half_life = 999.0  # Persistent drift / random walk
+
+            return {"autocorr_lag1": rho, "half_life_bars": round(half_life, 2)}
         except Exception:
-            ac_lag1, ac_lag5 = 0.0, 0.0
+            return {"autocorr_lag1": 0.0, "half_life_bars": 0.0}
 
-        # Institutional Stationarity Criteria:
-        # 1. ADF passed: Unit Root removed (`p < 0.05`) — Primary criterion for quantitative time-series modeling
-        # 2. KPSS passed: Trend-Stationary (`p > 0.05`)
-        adf_passed = (adf_pvalue < 0.05)
-        kpss_passed = (kpss_pvalue > 0.05)
+    def find_optimal_frac_d(self, series: pd.Series, step: float = 0.05, max_d: float = 1.0) -> float:
+        """
+        Intelligent Auto-Adjusting Fractional Differencing Order Discovery.
+        Loops `d` from `step` up to `max_d` by increments of `step`.
+        Returns the MINIMUM `d` where ADF p_value < 0.05 (stationary),
+        thereby preserving the MAXIMUM possible historical memory.
+        """
+        clean_series = series.dropna().to_numpy(dtype=float, copy=True)
+        if len(clean_series) < 50:
+            return 0.35  # Fallback standard quant default if insufficient data
 
+        d_candidate = step
+        while d_candidate <= max_d:
+            # Calculate fractional weights for candidate `d`
+            weights = [1.0]
+            for k in range(1, 100):
+                w = -weights[-1] / k * (d_candidate - k + 1)
+                if abs(w) < 1e-4:
+                    break
+                weights.append(w)
+            w_arr = np.array(weights, dtype=float)
+
+            # Convolve and run fast ADF test
+            convolved = np.convolve(clean_series, w_arr, mode="full")[: len(clean_series)]
+            test_series = pd.Series(convolved[len(w_arr):])  # Drop initial warm-up transient
+            adf_res = self.run_adf_test(test_series)
+
+            if adf_res["is_stationary"]:
+                logger.debug(f"Discovered optimal frac_d={d_candidate:.2f} (ADF p={adf_res['p_value']:.4f})")
+                return round(d_candidate, 2)
+
+            d_candidate += step
+
+        return 1.0  # Fall back to integer first difference (standard returns) if very stubborn
+
+    def evaluate_trend_preservation(self, raw_series: pd.Series, transformed_series: pd.Series, long_window: int = 50) -> dict:
+        """
+        PDF Requirement 5: Trend Preservation Verification.
+        Measures correlation between:
+        1. Long-term rolling trends (`long_window` SMA correlation).
+        2. Local step-by-step variations (1-bar delta correlation).
+        """
+        raw_clean = raw_series.dropna()
+        trans_clean = transformed_series.dropna()
+        common_idx = raw_clean.index.intersection(trans_clean.index)
+
+        if len(common_idx) < long_window + 10:
+            return {"long_term_corr": 0.0, "local_corr": 0.0, "trend_preserved": False}
+
+        r = raw_clean.loc[common_idx]
+        t = trans_clean.loc[common_idx]
+
+        # 1. Long-term trend correlation (Rolling SMA)
+        r_trend = r.rolling(window=long_window, min_periods=10).mean().dropna()
+        t_trend = t.rolling(window=long_window, min_periods=10).mean().dropna()
+        long_corr = float(r_trend.corr(t_trend)) if len(r_trend) > 10 else 0.0
+
+        # 2. Local step delta correlation
+        r_diff = r.diff().dropna()
+        t_diff = t.diff().dropna()
+        local_corr = float(r_diff.corr(t_diff)) if len(r_diff) > 10 else 0.0
+
+        if np.isnan(long_corr):
+            long_corr = 0.0
+        if np.isnan(local_corr):
+            local_corr = 0.0
+
+        # A technique preserves meaningful trend if long-term correlation > 0.40 or local correlation > 0.50
+        preserved = abs(long_corr) > 0.40 or abs(local_corr) > 0.50
         return {
-            "adf_pvalue": round(adf_pvalue, 4),
-            "kpss_pvalue": round(kpss_pvalue, 4),
-            "autocorr_lag1": round(ac_lag1, 4),
-            "autocorr_lag5": round(ac_lag5, 4),
-            "adf_passed": adf_passed,
-            "kpss_passed": kpss_passed,
-            "is_stationary": adf_passed
+            "long_term_corr": round(long_corr, 4),
+            "local_corr": round(local_corr, 4),
+            "trend_preserved": preserved,
         }
 
-    def evaluate_preprocessed_datasets(self, preprocessed_dfs: dict) -> pd.DataFrame:
+    def analyze_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Function 2: Loops across all preprocessed DataFrames (`from CryptoMLClassifier`),
-        computes average stationarity & memory metrics across all numerical features,
-        and returns a structured DataFrame report for `main.py` to display and save.
+        Runs complete ADF, KPSS, Autocorrelation, and Half-Life tests across all numeric features in `df`.
+        Returns a cleanly formatted Summary Leaderboard DataFrame.
         """
-        if not preprocessed_dfs:
-            logger.error("No preprocessed datasets provided for stationarity evaluation!")
+        feature_cols = [
+            col for col in df.columns
+            if col not in self.exclude_cols and pd.api.types.is_numeric_dtype(df[col])
+        ]
+
+        if not feature_cols:
+            logger.warning("No numeric features found to run stationarity analysis.")
             return pd.DataFrame()
 
-        results = []
+        rows = []
+        for col in feature_cols:
+            series = df[col]
+            adf = self.run_adf_test(series)
+            kpss_res = self.run_kpss_test(series)
+            acf = self.calculate_autocorrelation(series)
 
-        for method_name, df in preprocessed_dfs.items():
-            logger.info(f"Running stationarity & memory analysis for method: [{method_name.upper()}]...")
-            feature_cols = [c for c in df.columns if c not in self.exclude_cols and pd.api.types.is_numeric_dtype(df[c])]
-            
-            if not feature_cols:
-                continue
-
-            adf_pvals, kpss_pvals, ac1_vals, ac5_vals = [], [], [], []
-            adf_pass_counts, kpss_pass_counts = 0, 0
-
-            for col in feature_cols:
-                metrics = self.analyze_series(df[col])
-                adf_pvals.append(metrics["adf_pvalue"])
-                kpss_pvals.append(metrics["kpss_pvalue"])
-                ac1_vals.append(metrics["autocorr_lag1"])
-                ac5_vals.append(metrics["autocorr_lag5"])
-                if metrics["adf_passed"]:
-                    adf_pass_counts += 1
-                if metrics["kpss_passed"]:
-                    kpss_pass_counts += 1
-
-            avg_adf = float(np.mean(adf_pvals))
-            avg_kpss = float(np.mean(kpss_pvals))
-            avg_ac1 = float(np.mean(ac1_vals))
-            avg_ac5 = float(np.mean(ac5_vals))
-            
-            adf_pass_pct = round((adf_pass_counts / len(feature_cols)) * 100.0, 1)
-            kpss_pass_pct = round((kpss_pass_counts / len(feature_cols)) * 100.0, 1)
-
-            # Assign institutional status label based primarily on ADF Unit Root removal (`p < 0.05`)
-            if adf_pass_pct >= 60.0:
-                status_label = "STATIONARY"
-            elif adf_pass_pct >= 40.0:
-                status_label = "PARTIAL STATIONARY"
-            else:
-                status_label = "NON-STATIONARY"
-
-            results.append({
-                "method": method_name.upper(),
-                "adf_pvalue_avg": round(avg_adf, 4),
-                "kpss_pvalue_avg": round(avg_kpss, 4),
-                "autocorr_lag1_avg": round(avg_ac1, 4),
-                "autocorr_lag5_avg": round(avg_ac5, 4),
-                "adf_pass_rate": f"{adf_pass_pct}% ({adf_pass_counts}/{len(feature_cols)})",
-                "kpss_pass_rate": f"{kpss_pass_pct}% ({kpss_pass_counts}/{len(feature_cols)})",
-                "stationarity_status": status_label
+            rows.append({
+                "feature": col,
+                "adf_stat": round(adf["adf_stat"], 4),
+                "adf_p_value": round(adf["p_value"], 4),
+                "adf_stationary": adf["is_stationary"],
+                "kpss_stat": round(kpss_res["kpss_stat"], 4),
+                "kpss_p_value": round(kpss_res["p_value"], 4),
+                "kpss_stationary": kpss_res["is_stationary"],
+                "autocorr_lag1": round(acf["autocorr_lag1"], 4),
+                "half_life_bars": acf["half_life_bars"],
             })
 
-        report_df = pd.DataFrame(results)
-        logger.info("Successfully completed stationarity evaluation across all methods.")
-        return report_df
+        summary_df = pd.DataFrame(rows)
+        logger.info(f"Completed Stationarity Analysis across {len(feature_cols)} features.")
+        return summary_df

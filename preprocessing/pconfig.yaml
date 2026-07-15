@@ -1,12 +1,6 @@
-# ==============================================================================
-# PREPROCESSING CONFIGURATION (`pp.config.yaml`)
-# ==============================================================================
-# Easily switch any preprocessing technique without modifying your Python code.
-# ==============================================================================
-
 enabled: true
 
-# Select ONE method to apply to all features:
+# Select ONE method to apply to all features when running single transformation:
 # Options: 
 #   none | robust | minmax | fracdiff | winsorize | log | gaussian
 method: "robust"
@@ -21,22 +15,14 @@ exclude_columns:
   - "timestamp"
   - "target"
 
-# ==============================================================================
-# MACHINE LEARNING EVALUATION CONFIGURATION
-# model_task: 'classification' or 'regression'
-# classification -> uses XGBClassifier/LGBMClassifier, metrics: Accuracy/F1/Precision
-# regression     -> uses LinearRegression/XGBRegressor, metrics: MAE/RMSE/R2/Directional Accuracy
 model_task: "regression"
-
-# Regression only: threshold to convert predicted log-return to +1/0/-1 signal
-# e.g. 0.002 means: if predicted_return > 0.2% -> Buy (+1), < -0.2% -> Sell (-1), else Hold (0)
-regression_signal_threshold: 0.002
 
 # Select models to evaluate based on model_task:
 models:
   - lightgbm
   - xgboost
   - linear_regression
+
 # Select preprocessing techniques to loop across and compare in benchmark table:
 methods_to_test:
   - "none"       # Baseline (No preprocessing)
@@ -48,5 +34,16 @@ methods_to_test:
   - "gaussian"   # 8. Gaussian Quantile Transform (Taming fat tails, fit on train)
 
 # Optional Advanced Quantitative Analysis Flags (`PDF Step 4 & Step 5`):
-run_stationarity_analysis: false  # Set to true to run ADF, KPSS, and Autocorrelation analysis
-run_trend_analysis: false         # Set to true to run Macro & Local Trend Preservation analysis
+run_stationarity_analysis: true   # Set to true to run ADF, KPSS, and Autocorrelation analysis
+run_trend_analysis: true          # Set to true to run Macro & Local Trend Preservation analysis
+
+# ==============================================================================
+# OUTPUT & CSV STORAGE DIRECTORIES (`csv_files/`)
+# Automatically divides exports into 3 subfolders under classification/regression
+# ==============================================================================
+output_dirs:
+  root: "../csv_files"
+  subfolders:
+    preprocess: "preprocessed_data"            # Subfolder 1: Preprocessed datasets
+    predicted_signals: "model_predicted"       # Subfolder 2: Model predictions & signals (+1, 0, -1)
+    backtest_ledgers: "backtest_ledgers"       # Subfolder 3: Backtest trade ledgers & summaries
