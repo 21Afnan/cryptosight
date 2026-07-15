@@ -75,7 +75,8 @@ class PreprocessingMain:
 
         stationarity_analyzer = StationarityAnalyzer()
         trend_analyzer = TrendPreservationAnalyzer()
-        model_evaluator = ModelEvaluator(task=self.model_task, threshold=0.002)
+        # Calibrated threshold for 15m crypto returns (0.0006 = 0.06% return required per bar to trigger signal)
+        model_evaluator = ModelEvaluator(task=self.model_task, threshold=0.0006)
         backtester = PreprocessingBacktester()
 
         leaderboard_by_symbol = {}
@@ -156,7 +157,8 @@ class PreprocessingMain:
                         if "actual_target" in predictions_df.columns:
                             act_target = predictions_df["actual_target"].values
                             if self.model_task == "regression":
-                                perfect_sig = np.where(act_target > 0.002, 1, np.where(act_target < -0.002, -1, 0))
+                                # Exactly synchronize with model_evaluator threshold
+                                perfect_sig = np.where(act_target > model_evaluator.threshold, 1, np.where(act_target < -model_evaluator.threshold, -1, 0))
                             else:
                                 perfect_sig = act_target.astype(int)
 
