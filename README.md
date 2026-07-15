@@ -25,6 +25,7 @@
 5. **AI Sentiment Ingestion & NLP Pipeline**: Scrapes real-time discussions from **Reddit**, processes text dynamically (unescaping HTML entities, expanding contractions, stripping punctuation/numbers), structures text with clear headers, and predicts sentiment (Bullish/Bearish/Neutral) using **Hugging Face FinBERT** (with chunk-averaging to bypass the 512-token limit).
 6. **Quantitative ML Feature Engineering & Target Pipeline (`cryptosight.ml`)**: A pure in-memory, decoupled quant data pipeline (`MLFeatureBuilder`) that resamples raw market data to target timeframes (`15m`, `1h`), calculates multi-indicator technical features and candlestick patterns (`EMA`, `RSI`, `MACD`, `DOJI`, `ENGULFING`) with automatic **Look-Ahead Bias Prevention (`.shift(1)`)**, generates state-of-the-art **Log Return (`np.log`)** and **Threshold-Filtered Classification (`1/-1/0`)** targets, and automatically exports clean ML datasets directly to CSV inside `ml/datasets/`.
 7. **Quantitative Preprocessing & Backtesting Evaluation Pipeline (`cryptosight.preprocessing`)**: An institutional evaluation suite that checks feature stationarity (`ADF & KPSS tests`), executes raw unmodeled baseline backtests (`ACTUAL_DF_NO_MODEL` with threshold gates), benchmarks 6 quantitative preprocessing methods (`RobustScaler, MinMaxScaler, Winsorization, Fractional Differencing, Log, Gaussian`), cross-evaluates multi-task ML models (`Regression vs. Classification`), and generates a **Master Leaderboard & Trade Ledger Breakdown** directly via the quantitative `BacktestingEngine`.
+8. **Quantitative Performance & Risk Analytics Suite (`cryptosight.stats`)**: An automated statistical evaluation and interactive visualization engine that connects to PostgreSQL backtest ledgers (`backtests.{strategy_id}`) to compute **59+ QuantStats metrics** (`CAGR`, `Sharpe Ratio`, `Sortino Ratio`, `Calmar Ratio`, `Max Drawdown`) via dynamic Python introspection (`inspect.getmembers`). Features robust `NaN`/`Inf` JSON serialization (`metrics_report.json`), and generates **6 frontend-ready Plotly quant charts** (`daily_returns`, `log_returns`, `returns`, `yearly_returns`, `drawdown`, `drawdowns_periods`) exported as both standalone HTML files and 1 consolidated master report (`all_charts.json`) containing pure JSON `plotly_figure` dicts (with `.tolist()` to eliminate base64 `bdata`) + direct `raw_values` arrays (`[{time, value}]`) tailored for effortless custom frontend integration.
 
 ---
 
@@ -78,6 +79,13 @@ graph TD
         PP_Methods -->|Train LGBM / XGB / Linear| PP_Models["Multi-Model Cross-Evaluation"]
         PP_Models -->|Send Signals (+1, 0, -1)| Backtester
         Backtester -->|Leaderboard & PnL Table| PP_Leaderboard["Final Master Summary Table & Trade Ledger Analysis"]
+    end
+
+    subgraph Quantitative Performance & Risk Analytics Layer
+        PP_Leaderboard -->|Pass Completed Backtest Ledger| Stats_Engine["Automated 59+ QuantStats Metrics Engine (metrices.py)"]
+        Stats_Engine -->|Dynamic Introspection & Safe Serialization| Stats_JSON["metrics_report.json (Safe NaN / Inf / Timestamp Handling)"]
+        Stats_Engine -->|Render 6 Frontend-Ready Quant Charts| Stats_Plots["daily_returns | log_returns | returns | yearly_returns | drawdown | drawdowns_periods"]
+        Stats_Plots -->|Consolidate into 1 Master Report| Stats_Master["all_charts.json (plotly_figure dicts + raw_values arrays)"]
     end
 ```
 
@@ -136,6 +144,21 @@ To scientifically determine which feature scaling technique maximizes trading pr
 - **Continuous Return Threshold vs. Classification Noise**: Demonstrates why raw classification (`predict_proba() > 0.50`) causes excessive over-trading in choppy/sideways markets (`360+ trades losing $5,000+ in broker fees`). By switching to `Regression` and applying a continuous `regression_signal_threshold: 0.002` (`0.20% return gate`), models only execute trades when the predicted movement exceeds round-trip broker commissions (`0.14%`) and slippage (`0.06%`).
 - **Direct Engine Integration (`backtest_runner.py`)**: Passes all generated model signals (`+1, 0, -1`) and unscaled test prices directly into the built-in `BacktestingEngine` (`cryptosight.backtesting.backtest.BacktestingEngine`), generating a unified **Step 8 & 9 PnL Leaderboard** and **Step 10 Master Summary Table (`BTC_final_summary_master_table.csv`)**.
 
+### 📊 8. Quantitative Performance & Risk Analytics Suite (`cryptosight.stats`)
+To transform raw backtest ledgers into institutional performance showcases and frontend-ready data feeds, CryptoSight provides a decoupled statistical analytics suite:
+- **Dynamic 59+ Metric Introspection (`metrices.py`)**: Uses Python's `inspect.getmembers()` to automatically discover and execute all scalar statistical functions inside `quantstats.stats` (`cagr`, `sharpe`, `sortino`, `calmar`, `max_drawdown`, `win_rate`, `profit_factor`, `tail_ratio`). Automatically skips multi-series or benchmark-dependent calculations without requiring manual maintenance (`DRY Principle`).
+- **Safe JSON Type Normalization (`to_json_safe`)**: Recursively sanitizes mathematical edge cases (`numpy.float64`, `pd.Timestamp`, `float('nan')`, `float('inf')`) into clean JSON strings and null (`None`) values rounded to 6 decimal places, guaranteeing 100% valid JSON formatting inside `cryptosight/stats/metrics_report.json`.
+- **6 Essential Quant Visualizations (`plots.py`)**: Generates interactive, dark-mode Plotly charts focused on institutional risk and return milestones:
+  1. `daily_returns`: Daily resampled / period returns over time (`%`)
+  2. `log_returns`: Cumulative log returns trajectory (`%`)
+  3. `returns`: Baseline cumulative strategy equity curve (`%`)
+  4. `yearly_returns`: Annual / year-by-year compounded returns (`%`)
+  5. `drawdown`: Portfolio underwater drawdown depth & duration (`%`)
+  6. `drawdowns_periods`: Highlights top 5 worst drawdown episodes overlaid directly on the `$100 Base` equity index.
+- **Frontend-Ready Dual-Format JSON Architecture (`all_charts.json`)**: To support custom web dashboards (`React`, `Next.js`, `Vue`, `Chart.js`, `Recharts`, `Plotly.js`), `generate_all_plots()` consolidates all 6 charts into one master report (`all_charts.json`) providing:
+  - `"plotly_figure"`: Pure JSON dictionary of `data` and `layout`. Explicitly calls `.tolist()` on all pandas indexes and series to **permanently eliminate base64 `bdata` strings**, allowing direct plug-and-play rendering.
+  - `"raw_values"`: Direct lightweight JSON arrays (`[{"time": "...", "value": 1.8614}, ...]`) for custom UI cards and lightweight chart libraries without parsing complex Plotly structures.
+
 ---
 
 ## 📁 Complete Repository Structure & Guide
@@ -181,6 +204,12 @@ cryptosight/
 │   ├── models.py                  # Trains & evaluates LGBM, XGBoost & Linear models across prep methods
 │   ├── backtest_runner.py         # Interfaces model predictions with BacktestingEngine for PnL metrics
 │   └── analyze_backtest_ledger.py # Audits trade ledgers (Long/Short ratios, TP/SL hit rates, fee drag)
+├── stats/
+│   ├── main.py                    # Master pipeline orchestrator: executes backtest -> computes metrics -> generates charts
+│   ├── metrices.py                # Automated 59+ QuantStats metrics engine with inspect auto-discovery & safe JSON export
+│   ├── plots.py                   # Generates 6 quant charts + dual-format all_charts.json (plotly_figure + raw_values)
+│   ├── metrics_report.json        # Exported JSON report of all 59+ strategy performance ratios
+│   └── charts/                    # Destination directory for all 6 HTML interactive charts and all_charts.json
 ├── csv_files/                     # Automated export directory for predictions, reports & master tables
 ├── logs/
 │   ├── binance.log                # Rotating log file tracking Binance API execution
@@ -327,6 +356,23 @@ To scientifically evaluate which preprocessing transformation (`RobustScaler`, `
    python -m cryptosight.preprocessing.analyze_backtest_ledger
    ```
    - Outputs an exhaustive breakdown explaining how continuous regression thresholds (`0.20% / 0.002`) successfully filter out 90% of sideways market noise and eliminate excessive broker fee drag compared to raw classification coin-flips (`predict_proba > 0.50`).
+
+---
+
+### Step 10: Running the Quantitative Performance & Risk Analytics Suite (`cryptosight.stats`)
+
+Once your backtesting engine has simulated your strategy and saved the trade ledger, use the analytics suite to generate comprehensive statistical metrics and interactive frontend charts:
+
+1. **Execute the Stats Analytics Pipeline**: Run the entry point from your virtual environment terminal:
+   ```bash
+   python -m cryptosight.stats.main
+   ```
+2. **What the Pipeline Does Automatically**:
+   - **Runs Backtest Engine**: Executes `BacktestingEngine.run_pipeline()`, loads `backtest_ledger.csv`, and indexes `perc_pnl` strictly by **`exit_time`** (Mark-to-Exit accounting).
+   - **Computes 59+ Institutional Metrics**: Auto-discovers and calculates QuantStats ratios (`CAGR`, `Sharpe`, `Sortino`, `Max Drawdown`, `Calmar`, `Win Rate`), serializing them cleanly into `cryptosight/stats/metrics_report.json`.
+   - **Generates 6 Frontend-Ready Quant Charts**: Produces `daily_returns.html`, `log_returns.html`, `returns.html`, `yearly_returns.html`, `drawdown.html`, and `drawdowns_periods.html`.
+   - **Exports `all_charts.json` for Web Developers**: Saves every chart with both a clean `plotly_figure` dict (pure lists without binary `bdata`) and a lightweight `raw_values` array (`[{time, value}]`) ready for Chart.js, Recharts, or custom UI components.
+3. **Console Performance Overview**: Prints the top 12 headline metrics (`CAGR`, `Sharpe Ratio`, `Calmar Ratio`, `Max Drawdown`, `Win Rate`) right in your terminal for instant strategic assessment.
 
 ---
 
