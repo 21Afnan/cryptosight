@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-# Ensure root workspace (`d:\Neurog_Internship`) is in Python path so direct execution works anywhere
+# Ensure root workspace is in sys.path
 root_workspace = Path(__file__).resolve().parent.parent.parent
 if str(root_workspace) not in sys.path:
     sys.path.insert(0, str(root_workspace))
@@ -9,61 +9,40 @@ if str(root_workspace) not in sys.path:
 import numpy as np
 import pandas as pd
 from cryptosight.utils.logger import get_logger
-from cryptosight.utils.config import load_config
 from cryptosight.ml.main import get_ml_dataset
+from cryptosight.preprocessing.main import PreprocessingMain
 from cryptosight.preprocessing.preprocessor import DataPreprocessor
 from cryptosight.preprocessing.stationarity import StationarityAnalyzer
 from cryptosight.preprocessing.trend_preservation import TrendPreservationAnalyzer
 from cryptosight.preprocessing.models import ModelEvaluator
 from cryptosight.preprocessing.backtester import PreprocessingBacktester
 
-logger = get_logger("PPMain")
+logger = get_logger("PPMasterBenchmark")
 
 
-class PreprocessingMain:
+class MasterBenchmarkEngine:
     """
-    Master orchestrator class for the Quantitative Preprocessing Module.
-    Sets up config file paths, initializes output folders (`preprocessed_data`, `model_predicted`, `backtest_ledgers`),
-    and runs the complete 5-step evaluation benchmark from start to finish.
+    Master Quantitative Orchestrator Suite.
+    Executes all 5 critical steps seamlessly:
+    1. Preprocesses datasets across all methods (`robust`, `minmax`, `fracdiff`, etc.) & exports CSVs.
+    2. Runs Stationarity (ADF/KPSS) and Trend Preservation analysis.
+    3. Trains ML models (`LightGBM`, `XGBoost`, `LinearRegression`) & exports predicted signals (`+1, 0, -1`).
+    4. Runs step-by-step backtest simulation on original unscaled market prices (`raw_df`).
+    5. Runs baseline backtest on actual raw targets (`actual_target`) to measure theoretical maximum performance.
+    Outputs a complete Comparative Leaderboard summary table.
     """
 
     def __init__(self, config_path: str | Path = None):
-        if config_path is None:
-            self.config_path = Path(__file__).resolve().parent / "pconfig.yaml"
-        else:
-            self.config_path = Path(config_path)
-
-        if not self.config_path.exists():
-            raise FileNotFoundError(f"Configuration file not found at: {self.config_path}")
-
-        self.config = load_config(self.config_path)
-        self.model_task = str(self.config["model_task"]).lower()
-
-        root_dir = Path(__file__).resolve().parent.parent / "csv_files" / self.model_task
-        subfolders = self.config["output_dirs"]["subfolders"]
-
-        self.output_dirs = {
-            "preprocessed": root_dir / subfolders["preprocess"],
-            "predicted_signals": root_dir / subfolders["predicted_signals"],
-            "backtest_ledgers": root_dir / subfolders["backtest_ledgers"],
-        }
-
-        for name, path_obj in self.output_dirs.items():
-            path_obj.mkdir(parents=True, exist_ok=True)
-
+        self.app = PreprocessingMain(config_path=config_path)
+        self.config = self.app.config
+        self.model_task = self.app.model_task
+        self.output_dirs = self.app.output_dirs
         self.methods = self.config.get("methods_to_test", [self.config.get("method", "robust")])
         self.models = self.config.get("models", ["lightgbm", "xgboost", "linear_regression"])
-        logger.info(f"Initialized PreprocessingMain | Task: [{self.model_task.upper()}] | Config: {self.config_path.name}")
+        logger.info(f"Initialized MasterBenchmarkEngine | Task: [{self.model_task.upper()}] | Methods: {self.methods} | Models: {self.models}")
 
     def run_full_benchmark(self) -> dict[str, pd.DataFrame]:
-        """
-        Runs the complete end-to-end 5-step quantitative evaluation pipeline:
-        1. Preprocesses datasets across all methods & exports CSVs.
-        2. Runs Stationarity (ADF/KPSS) and Trend Preservation analysis.
-        3. Trains ML models (`LightGBM`, `XGBoost`, `LinearRegression`) & exports predicted signals (`+1, 0, -1`).
-        4. Runs step-by-step backtest simulation on original unscaled market prices (`raw_df`).
-        5. Runs baseline backtest on actual raw targets (`actual_target`) to measure theoretical maximum performance.
-        """
+        """Runs the complete end-to-end 5-step quantitative evaluation pipeline."""
         logger.info("\n" + "=" * 70)
         logger.info(f" STARTING MASTER BENCHMARK PIPELINE | TASK: [{self.model_task.upper()}]")
         logger.info("=" * 70)
@@ -153,6 +132,7 @@ class PreprocessingMain:
                 if method == self.methods[0]:
                     logger.info(f"\n--- STEP 5: Running Theoretical Maximum Baseline on ACTUAL RAW TARGET ---")
                     try:
+                        # Convert actual target into perfect trading signal
                         if "actual_target" in predictions_df.columns:
                             act_target = predictions_df["actual_target"].values
                             if self.model_task == "regression":
@@ -198,5 +178,5 @@ class PreprocessingMain:
 
 
 if __name__ == "__main__":
-    app = PreprocessingMain()
-    app.run_full_benchmark()
+    engine = MasterBenchmarkEngine()
+    engine.run_full_benchmark()
