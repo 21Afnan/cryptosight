@@ -1,23 +1,19 @@
 # ==============================================================================
 # CRYPTOSIGHT ML MODULE — DATASET CONFIGURATION
-# ==============================================================================
-# Single configuration file for Regression, Classification, and Time Series.
-# Enable/disable sections independently (`enabled: true/false`) to customize datasets.
-# ==============================================================================
 
-model_type: classification  # Options: regression | classification | timeseries
+model_type: classification  # Options: classification | regression | timeseries
 
 # --- 1. MARKET DATA (Base OHLCV Dataset) ---
 data:
-  enabled: true  
+  enabled: true
   symbols:
     - "BTC"
-  exchange: "binance"         # Options: "binance", "bybit", or a list like ["binance", "bybit"]
-  timeframe: "1m"             # Base timeframe or target timeframe (if target_timeframe is not specified)
-  target_timeframe: "15m"      # Resampled timeframe for feature engineering & ML training (e.g. "15m", "1h", "4h")
+  exchange: "binance"           # Options: "binance" | "bybit"
+  timeframe: "1m"               # Base timeframe fetched from DB
+  target_timeframe: "15m"       # Resampled timeframe used for ML training (e.g. "15m", "1h", "4h")
   start_date: "2025-01-01"
   end_date: "2026-06-30"
-  fill_method: "ffill"        
+  fill_method: "ffill"
   max_retries: 5
   retry_delay: 3
 
@@ -57,60 +53,123 @@ features:
       aliases:
         pattern: pat_BULLISH_ENGULFING
 
-# --- 4. PREDICTION TARGET GENERATION ---
+# --- 3. PREDICTION TARGET GENERATION ---
 target:
   source: close
-  horizon: 1              # Number of bars ahead to predict (e.g. 1 bar = 15m into future if target_timeframe is 15m)
-  threshold: 0.002        # For classification: minimum percentage return (0.2%) required to trigger Buy (1) or Sell (-1) above trading fees
-# --- 5. DATA SPLITTING CONFIGURATION ---
+  horizon: 1           # Number of bars ahead to predict
+  threshold: 0.002     # Min % return to trigger Buy(+1) or Sell(-1); else Hold(0)
+
+# --- 4. DATA SPLITTING CONFIGURATION ---
 splitting:
   train_ratio: 0.70
   val_ratio: 0.15
   test_ratio: 0.15
 
-# --- 6. TRADITIONAL ML CLASSIFICATION MODELS ---
+# --- 5. CLASSIFICATION MODELS ---
 classification:
   models:
-    - name: logistic_regression
-      parameters:
-        class_weight: "balanced"
-        max_iter: 1000
-    - name: decision_tree
-      parameters:
-        class_weight: "balanced"
-        max_depth: 5
+    # - name: logistic_regression
+    #   parameters:
+    #     class_weight: "balanced"
+    #     max_iter: 1000
+
+    # - name: decision_tree
+    #   parameters:
+    #     class_weight: "balanced"
+    #     max_depth: 5
+
     - name: random_forest
       parameters:
         class_weight: "balanced"
         n_estimators: 100
         max_depth: 5
+
     - name: lightgbm
       parameters:
         class_weight: "balanced"
         n_estimators: 100
         learning_rate: 0.05
         verbosity: -1
+
     - name: xgboost
       parameters:
         n_estimators: 100
         max_depth: 5
-    - name: svm
+
+    # - name: svm
+    #   parameters:
+    #     class_weight: "balanced"
+    #     C: 1.0
+    #     probability: true
+
+# ==============================================================================
+# --- 7. REGRESSION MODELS ---
+# Predicts a continuous % return. Threshold rule converts output → Buy/Hold/Sell.
+# Activate with: model_type: regression
+# ==============================================================================
+regression:
+  # predicted_return > +signal_threshold → Buy(+1)
+  # predicted_return < -signal_threshold → Sell(-1)
+  # else                                 → Hold(0)
+  signal_threshold: 0.002
+
+  models:
+    - name: xgboost_regressor
       parameters:
-        class_weight: "balanced"
-        C: 1.0
-        probability: true
+        n_estimators: 100
+        max_depth: 5
+        learning_rate: 0.05
 
+    - name: random_forest_regressor
+      parameters:
+        n_estimators: 100
+        max_depth: 5
 
-# --- 7. INFERENCE CONFIGURATION ---
-# Everything else (data, features, target) is inherited from above.
-# This block only controls WHAT models to run and WHEN to run inference.
+    - name: lightgbm_regressor
+      parameters:
+        n_estimators: 100
+        learning_rate: 0.05
+        verbosity: -1
+
+    - name: linear_regression
+      parameters: {}              # no hyperparameters (baseline)
+
+# ==============================================================================
+# --- 8. TIME SERIES / DEEP LEARNING MODELS ---
+# Feeds a sliding window of N past bars into an LSTM / GRU sequential model.
+# Activate with: model_type: timeseries
+# ==============================================================================
+timeseries:
+  lookback_window: 60            # number of past bars (15m candles) fed as input sequence
+  output_type: "classification"  # classification (Buy/Hold/Sell) | regression (% return)
+
+  models:
+    - name: lstm
+      parameters:
+        hidden_size: 128
+        num_layers: 2
+        dropout: 0.2
+        epochs: 50
+        batch_size: 64
+        learning_rate: 0.001
+
+    - name: gru
+      parameters:
+        hidden_size: 64
+        num_layers: 2
+        dropout: 0.2
+        epochs: 50
+        batch_size: 64
+        learning_rate: 0.001
+
+# --- 9. INFERENCE CONFIGURATION ---
 inference:
-  model_type: "classification"   # Must match the trained model type above
+  model_type: "classification"
   models:
     - "xgboost"
     - "random_forest"
     - "lightgbm"
 
-  # Date range to run inference on (independent of training dates)
-  start_date: "2026-07-01 00:00:00"
-  end_date: "2026-07-16 00:00:00"
+  # Set to TEST SET range → enables direct test-prediction vs inference comparison
+  start_date: "2026-04-09 08:00:00"
+  end_date: "2026-06-30 00:00:00"

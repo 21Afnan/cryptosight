@@ -57,18 +57,21 @@ def evaluate_classification(model, X_train, y_train, X_val, y_val, X_test, y_tes
 
     # Compile raw predictions for further use
     predictions = {
+        "train_preds": train_preds,
         "val_preds": val_preds,
+        "test_preds": test_preds,
         "val_proba": val_proba
     }
 
     return metrics, predictions
 
-def create_leaderboard_entry(task: str, model_name: str, metrics: dict, model_save_path: str, pred_save_path: str) -> dict:
+def create_leaderboard_entry(task: str, model_name: str, metrics: dict, model_save_path: str, pred_save_path: str, hyperparameters: dict = None) -> dict:
     """
     Creates a standardized leaderboard dictionary entry for any model type.
     """
     entry = {
         "model": model_name,
+        "hyperparameters": hyperparameters or {},
         "model_file": str(model_save_path),
         "prediction_file": str(pred_save_path)
     }

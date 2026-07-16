@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from cryptosight.utils.config import load_config, get_ml_artifacts_dir, save_config_artifact
+import json
 from cryptosight.utils.logger import get_logger
 from cryptosight.ml.models.model_utills import train_model, save_model
 from sklearn.linear_model import LogisticRegression
@@ -114,18 +115,27 @@ class ClassifierPipeline:
 
                 # Map predictions back to original trading targets [-1, 0, 1]
                 val_predictions = preds['val_preds'] - 1
+                test_predictions = preds.get('test_preds', preds['val_preds']) - 1
 
-                # Save predictions to CSV file under ml/csv_files for the signals module to use
+                # Save predictions to CSV file under ml/csv_files/classification/model_predicted/
                 pred_csv_dir = Path(__file__).resolve().parent.parent.parent / "csv_files" / "classification" / "model_predicted"
                 pred_csv_dir.mkdir(parents=True, exist_ok=True)
                 pred_save_path = pred_csv_dir / f"{clean_sym}_{model_name}_predicted.csv"
 
-                # Store predictions along with all input features and actual target
+                # Store validation predictions along with input features, actual, and predicted targets
                 pred_df = val_df.copy()
+                pred_df["actual"] = val_df["target"]
                 pred_df["predicted"] = val_predictions
                 pred_df.to_csv(pred_save_path, index=False, encoding="utf-8")
 
-                # Store in returned dictionary
+                # Store testing dataset predictions along with actual vs predicted (specifically requested)
+                test_pred_df = test_df.copy()
+                test_pred_df["actual"] = test_df["target"]
+                test_pred_df["predicted"] = test_predictions
+                test_pred_save_path = pred_csv_dir / f"{clean_sym}_{model_name}_test_predicted.csv"
+                test_pred_df.to_csv(test_pred_save_path, index=False, encoding="utf-8")
+
+                # Store in returned dictionary (validation DataFrame with predicted column for backtesting)
                 all_predictions[model_name] = pred_df
 
                 entry = create_leaderboard_entry(
@@ -133,11 +143,13 @@ class ClassifierPipeline:
                     model_name=model_name,
                     metrics=metrics,
                     model_save_path=model_save_path,
-                    pred_save_path=pred_save_path
+                    pred_save_path=pred_save_path,
+                    hyperparameters=params
                 )
                 leaderboard.append(entry)
 
-            # Save comparative leaderboard artifact
+            # Save leaderboard YAML — main.py reads this to inject trading metrics,
+            # then writes the single authoritative quant_pipeline.json.
             leaderboard = sorted(leaderboard, key=lambda x: float(x["val_accuracy"].replace("%", "")), reverse=True)
             run_meta = {
                 "symbol": symbol,
@@ -149,7 +161,50 @@ class ClassifierPipeline:
                 "leaderboard": leaderboard
             }
             save_config_artifact(run_meta, "classification_run.yaml", asset_type="config")
-            logger.info("Saved classification run leaderboard to artifacts/configs/classification_run.yaml")
+
+            # ── DEDICATED MODEL METADATA JSON (separate from quant_pipeline.json) ──
+            # Contains ONLY model-level information: hyperparameters + all metrics.
+            # Named uniquely so multiple symbols/timeframes never collide.
+            model_metadata = {
+                "symbol": clean_sym,
+                "timeframe": self.tf,
+                "model_type": "classification",
+                "models": {}
+            }
+            for entry in leaderboard:
+                m = entry.get("model")
+                model_metadata["models"][m] = {
+                    "hyperparameters": entry.get("hyperparameters", {}),
+                    "accuracy": {
+                        "train_accuracy": entry.get("train_accuracy"),
+                        "train_correct": entry.get("train_correct"),
+                        "train_total": entry.get("train_total"),
+                        "train_loss": entry.get("train_loss"),
+                        "val_accuracy": entry.get("val_accuracy"),
+                        "val_precision": entry.get("val_precision"),
+                        "val_recall": entry.get("val_recall"),
+                        "val_correct": entry.get("val_correct"),
+                        "val_total": entry.get("val_total"),
+                        "val_loss": entry.get("val_loss"),
+                        "test_accuracy": entry.get("test_accuracy"),
+                        "test_correct": entry.get("test_correct"),
+                        "test_total": entry.get("test_total"),
+                        "test_loss": entry.get("test_loss"),
+                    },
+                    "trading_metrics": entry.get("trading_metrics", {}),
+                    "model_file": entry.get("model_file"),
+                    "prediction_file": entry.get("prediction_file"),
+                }
+
+            metadata_json_path = get_ml_artifacts_dir("config") / f"{clean_sym}_{self.tf}_classification_metadata.json"
+            try:
+                with open(metadata_json_path, "w", encoding="utf-8") as mf:
+                    json.dump(model_metadata, mf, indent=4, default=str)
+                logger.info(f"Model metadata JSON saved -> {metadata_json_path}")
+            except Exception as e_meta:
+                logger.error(f"Could not write model metadata JSON: {e_meta}")
+
+            logger.info(f"Saved classification leaderboard YAML for {clean_sym} {self.tf}")
 
         return all_predictions
 

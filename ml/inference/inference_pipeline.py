@@ -245,6 +245,12 @@ class InferencePipeline:
                         }
                     }
 
+                # Save individual model's inference CSV to ml/csv_files/inference/
+                csv_dir = Path(__file__).resolve().parent.parent / "csv_files" / "inference"
+                csv_dir.mkdir(parents=True, exist_ok=True)
+                model_csv_path = csv_dir / f"{symbol}_{self.tf}_{model_name}_inference.csv"
+                results_df.to_csv(model_csv_path, index=False, encoding="utf-8")
+
                 # Add this model's signals to the unified CSV DataFrame
                 results_df["timestamp"] = pd.to_datetime(results_df["timestamp"], utc=True)
                 combined_csv_df = combined_csv_df.merge(results_df, on="timestamp", how="left")
@@ -260,8 +266,8 @@ class InferencePipeline:
             )
             logger.info(f"[{symbol}] Saved inference report to artifacts/configs/inference_{symbol}_{self.tf}.yaml")
             
-            # ── STEP 7: Save ONE unified easy-to-read CSV ────────────────────────
-            csv_dir = Path(__file__).resolve().parent.parent.parent / "csv_files" / "inference"
+            # ── STEP 7: Save ONE unified easy-to-read CSV inside ml/csv_files/inference/ ────────────
+            csv_dir = Path(__file__).resolve().parent.parent / "csv_files" / "inference"
             csv_dir.mkdir(parents=True, exist_ok=True)
             csv_path = csv_dir / f"{symbol}_{self.tf}_combined_inference.csv"
             combined_csv_df.to_csv(csv_path, index=False)

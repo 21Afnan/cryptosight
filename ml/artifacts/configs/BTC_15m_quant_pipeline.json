@@ -1,0 +1,286 @@
+{
+    "1_dataset_info": {
+        "symbol": "BTC",
+        "exchange": "binance",
+        "base_timeframe": "1m",
+        "target_timeframe": "15m",
+        "total_dataset_rows": 52271,
+        "features_generated_count": 13,
+        "raw_features_csv": "D:\\Neurog_Internship\\cryptosight\\ml\\csv_files\\BTC_15m_features.csv"
+    },
+    "2_preprocessing_info": {
+        "train_ratio": 0.7,
+        "val_ratio": 0.15,
+        "test_ratio": 0.15,
+        "train_rows": 36589,
+        "validation_rows": 7841,
+        "test_rows": 7841,
+        "scaler_joblib_path": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\preprocessors\\preprocessor.joblib",
+        "train_preprocessed_csv": "D:\\Neurog_Internship\\cryptosight\\ml\\csv_files\\BTC_15m_train_preprocessed.csv",
+        "validation_preprocessed_csv": "D:\\Neurog_Internship\\cryptosight\\ml\\csv_files\\BTC_15m_validation_preprocessed.csv",
+        "test_preprocessed_csv": "D:\\Neurog_Internship\\cryptosight\\ml\\csv_files\\BTC_15m_test_preprocessed.csv"
+    },
+    "3_classification_and_backtesting": {
+        "symbol": "BTC",
+        "timeframe": "15m",
+        "features_count": 13,
+        "train_rows": 36589,
+        "val_rows": 7841,
+        "test_rows": 7841,
+        "leaderboard": [
+            {
+                "model": "xgboost",
+                "hyperparameters": {
+                    "n_estimators": 100,
+                    "max_depth": 5
+                },
+                "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\BTC_15m_xgboost.joblib",
+                "prediction_file": "D:\\Neurog_Internship\\cryptosight\\ml\\csv_files\\classification\\model_predicted\\BTC_xgboost_predicted.csv",
+                "train_accuracy": "70.77%",
+                "train_correct": 25893,
+                "train_total": 36589,
+                "train_loss": 0.7848,
+                "val_accuracy": "32.88%",
+                "val_precision": "63.06%",
+                "val_recall": "32.88%",
+                "val_correct": 2578,
+                "val_total": 7841,
+                "val_loss": 1.2856,
+                "test_accuracy": "36.13%",
+                "test_correct": 2833,
+                "test_total": 7841,
+                "test_loss": 1.2328,
+                "trading_metrics": {
+                    "sharpe_ratio": -1.466585,
+                    "sortino_ratio": -2.240075,
+                    "calmar_ratio": -0.755297,
+                    "total_return": -0.299,
+                    "profit_factor": 0.826637,
+                    "max_drawdown": -0.395871,
+                    "win_rate": 0.337461
+                }
+            },
+            {
+                "model": "lightgbm",
+                "hyperparameters": {
+                    "class_weight": "balanced",
+                    "n_estimators": 100,
+                    "learning_rate": 0.05,
+                    "verbosity": -1
+                },
+                "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\BTC_15m_lightgbm.joblib",
+                "prediction_file": "D:\\Neurog_Internship\\cryptosight\\ml\\csv_files\\classification\\model_predicted\\BTC_lightgbm_predicted.csv",
+                "train_accuracy": "65.23%",
+                "train_correct": 23868,
+                "train_total": 36589,
+                "train_loss": 0.8916,
+                "val_accuracy": "32.22%",
+                "val_precision": "65.57%",
+                "val_recall": "32.22%",
+                "val_correct": 2526,
+                "val_total": 7841,
+                "val_loss": 1.2856,
+                "test_accuracy": "33.47%",
+                "test_correct": 2624,
+                "test_total": 7841,
+                "test_loss": 1.2514,
+                "trading_metrics": {
+                    "sharpe_ratio": -1.602409,
+                    "sortino_ratio": -2.434655,
+                    "calmar_ratio": -0.729044,
+                    "total_return": -0.31928,
+                    "profit_factor": 0.812017,
+                    "max_drawdown": -0.437943,
+                    "win_rate": 0.334365
+                }
+            },
+            {
+                "model": "random_forest",
+                "hyperparameters": {
+                    "class_weight": "balanced",
+                    "n_estimators": 100,
+                    "max_depth": 5
+                },
+                "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\BTC_15m_random_forest.joblib",
+                "prediction_file": "D:\\Neurog_Internship\\cryptosight\\ml\\csv_files\\classification\\model_predicted\\BTC_random_forest_predicted.csv",
+                "train_accuracy": "59.73%",
+                "train_correct": 21853,
+                "train_total": 36589,
+                "train_loss": 0.9657,
+                "val_accuracy": "27.14%",
+                "val_precision": "67.06%",
+                "val_recall": "27.14%",
+                "val_correct": 2128,
+                "val_total": 7841,
+                "val_loss": 1.319,
+                "test_accuracy": "22.15%",
+                "test_correct": 1737,
+                "test_total": 7841,
+                "test_loss": 1.3314,
+                "trading_metrics": {
+                    "sharpe_ratio": -2.236487,
+                    "sortino_ratio": -3.306,
+                    "calmar_ratio": -0.760439,
+                    "total_return": -0.404956,
+                    "profit_factor": 0.748265,
+                    "max_drawdown": -0.532529,
+                    "win_rate": 0.313665
+                }
+            }
+        ]
+    },
+    "4_system_configs": {
+        "ml_config": {
+            "model_type": "classification",
+            "data": {
+                "enabled": true,
+                "symbols": [
+                    "BTC"
+                ],
+                "exchange": "binance",
+                "timeframe": "1m",
+                "target_timeframe": "15m",
+                "start_date": "2025-01-01",
+                "end_date": "2026-06-30",
+                "fill_method": "ffill",
+                "max_retries": 5,
+                "retry_delay": 3
+            },
+            "features": {
+                "enabled": true,
+                "indicators": {
+                    "EMA": [
+                        {
+                            "parameters": {
+                                "timeperiod": 20
+                            },
+                            "aliases": {
+                                "ema": "ind_EMA_20"
+                            }
+                        },
+                        {
+                            "parameters": {
+                                "timeperiod": 50
+                            },
+                            "aliases": {
+                                "ema": "ind_EMA_50"
+                            }
+                        }
+                    ],
+                    "RSI": [
+                        {
+                            "parameters": {
+                                "timeperiod": 14
+                            },
+                            "aliases": {
+                                "rsi": "ind_RSI_14"
+                            }
+                        }
+                    ],
+                    "MACD": [
+                        {
+                            "parameters": {
+                                "fastperiod": 12,
+                                "slowperiod": 26,
+                                "signalperiod": 9
+                            },
+                            "aliases": {
+                                "macd": "ind_MACD_12_26_9",
+                                "signal": "ind_MACD_SIGNAL_12_26_9",
+                                "histogram": "ind_MACD_HIST_12_26_9"
+                            }
+                        }
+                    ]
+                },
+                "patterns": {
+                    "DOJI": {
+                        "aliases": {
+                            "pattern": "pat_DOJI"
+                        }
+                    },
+                    "BULLISH_ENGULFING": {
+                        "aliases": {
+                            "pattern": "pat_BULLISH_ENGULFING"
+                        }
+                    }
+                }
+            },
+            "target": {
+                "source": "close",
+                "horizon": 1,
+                "threshold": 0.002
+            },
+            "splitting": {
+                "train_ratio": 0.7,
+                "val_ratio": 0.15,
+                "test_ratio": 0.15
+            },
+            "classification": {
+                "models": [
+                    {
+                        "name": "random_forest",
+                        "parameters": {
+                            "class_weight": "balanced",
+                            "n_estimators": 100,
+                            "max_depth": 5
+                        }
+                    },
+                    {
+                        "name": "lightgbm",
+                        "parameters": {
+                            "class_weight": "balanced",
+                            "n_estimators": 100,
+                            "learning_rate": 0.05,
+                            "verbosity": -1
+                        }
+                    },
+                    {
+                        "name": "xgboost",
+                        "parameters": {
+                            "n_estimators": 100,
+                            "max_depth": 5
+                        }
+                    }
+                ]
+            },
+            "inference": {
+                "model_type": "classification",
+                "models": [
+                    "xgboost",
+                    "random_forest",
+                    "lightgbm"
+                ],
+                "start_date": "2026-04-09 08:00:00",
+                "end_date": "2026-06-30 00:00:00"
+            }
+        },
+        "backtesting_config": {
+            "exchange": "bybit",
+            "symbol": "btc",
+            "timeframe": "1m",
+            "start_time": "2026-04-01",
+            "end_time": "2026-06-01",
+            "initial_balance": 10000.0,
+            "position_size": {
+                "type": "fixed_percentage",
+                "value": 10.0
+            },
+            "commission": 0.0005,
+            "slippage": 0.0002,
+            "allow_long": true,
+            "allow_short": true,
+            "max_open_positions": 1,
+            "take_profit": {
+                "type": "percentage",
+                "value": 2.0
+            },
+            "stop_loss": {
+                "type": "percentage",
+                "value": 1.0
+            },
+            "entry_price": "next_open",
+            "exit_price": "next_open"
+        },
+        "inference_config": {}
+    }
+}

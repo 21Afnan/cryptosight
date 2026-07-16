@@ -2,54 +2,54 @@ symbol: BTC
 timeframe: 15m
 task_type: classification
 period:
-  start: '2026-07-01 00:00:00'
-  end: '2026-07-16 00:00:00'
+  start: '2026-04-09 08:00:00'
+  end: '2026-06-30 00:00:00'
 models:
   xgboost:
-    total_rows: 1441
-    correct: 515
-    accuracy: 35.74%
-    precision: 37.06%
-    recall: 37.65%
+    total_rows: 7841
+    correct: 2833
+    accuracy: 36.13%
+    precision: 38.38%
+    recall: 39.00%
     signal_distribution:
       buy  (+1):
-        actual: 154
-        predicted: 756
+        actual: 852
+        predicted: 3879
       hold (0):
-        actual: 1149
-        predicted: 464
+        actual: 6061
+        predicted: 2402
       sell (-1):
-        actual: 138
-        predicted: 221
+        actual: 928
+        predicted: 1560
   random_forest:
-    total_rows: 1441
-    correct: 268
-    accuracy: 18.60%
-    precision: 39.31%
-    recall: 34.65%
+    total_rows: 7841
+    correct: 1737
+    accuracy: 22.15%
+    precision: 42.32%
+    recall: 36.66%
     signal_distribution:
       buy  (+1):
-        actual: 154
-        predicted: 1285
+        actual: 852
+        predicted: 6653
       hold (0):
-        actual: 1149
-        predicted: 137
+        actual: 6061
+        predicted: 1022
       sell (-1):
-        actual: 138
-        predicted: 19
+        actual: 928
+        predicted: 166
   lightgbm:
-    total_rows: 1441
-    correct: 444
-    accuracy: 30.81%
-    precision: 37.07%
-    recall: 35.85%
+    total_rows: 7841
+    correct: 2624
+    accuracy: 33.47%
+    precision: 39.18%
+    recall: 39.62%
     signal_distribution:
       buy  (+1):
-        actual: 154
-        predicted: 919
+        actual: 852
+        predicted: 4702
       hold (0):
-        actual: 1149
-        predicted: 369
+        actual: 6061
+        predicted: 2086
       sell (-1):
-        actual: 138
-        predicted: 153
+        actual: 928
+        predicted: 1053
