@@ -1,0 +1,70 @@
+winsor_limit: 0.01
+frac_step: 0.05
+feature_cols:
+- open
+- high
+- low
+- close
+- volume
+- ind_EMA_20
+- ind_EMA_50
+- ind_RSI_14
+- ind_MACD_12_26_9
+- ind_MACD_SIGNAL_12_26_9
+- ind_MACD_HIST_12_26_9
+- pat_DOJI
+- pat_BULLISH_ENGULFING
+optimal_d_values:
+  open: 0.15
+  high: 0.15
+  low: 0.15
+  close: 0.15
+  volume: 0.0
+  ind_EMA_20: 0.15
+  ind_EMA_50: 0.2
+  ind_RSI_14: 0.0
+  ind_MACD_12_26_9: 0.0
+  ind_MACD_SIGNAL_12_26_9: 0.0
+  ind_MACD_HIST_12_26_9: 0.0
+  pat_DOJI: 0.0
+  pat_BULLISH_ENGULFING: 0.0
+winsor_bounds:
+  open:
+  - 27519.052853028887
+  - 43766.057852402955
+  high:
+  - 27637.474334717535
+  - 43824.27326295436
+  low:
+  - 27398.85535171496
+  - 43691.11951322617
+  close:
+  - 27519.038155867027
+  - 43745.02915719114
+  volume:
+  - 22.4037548
+  - 1344.8581456000081
+  ind_EMA_20:
+  - 27692.87005918933
+  - 43698.036756763286
+  ind_EMA_50:
+  - 19521.93817027277
+  - 30984.369959756164
+  ind_RSI_14:
+  - 22.554764526793566
+  - 77.01390746108747
+  ind_MACD_12_26_9:
+  - -803.0873873140989
+  - 670.6159217723018
+  ind_MACD_SIGNAL_12_26_9:
+  - -755.7592356950007
+  - 619.3139559625348
+  ind_MACD_HIST_12_26_9:
+  - -228.59581004125837
+  - 214.3662415240146
+  pat_DOJI:
+  - 0.0
+  - 100.0
+  pat_BULLISH_ENGULFING:
+  - 0.0
+  - 100.0

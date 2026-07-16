@@ -1,8 +1,6 @@
-from pathlib import Path
 import pandas as pd
 import numpy as np
 from cryptosight.utils.logger import get_logger
-from cryptosight.utils.config import load_config
 from cryptosight.data.downloader import Downloader
 
 logger = get_logger("MLFeatures")
@@ -37,7 +35,19 @@ class MLFeatureBuilder:
         data_cfg = self.config.get("data")
 
         cfg_exchange = data_cfg.get("exchange")
-        exchange = cfg_exchange[0] if isinstance(cfg_exchange, list) else cfg_exchange
+        if isinstance(cfg_exchange, list):
+            if len(cfg_exchange) > 1:
+                logger.warning(
+                    f"Multiple exchanges configured {cfg_exchange} — ML pipeline currently "
+                    f"supports only ONE exchange per run. Using first: '{cfg_exchange[0]}'. "
+                    f"Remaining exchanges {cfg_exchange[1:]} will be IGNORED."
+                )
+            exchange = cfg_exchange[0]
+        else:
+            exchange = cfg_exchange
+
+        if not exchange:
+            raise ValueError("Config key 'data.exchange' is missing or empty. Cannot proceed.")
 
         cfg_symbols = data_cfg.get("symbols")
         if isinstance(cfg_symbols, str):
@@ -106,7 +116,6 @@ class MLFeatureBuilder:
         target_cfg = self.config.get("target")
         horizon = int(target_cfg.get("horizon"))
         source_col = target_cfg.get("source")
-        threshold = float(target_cfg.get("threshold"))
 
         if source_col not in df.columns:
             logger.warning(f"Target source column '{source_col}' not found in DataFrame. Skipping target generation.")
@@ -121,6 +130,7 @@ class MLFeatureBuilder:
 
         elif model_type == "classification":
             # Threshold-filtered directional class: 1 (UP above fees), -1 (DOWN below fees), 0 (HOLD/NOISE)
+            threshold = float(target_cfg.get("threshold"))
             future_return = (result_df[source_col].shift(-horizon) - result_df[source_col]) / result_df[source_col]
             result_df["target"] = 0
             result_df.loc[future_return > threshold, "target"] = 1
@@ -153,51 +163,37 @@ class MLFeatureBuilder:
 
     def build_dataset(self) -> dict[str, pd.DataFrame]:
         """
-    Runs Step 1 (Resampling) + Step 2 (Technical Indicators & Chart Patterns) + Step 3 (Target Generation).
-    Returns a dictionary of clean DataFrames: {"BTC": clean_df}.
+        Runs Step 1 (Resampling) + Step 2 (Technical Indicators & Chart Patterns) + Step 3 (Target Generation).
+        Returns a dictionary of clean DataFrames: {"BTC": clean_df}.
         """
         resampled_data = self.fetch_and_resample_data()
         feature_data = {}
 
         for sym, df in resampled_data.items():
-            logger.info(f"--- Building Features & Target for [{sym}] ---")
-            processed_df = self.add_technical_features(df)
-            processed_df = self.add_target(processed_df)
-
-            # If `data.enabled` is false, drop base OHLCV columns (`open`, `high`, `low`, `close`, `volume`)
-            # so only the calculated indicators/patterns (and target) are shown in the final DataFrame.
-            if not self.config.get("data").get("enabled"):
-                ohlcv_cols = ["open", "high", "low", "close", "volume"]
-                cols_to_drop = [c for c in ohlcv_cols if c in processed_df.columns]
-                processed_df = processed_df.drop(columns=cols_to_drop)
-                logger.info(f"[{sym}] 'data.enabled' is false --> Dropped base OHLCV columns {cols_to_drop} from final dataset.")
-
-            feature_data[sym] = processed_df
-
-            # Store CSV inside root `csv_files/` folder (`as requested by user`)
-            out_dir = Path(__file__).resolve().parent.parent / "csv_files"
-            out_dir.mkdir(parents=True, exist_ok=True)
-            target_timeframe = self.config.get("data", {}).get("target_timeframe", "15m")
-            clean_sym = str(sym).upper().replace("/", "_").replace(":", "_").replace("\\", "_").replace("?", "").replace("*", "").strip()
-            clean_tf = str(target_timeframe).replace("/", "_").replace(":", "_").strip()
-            csv_path = out_dir / f"{clean_sym}_{clean_tf}_features.csv"
             try:
-                processed_df.to_csv(csv_path, index=False, encoding="utf-8")
-                logger.info(f"[{sym}] Successfully saved final ML dataset to CSV: {csv_path}")
-            except OSError as e:
-                logger.warning(f"[{sym}] Could not save CSV to {csv_path} ({e}). Saving to temporary clean filename...")
-                fallback_path = out_dir / f"dataset_{clean_sym}.csv"
-                processed_df.to_csv(fallback_path, index=False, encoding="utf-8")
-                logger.info(f"[{sym}] Saved fallback dataset to: {fallback_path}")
+                logger.info(f"--- Building Features & Target for [{sym}] ---")
+                processed_df = self.add_technical_features(df)
+                processed_df = self.add_target(processed_df)
 
-            logger.info(f"=== {sym} Ready [{str(self.config.get('model_type', 'regression')).upper()} | Shape: {processed_df.shape}] ===")
+                # If `data.enabled` is false, drop base OHLCV columns (`open`, `high`, `low`, `close`, `volume`)
+                # so only the calculated indicators/patterns (and target) are shown in the final DataFrame.
+                if not self.config.get("data").get("enabled"):
+                    ohlcv_cols = ["open", "high", "low", "close", "volume"]
+                    cols_to_drop = [c for c in ohlcv_cols if c in processed_df.columns]
+                    processed_df = processed_df.drop(columns=cols_to_drop)
+                    logger.info(f"[{sym}] 'data.enabled' is false --> Dropped base OHLCV columns {cols_to_drop} from final dataset.")
 
-            print("\n" + "=" * 85)
-            print(f" [{sym}] QUANT ML DATASET PREVIEW (Total Columns: {len(processed_df.columns)})")
-            print("=" * 85)
-            preview_df = processed_df.tail(3).round(4)
-            with pd.option_context("display.float_format", "{:.4f}".format):
-                print(preview_df.T.to_string())
-            print("=" * 85 + "\n")
+                feature_data[sym] = processed_df
+
+                logger.info(f"=== {sym} Ready [{str(self.config.get('model_type', 'regression')).upper()} | Shape: {processed_df.shape}] ===")
+
+                print(f" [{sym}] QUANT ML DATASET PREVIEW (Total Columns: {len(processed_df.columns)})")
+                print("=" * 85)
+                preview_df = processed_df.tail(3).round(4)
+                with pd.option_context("display.float_format", "{:.4f}".format):
+                    print(preview_df.T.to_string())
+            except Exception as e:
+                logger.error(f"Failed to process {sym}: {e}")
+                continue
 
         return feature_data

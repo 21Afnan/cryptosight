@@ -15,7 +15,7 @@ data:
   exchange: "binance"         # Options: "binance", "bybit", or a list like ["binance", "bybit"]
   timeframe: "1m"             # Base timeframe or target timeframe (if target_timeframe is not specified)
   target_timeframe: "15m"      # Resampled timeframe for feature engineering & ML training (e.g. "15m", "1h", "4h")
-  start_date: "2024-01-01"
+  start_date: "2025-01-01"
   end_date: "2026-06-30"
   fill_method: "ffill"        
   max_retries: 5
@@ -57,16 +57,48 @@ features:
       aliases:
         pattern: pat_BULLISH_ENGULFING
 
-# --- 3. SENTIMENT DATA COLLECTION ---
-sentiment:
-  enabled: true
-  source:
-    - reddit
-  aliases:
-    sentiment: sen_MARKET
-
 # --- 4. PREDICTION TARGET GENERATION ---
 target:
   source: close
   horizon: 1              # Number of bars ahead to predict (e.g. 1 bar = 15m into future if target_timeframe is 15m)
   threshold: 0.002        # For classification: minimum percentage return (0.2%) required to trigger Buy (1) or Sell (-1) above trading fees
+# --- 5. DATA SPLITTING CONFIGURATION ---
+splitting:
+  train_ratio: 0.70
+  val_ratio: 0.15
+  test_ratio: 0.15
+
+# --- 6. TRADITIONAL ML CLASSIFICATION MODELS ---
+classification:
+  models:
+    - name: logistic_regression
+      parameters:
+        class_weight: "balanced"
+        max_iter: 1000
+    - name: decision_tree
+      parameters:
+        class_weight: "balanced"
+        max_depth: 5
+    - name: random_forest
+      parameters:
+        class_weight: "balanced"
+        n_estimators: 100
+        max_depth: 5
+    - name: lightgbm
+      parameters:
+        class_weight: "balanced"
+        n_estimators: 100
+        learning_rate: 0.05
+        verbosity: -1
+    - name: xgboost
+      parameters:
+        n_estimators: 100
+        max_depth: 5
+    - name: svm
+      parameters:
+        class_weight: "balanced"
+        C: 1.0
+        probability: true
+
+
+

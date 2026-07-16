@@ -153,7 +153,7 @@ class PreprocessingBacktester(BacktestingEngine):
             })
             return summary
 
-        closed_trades = ledger_df[ledger_df["status"].str.lower() == "closed"] if "status" in ledger_df.columns else ledger_df
+        closed_trades = ledger_df[ledger_df["status"].str.lower().isin(["completed", "closed"])] if "status" in ledger_df.columns else ledger_df
         total_trades = len(closed_trades)
         if total_trades == 0:
             summary.update({
