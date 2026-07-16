@@ -180,12 +180,4 @@ class QuantPreprocessor:
             print(f"Warning: Failed to save preprocessor joblib object to {target_path}: {e}")
             return ""
 
-    @classmethod
-    def load(cls, filepath: str = None) -> "QuantPreprocessor":
-        """Loads a saved preprocessor object from a .joblib file."""
-        import joblib
-        if filepath is None:
-            from cryptosight.utils.config import get_ml_artifacts_dir
-            filepath = get_ml_artifacts_dir("preprocessor") / "preprocessor.joblib"
-            
-        return joblib.load(filepath)
+  
