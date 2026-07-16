@@ -157,7 +157,7 @@ class ClassifierPipeline:
 def get_signals(predictions_df: pd.DataFrame) -> pd.DataFrame:
     """
     Extracts and formats predictions into a clean DataFrame containing
-    only ['timestamp', 'signal'] for backtesting and signal generation modules.
+    only ['signal'] with a DatetimeIndex for the backtesting module.
     """
     if "predicted" not in predictions_df.columns:
         raise ValueError("Input DataFrame does not contain a 'predicted' column.")
@@ -166,5 +166,10 @@ def get_signals(predictions_df: pd.DataFrame) -> pd.DataFrame:
         "timestamp": predictions_df["timestamp"],
         "signal": predictions_df["predicted"].astype(int)
     })
+    
+    # Backtester uses .join() and requires timestamp as index
+    signal_df["timestamp"] = pd.to_datetime(signal_df["timestamp"], utc=True)
+    signal_df.set_index("timestamp", inplace=True)
+    
     return signal_df
 

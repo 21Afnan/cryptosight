@@ -1,0 +1,55 @@
+symbol: BTC
+timeframe: 15m
+task_type: classification
+period:
+  start: '2026-07-01 00:00:00'
+  end: '2026-07-16 00:00:00'
+models:
+  xgboost:
+    total_rows: 1441
+    correct: 515
+    accuracy: 35.74%
+    precision: 37.06%
+    recall: 37.65%
+    signal_distribution:
+      buy  (+1):
+        actual: 154
+        predicted: 756
+      hold (0):
+        actual: 1149
+        predicted: 464
+      sell (-1):
+        actual: 138
+        predicted: 221
+  random_forest:
+    total_rows: 1441
+    correct: 268
+    accuracy: 18.60%
+    precision: 39.31%
+    recall: 34.65%
+    signal_distribution:
+      buy  (+1):
+        actual: 154
+        predicted: 1285
+      hold (0):
+        actual: 1149
+        predicted: 137
+      sell (-1):
+        actual: 138
+        predicted: 19
+  lightgbm:
+    total_rows: 1441
+    correct: 444
+    accuracy: 30.81%
+    precision: 37.07%
+    recall: 35.85%
+    signal_distribution:
+      buy  (+1):
+        actual: 154
+        predicted: 919
+      hold (0):
+        actual: 1149
+        predicted: 369
+      sell (-1):
+        actual: 138
+        predicted: 153

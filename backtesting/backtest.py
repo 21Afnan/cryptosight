@@ -389,11 +389,11 @@ class BacktestingEngine:
         
         return entries_df
 
-    def run_pipeline(self) -> pd.DataFrame:
+    def run_pipeline(self, external_signals_df: pd.DataFrame = None) -> pd.DataFrame:
         """
         Runs the complete backtesting pipeline step-by-step:
         1. Fetch raw candles (fetch_data)
-        2. Fetch generated signals (run_signals)
+        2. Fetch generated signals (run_signals or external_signals_df)
         3. Merge candles with signals (merge_data)
         4. Locate entries and calculate entry prices (determine_entries)
         5. Calculate initial position size/quantities (calculate_position_size)
@@ -409,7 +409,11 @@ class BacktestingEngine:
         ohlcv_df = self.fetch_data()
 
         # Step 2: Fetch strategy signals
-        signals_df = self.run_signals()
+        if external_signals_df is not None:
+            self.logger.info("Using external ML signals for backtesting...")
+            signals_df = external_signals_df
+        else:
+            signals_df = self.run_signals()
 
         # Step 3: Merge OHLCV and signals together
         merged_df = self.merge_data(ohlcv_df, signals_df)

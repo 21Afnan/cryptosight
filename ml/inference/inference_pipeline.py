@@ -126,7 +126,7 @@ class InferencePipeline:
                 logger.error(f"[{symbol}] Preprocessor not found at {preproc_path}. Skipping.")
                 continue
 
-            preprocessor = QuantPreprocessor.load(str(preproc_path))
+            preprocessor = load_model(str(preproc_path))  # joblib.load under the hood
             timestamps = features_df["timestamp"].values
             X_live = preprocessor.transform(features_df)
 
@@ -142,6 +142,15 @@ class InferencePipeline:
                 },
                 "models": {}
             }
+            
+            # Initialize a unified DataFrame for the final CSV export
+            combined_csv_df = features_df[["timestamp"]].copy().reset_index(drop=True)
+            combined_csv_df["timestamp"] = pd.to_datetime(combined_csv_df["timestamp"], utc=True)
+            if "target" in features_with_target.columns:
+                target_df = features_with_target[["timestamp", "target"]].copy()
+                target_df["timestamp"] = pd.to_datetime(target_df["timestamp"], utc=True)
+                combined_csv_df = combined_csv_df.merge(target_df, on="timestamp", how="left")
+                combined_csv_df.rename(columns={"target": "actual_signal"}, inplace=True)
 
             for model_name in self.models:
                 model_dir = get_ml_artifacts_dir("model")
@@ -152,16 +161,29 @@ class InferencePipeline:
                     continue
 
                 model    = load_model(str(model_path))
+                
+                # Pass ONLY the feature columns to the model (drops timestamp)
+                X_model = X_live[preprocessor.feature_cols]
+                
                 raw_preds = model.predict(
-                    X_live.values if isinstance(X_live, pd.DataFrame) else X_live
+                    X_model.values if isinstance(X_model, pd.DataFrame) else X_model
                 )
 
                 # Map [0,1,2] → [-1,0,1] for classification
                 signals    = raw_preds - 1 if self.task_type == "classification" else raw_preds
-                results_df = pd.DataFrame({"timestamp": timestamps, "signal": signals})
+                
+                # Build results_df preserving the exact pandas series for timestamps
+                results_df = pd.DataFrame({
+                    "timestamp": features_df["timestamp"].reset_index(drop=True),
+                    "signal": signals
+                })
 
                 # ── Compute Metrics ───────────────────────────────────────────────
                 if "target" in features_with_target.columns:
+                    # Force both to UTC to prevent merge conflicts
+                    results_df["timestamp"] = pd.to_datetime(results_df["timestamp"], utc=True)
+                    features_with_target["timestamp"] = pd.to_datetime(features_with_target["timestamp"], utc=True)
+
                     merged    = results_df.merge(
                         features_with_target[["timestamp", "target"]],
                         on="timestamp", how="inner"
@@ -223,6 +245,11 @@ class InferencePipeline:
                         }
                     }
 
+                # Add this model's signals to the unified CSV DataFrame
+                results_df["timestamp"] = pd.to_datetime(results_df["timestamp"], utc=True)
+                combined_csv_df = combined_csv_df.merge(results_df, on="timestamp", how="left")
+                combined_csv_df.rename(columns={"signal": f"{model_name}_predicted_signal"}, inplace=True)
+
                 all_results[f"{symbol}_{model_name}"] = results_df
 
             # ── STEP 6: Save ONE unified inference report to artifacts ────────────
@@ -232,6 +259,13 @@ class InferencePipeline:
                 asset_type="config"
             )
             logger.info(f"[{symbol}] Saved inference report to artifacts/configs/inference_{symbol}_{self.tf}.yaml")
+            
+            # ── STEP 7: Save ONE unified easy-to-read CSV ────────────────────────
+            csv_dir = Path(__file__).resolve().parent.parent.parent / "csv_files" / "inference"
+            csv_dir.mkdir(parents=True, exist_ok=True)
+            csv_path = csv_dir / f"{symbol}_{self.tf}_combined_inference.csv"
+            combined_csv_df.to_csv(csv_path, index=False)
+            logger.info(f"[{symbol}] Saved combined CSV to {csv_path}")
 
         return all_results
 

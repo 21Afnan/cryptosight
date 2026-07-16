@@ -93,9 +93,92 @@ if __name__ == "__main__":
         model_type = config.get("model_type", "classification").lower()
         if model_type == "classification":
             print(f"\n--- Running TRADITIONAL ML CLASSIFICATION for {sym} ---")
-            from cryptosight.ml.models.classification.train_classifiers import ClassifierPipeline
+            from cryptosight.ml.models.classification.train_classifiers import ClassifierPipeline, get_signals
+            from cryptosight.backtesting.backtest import BacktestingEngine
+            from cryptosight.stats.metrices import compute_all_metrics
+            from cryptosight.utils.config import get_ml_artifacts_dir, save_config_artifact
+            import json
+            
             pipeline = ClassifierPipeline(config)
             val_predictions = pipeline.train(train_prep, val_prep, test_prep)
+            
+            # Load the classification config saved by pipeline.train() so we can update it
+            config_dir = get_ml_artifacts_dir("config")
+            run_config_path = config_dir / "classification_run.yaml"
+            if run_config_path.exists():
+                import yaml
+                with open(run_config_path, "r", encoding="utf-8") as f:
+                    run_meta = yaml.safe_load(f) or {}
+            else:
+                run_meta = {}
+
+            print(f"\n--- RUNNING BACKTEST ON VALIDATION/TEST SIGNALS ---")
+            for model_name, pred_df in val_predictions.items():
+                print(f"\n>> Backtesting ML Model: {model_name.upper()}")
+                
+                # Extract clean signals with DatetimeIndex
+                signal_df = get_signals(pred_df)
+                
+                # Instantiate backtester
+                bt_engine = BacktestingEngine()
+                
+                # Override backtester config to match ML validation data window
+                bt_engine.config["symbol"] = clean_sym.lower()
+                bt_engine.config["start_time"] = str(signal_df.index.min())
+                bt_engine.config["end_time"] = str(signal_df.index.max())
+                
+                # Run the pipeline injecting ML signals
+                ledger = bt_engine.run_pipeline(external_signals_df=signal_df)
+                
+                # Print high-level results and compute stats
+                if not ledger.empty:
+                    final_balance = ledger["balance"].iloc[-1]
+                    net_profit = final_balance - bt_engine.config['initial_balance']
+                    print(f"  [{model_name}] Backtest Complete | Net Profit: ${net_profit:.2f} | Trades: {len(ledger)}")
+                    
+                    # Compute Trading Strategy Metrics on Returns
+                    clean_ledger = ledger.copy()
+                    if "exit_time" in clean_ledger.columns:
+                        clean_ledger = clean_ledger.sort_values(by="exit_time")
+                        clean_ledger["exit_time"] = pd.to_datetime(clean_ledger["exit_time"])
+                        returns_series = clean_ledger.set_index("exit_time")["perc_pnl"]
+                    else:
+                        returns_series = clean_ledger["perc_pnl"]
+                    
+                    # Compute all metrics (suppress console output from quantstats)
+                    try:
+                        all_metrics = compute_all_metrics(returns_series, is_percentage=True, save_filepath=None)
+                    except Exception as e:
+                        print(f"  [{model_name}] Warning: Could not compute metrics: {e}")
+                        all_metrics = {}
+                        
+                    trading_metrics = {
+                        "sharpe_ratio": all_metrics.get("sharpe", 0.0),
+                        "sortino_ratio": all_metrics.get("sortino", 0.0),
+                        "calmar_ratio": all_metrics.get("calmar", 0.0),
+                        "total_return": all_metrics.get("cagr", 0.0),
+                        "profit_factor": all_metrics.get("profit_factor", 0.0),
+                        "max_drawdown": all_metrics.get("max_drawdown", 0.0),
+                        "win_rate": all_metrics.get("win_rate", 0.0)
+                    }
+                    
+                    print("  [Trading Metrics]")
+                    for k, v in trading_metrics.items():
+                        print(f"    - {k:<15}: {v}")
+                        
+                    # Inject trading metrics into the saved classification config
+                    if "leaderboard" in run_meta:
+                        for entry in run_meta["leaderboard"]:
+                            if entry.get("model") == model_name:
+                                entry["trading_metrics"] = trading_metrics
+                else:
+                    print(f"  [{model_name}] Backtest Complete | No trades executed.")
+            
+            # Re-save the updated configuration
+            if run_meta:
+                save_config_artifact(run_meta, "classification_run.yaml", asset_type="config")
+                print(f"\nSaved Trading Metrics to artifacts/configs/classification_run.yaml")
+                
         elif model_type == "regression":
             print(f"\n--- model_type is REGRESSION (Milestone to be implemented next) ---")
         elif model_type == "timeseries":
