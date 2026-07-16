@@ -22,6 +22,14 @@ leaderboard:
   test_correct: 5203
   test_total: 7841
   test_loss: 0.6657
+  trading_metrics:
+    sharpe_ratio: -2.07575
+    sortino_ratio: -3.089373
+    calmar_ratio: -0.773703
+    total_return: -0.384507
+    profit_factor: 0.763826
+    max_drawdown: -0.49697
+    win_rate: 0.320988
 - model: logistic_regression
   model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_logistic_regression.joblib
   prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_logistic_regression_predicted.csv
@@ -39,6 +47,14 @@ leaderboard:
   test_correct: 4179
   test_total: 7841
   test_loss: 1.1112
+  trading_metrics:
+    sharpe_ratio: -2.022206
+    sortino_ratio: -3.017753
+    calmar_ratio: -0.842467
+    total_return: -0.377703
+    profit_factor: 0.769215
+    max_drawdown: -0.448329
+    win_rate: 0.31962
 - model: xgboost
   model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_xgboost.joblib
   prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_xgboost_predicted.csv
@@ -56,6 +72,14 @@ leaderboard:
   test_correct: 2833
   test_total: 7841
   test_loss: 1.2328
+  trading_metrics:
+    sharpe_ratio: -1.466585
+    sortino_ratio: -2.240075
+    calmar_ratio: -0.755297
+    total_return: -0.299
+    profit_factor: 0.826637
+    max_drawdown: -0.395871
+    win_rate: 0.337461
 - model: lightgbm
   model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_lightgbm.joblib
   prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_lightgbm_predicted.csv
@@ -73,6 +97,14 @@ leaderboard:
   test_correct: 2624
   test_total: 7841
   test_loss: 1.2514
+  trading_metrics:
+    sharpe_ratio: -1.602409
+    sortino_ratio: -2.434655
+    calmar_ratio: -0.729044
+    total_return: -0.31928
+    profit_factor: 0.812017
+    max_drawdown: -0.437943
+    win_rate: 0.334365
 - model: decision_tree
   model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_decision_tree.joblib
   prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_decision_tree_predicted.csv
@@ -90,6 +122,14 @@ leaderboard:
   test_correct: 2602
   test_total: 7841
   test_loss: 1.2661
+  trading_metrics:
+    sharpe_ratio: -2.957648
+    sortino_ratio: -4.233771
+    calmar_ratio: -0.798403
+    total_return: -0.486532
+    profit_factor: 0.682147
+    max_drawdown: -0.609381
+    win_rate: 0.294118
 - model: random_forest
   model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_random_forest.joblib
   prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_random_forest_predicted.csv
@@ -107,3 +147,11 @@ leaderboard:
   test_correct: 1737
   test_total: 7841
   test_loss: 1.3314
+  trading_metrics:
+    sharpe_ratio: -2.236487
+    sortino_ratio: -3.306
+    calmar_ratio: -0.760439
+    total_return: -0.404956
+    profit_factor: 0.748265
+    max_drawdown: -0.532529
+    win_rate: 0.313665
