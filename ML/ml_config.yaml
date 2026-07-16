@@ -101,4 +101,16 @@ classification:
         probability: true
 
 
+# --- 7. INFERENCE CONFIGURATION ---
+# Everything else (data, features, target) is inherited from above.
+# This block only controls WHAT models to run and WHEN to run inference.
+inference:
+  model_type: "classification"   # Must match the trained model type above
+  models:
+    - "xgboost"
+    - "random_forest"
+    - "lightgbm"
 
+  # Date range to run inference on (independent of training dates)
+  start_date: "2026-07-01 00:00:00"
+  end_date: "2026-07-16 00:00:00"

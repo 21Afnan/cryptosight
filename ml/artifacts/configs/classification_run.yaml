@@ -6,6 +6,8 @@ val_rows: 7841
 test_rows: 7841
 leaderboard:
 - model: svm
+  model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_svm.joblib
+  prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_svm_predicted.csv
   train_accuracy: 70.08%
   train_correct: 25640
   train_total: 36589
@@ -20,9 +22,9 @@ leaderboard:
   test_correct: 5203
   test_total: 7841
   test_loss: 0.6657
-  model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_svm.joblib
-  prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_svm_predicted.csv
 - model: logistic_regression
+  model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_logistic_regression.joblib
+  prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_logistic_regression_predicted.csv
   train_accuracy: 66.00%
   train_correct: 24148
   train_total: 36589
@@ -37,9 +39,9 @@ leaderboard:
   test_correct: 4179
   test_total: 7841
   test_loss: 1.1112
-  model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_logistic_regression.joblib
-  prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_logistic_regression_predicted.csv
 - model: xgboost
+  model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_xgboost.joblib
+  prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_xgboost_predicted.csv
   train_accuracy: 70.77%
   train_correct: 25893
   train_total: 36589
@@ -54,9 +56,9 @@ leaderboard:
   test_correct: 2833
   test_total: 7841
   test_loss: 1.2328
-  model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_xgboost.joblib
-  prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_xgboost_predicted.csv
 - model: lightgbm
+  model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_lightgbm.joblib
+  prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_lightgbm_predicted.csv
   train_accuracy: 65.23%
   train_correct: 23868
   train_total: 36589
@@ -71,9 +73,9 @@ leaderboard:
   test_correct: 2624
   test_total: 7841
   test_loss: 1.2514
-  model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_lightgbm.joblib
-  prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_lightgbm_predicted.csv
 - model: decision_tree
+  model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_decision_tree.joblib
+  prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_decision_tree_predicted.csv
   train_accuracy: 57.32%
   train_correct: 20974
   train_total: 36589
@@ -88,9 +90,9 @@ leaderboard:
   test_correct: 2602
   test_total: 7841
   test_loss: 1.2661
-  model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_decision_tree.joblib
-  prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_decision_tree_predicted.csv
 - model: random_forest
+  model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_random_forest.joblib
+  prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_random_forest_predicted.csv
   train_accuracy: 59.73%
   train_correct: 21853
   train_total: 36589
@@ -105,5 +107,3 @@ leaderboard:
   test_correct: 1737
   test_total: 7841
   test_loss: 1.3314
-  model_file: D:\Neurog_Internship\cryptosight\ml\artifacts\models\BTC_15m_random_forest.joblib
-  prediction_file: D:\Neurog_Internship\cryptosight\ml\csv_files\classification\model_predicted\BTC_random_forest_predicted.csv
