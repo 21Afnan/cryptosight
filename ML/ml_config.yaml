@@ -125,35 +125,34 @@ regression:
     #    n_estimators: 100
     #    max_depth: 5
 
-    #- name: lightgbm_regressor
-    #  parameters:
-    #    n_estimators: 100
-    #    learning_rate: 0.05
-    #    verbosity: -1
+    - name: lightgbm_regressor
+      parameters:
+        n_estimators: 100
+        learning_rate: 0.05
+        verbosity: -1
 
-   # - name: linear_regression
-   #  parameters: {}          # no hyperparameters (baseline)
+    - name: linear_regression
+      parameters: {}          # no hyperparameters (baseline)
 
     - name: lstm_regressor        # Deep Learning LSTM tailored for regression (% return)
       parameters:
-        hidden_size: 128
-        num_layers: 2
-        dropout: 0.2
-        epochs: 10
-        batch_size: 64
-        learning_rate: 0.001
-        lookback_window: 60       # sequence window of past bars fed into LSTM layers
+        hidden_size: 64           # Balanced size to prevent major overfitting while preserving model capacity
+        num_layers: 1             # Reduced from 2
+        dropout: 0.0
+        epochs: 15
+        batch_size: 128
+        learning_rate: 0.0005
+        lookback_window: 15       # 15 periods sequence window (less memory/lag)
 
 
 # --- 9. INFERENCE CONFIGURATION ---
 inference:
   model_type: "regression"
   models:
-    - "xgboost_regressor"
-    - "random_forest_regressor"
+   
     - "lightgbm_regressor"
     - "linear_regression"
-    - "lstm_regressor"
+   
 
   # Set to TEST SET range → enables direct test-prediction vs inference comparison
   start_date: "2026-04-09 08:00:00"

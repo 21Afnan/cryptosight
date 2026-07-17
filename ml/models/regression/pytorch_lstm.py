@@ -84,11 +84,16 @@ def train_pytorch_lstm_regressor(X_train, y_train, X_val, y_val, X_test, y_test,
         f"Lookback: {lookback} | Epochs: {epochs}"
     )
 
+    # Convert pandas DataFrames to numpy arrays if necessary to avoid indexing warnings
+    X_train_np = X_train.values if isinstance(X_train, pd.DataFrame) else X_train
+    X_val_np   = X_val.values   if isinstance(X_val, pd.DataFrame) else X_val
+    X_test_np  = X_test.values  if isinstance(X_test, pd.DataFrame) else X_test
+
     # ── Build sliding window sequences ───────────────────────────────────────
     # Each sample is now a real temporal sequence of `lookback` past candles
-    X_train_seq, y_train_seq = build_sequences(X_train, y_train, lookback)
-    X_val_seq,   y_val_seq   = build_sequences(X_val,   y_val,   lookback)
-    X_test_seq,  y_test_seq  = build_sequences(X_test,  y_test,  lookback)
+    X_train_seq, y_train_seq = build_sequences(X_train_np, y_train, lookback)
+    X_val_seq,   y_val_seq   = build_sequences(X_val_np,   y_val,   lookback)
+    X_test_seq,  y_test_seq  = build_sequences(X_test_np,  y_test,  lookback)
 
     logger.info(
         f"Sequence shapes | Train: {X_train_seq.shape} | "

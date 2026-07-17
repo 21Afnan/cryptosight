@@ -60,13 +60,13 @@ class ClassifierPipeline:
             feature_cols = [c for c in train_df.columns if c not in ["timestamp", "target"]]
             logger.info(f"Training traditional classification models for {symbol} on {len(feature_cols)} features...")
 
-            X_train = train_df[feature_cols].values
+            X_train = train_df[feature_cols]
             y_train = train_df["target"].values
 
-            X_val = val_df[feature_cols].values
+            X_val = val_df[feature_cols]
             y_val = val_df["target"].values
 
-            X_test = test_df[feature_cols].values
+            X_test = test_df[feature_cols]
             y_test = test_df["target"].values
 
             # Map target labels [-1, 0, 1] -> [0, 1, 2] for model objective safety
