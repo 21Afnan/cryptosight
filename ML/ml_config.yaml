@@ -134,24 +134,26 @@ regression:
     - name: linear_regression
       parameters: {}          # no hyperparameters (baseline)
 
-    - name: lstm_regressor        # Deep Learning LSTM tailored for regression (% return)
-      parameters:
-        hidden_size: 64           # Balanced size to prevent major overfitting while preserving model capacity
-        num_layers: 1             # Reduced from 2
-        dropout: 0.0
-        epochs: 15
-        batch_size: 128
-        learning_rate: 0.0005
-        lookback_window: 15       # 15 periods sequence window (less memory/lag)
+   # - name: lstm_regressor        # Deep Learning LSTM tailored for regression (% return)
+   #   parameters:
+   #     hidden_size: 64           # Balanced size to prevent major overfitting while preserving model capacity
+   #     num_layers: 1             # Reduced from 2
+   #     dropout: 0.0
+   #     epochs: 15
+   #     batch_size: 128
+   #     learning_rate: 0.0005
+   #     lookback_window: 15       # 15 periods sequence window (less memory/lag)
 
 
 # --- 9. INFERENCE CONFIGURATION ---
 inference:
   model_type: "regression"
   models:
-   
-    - "lightgbm_regressor"
-    - "linear_regression"
+   - "lightgbm_regressor"
+   - "linear_regression"
+    
+    
+
    
 
   # Set to TEST SET range → enables direct test-prediction vs inference comparison

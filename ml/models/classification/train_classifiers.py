@@ -144,27 +144,9 @@ class ClassifierPipeline:
                     "test": test_pred_df
                 }
 
-                # Extract live trained hyperparameters directly from the fitted model (never copy from config)
-                try:
-                    if hasattr(model, "get_params"):
-                        trained_params = model.get_params()
-                    elif hasattr(model, "estimator") and hasattr(model.estimator, "get_params"):
-                        trained_params = model.estimator.get_params()
-                    else:
-                        trained_params = {}
-                    clean_params = {}
-                    for k, v in trained_params.items():
-                        if v is None or str(v) == "None":
-                            continue
-                        if isinstance(v, float) and np.isnan(v):
-                            continue
-                        if str(v) == "nan":
-                            continue
-                        if isinstance(v, (str, int, float, bool)):
-                            clean_params[str(k)] = round(v, 6) if isinstance(v, float) else v
-                    trained_params = clean_params
-                except Exception:
-                    trained_params = {}
+                # Extract hyperparameters directly from the model object, keeping only configured keys
+                raw_params = model.get_params() if hasattr(model, "get_params") else {}
+                trained_params = {k: v for k, v in raw_params.items() if k in params}
 
                 entry = create_leaderboard_entry(
                     task="classification",

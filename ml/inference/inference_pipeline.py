@@ -87,7 +87,7 @@ class InferencePipeline:
     def engineer_features(self, resampled_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         Engineers technical features and computes target returns.
-        Filters both DataFrames to the active inference window (>= start_date).
+        Keeps full warmup history (unclipped) so sequence models (LSTMs) can predict correctly.
         Returns: (features_df, features_with_target)
         """
         logger.info(f"Engineering technical indicators & features...")
@@ -104,12 +104,6 @@ class InferencePipeline:
         if "timestamp" not in features_with_target.columns:
             features_with_target = features_with_target.reset_index()
 
-        # Slice to inference period
-        features_df = features_df[features_df["timestamp"].astype(str) >= self.start_date].copy()
-        features_with_target = features_with_target[
-            features_with_target["timestamp"].astype(str) >= self.start_date
-        ].copy()
-
         return features_df, features_with_target
 
     def load_preprocessor(self, symbol: str) -> QuantPreprocessor:
@@ -119,16 +113,33 @@ class InferencePipeline:
             raise FileNotFoundError(f"Fitted preprocessor not found at {preproc_path}")
         return load_model(str(preproc_path))
 
+    def build_inference_sequences(self, X: np.ndarray, lookback: int) -> np.ndarray:
+        """
+        Converts unclipped 2D tabular features of shape (N, features) into
+        sliding 3D sequences of shape (N, lookback, features) expected by the LSTM.
+        For indexes < lookback, pads using the first available row features.
+        """
+        X_seqs = []
+        for i in range(len(X)):
+            if i < lookback:
+                # Pad early rows with copies of the first row to keep array shapes aligned
+                pad_len = lookback - i
+                seq = np.vstack([np.tile(X[0], (pad_len, 1)), X[0 : i]])
+            else:
+                seq = X[i - lookback : i]
+            X_seqs.append(seq)
+        return np.array(X_seqs, dtype=np.float32)
+
     def predict_model(self, symbol: str, model_name: str, X_model: pd.DataFrame,
                       features_df: pd.DataFrame) -> pd.DataFrame:
         """
         Loads the trained model checkpoint and generates prediction signals.
         Supports both scikit-learn models (.joblib) and PyTorch LSTMs (.pt).
+        Clips predictions to the requested inference window (>= start_date) before returning.
         Returns a signal DataFrame with columns ['timestamp', 'signal'].
         """
         import torch
 
-        # LSTM has a .pt extension; traditional models use .joblib
         is_lstm = (model_name == "lstm_regressor")
         ext = "pt" if is_lstm else "joblib"
         model_path = self.model_dir / f"{self.exchange}_{symbol}_{self.tf}_{self.task_type}_{model_name}.{ext}"
@@ -141,15 +152,20 @@ class InferencePipeline:
         if is_lstm:
             from cryptosight.ml.models.regression.pytorch_lstm import LSTMNet
             X_arr = X_model.values if isinstance(X_model, pd.DataFrame) else X_model
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            checkpoint = torch.load(str(model_path), map_location=device)
 
-            # Retrieve parameters from single source of truth config (ml_config.yaml)
+            # Retrieve parameters from config
             lstm_cfg = next((m for m in self.config.get("regression", {}).get("models", [])
                              if m.get("name") == "lstm_regressor"), {})
             lstm_params = lstm_cfg.get("parameters", {})
             hidden_size = int(lstm_params.get("hidden_size", 64))
             num_layers  = int(lstm_params.get("num_layers", 1))
+            lookback    = int(lstm_params.get("lookback_window", 15))
+
+            # Build sliding sequences using warmup history
+            X_seq = self.build_inference_sequences(X_arr, lookback)
+
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            checkpoint = torch.load(str(model_path), map_location=device)
 
             model = LSTMNet(input_size=X_arr.shape[1], hidden_size=hidden_size, num_layers=num_layers).to(device)
             state_dict = checkpoint["state_dict"] if (isinstance(checkpoint, dict) and "state_dict" in checkpoint) else checkpoint
@@ -157,7 +173,7 @@ class InferencePipeline:
             model.eval()
 
             with torch.no_grad():
-                raw_preds = model(torch.tensor(X_arr, dtype=torch.float32).to(device)).cpu().numpy()
+                raw_preds = model(torch.tensor(X_seq, dtype=torch.float32).to(device)).cpu().numpy()
         else:
             model = load_model(str(model_path))
             raw_preds = model.predict(X_model)
@@ -165,10 +181,14 @@ class InferencePipeline:
         # Classification targets [0, 1, 2] map back to [-1, 0, 1] for signal trading
         signals = raw_preds - 1 if self.task_type == "classification" else raw_preds
 
-        return pd.DataFrame({
+        results_df = pd.DataFrame({
             "timestamp": features_df["timestamp"].reset_index(drop=True),
             "signal":    signals
         })
+
+        # Clip predictions to the active inference window (>= start_date)
+        results_df = results_df[results_df["timestamp"].astype(str) >= self.start_date].reset_index(drop=True)
+        return results_df
 
     def evaluate_predictions(self, symbol: str, model_name: str, results_df: pd.DataFrame,
                              features_with_target: pd.DataFrame, inference_report: dict) -> None:
@@ -288,6 +308,7 @@ class InferencePipeline:
                 continue
 
             # ── STEP 2: Engineer technical indicators & targets ──────────────
+            # Kept unclipped with full warmup history
             features_df, features_with_target = self.engineer_features(resampled_df)
             if features_df.empty:
                 logger.error(f"[{symbol}] No candles in inference range. Skipping.")
@@ -303,11 +324,16 @@ class InferencePipeline:
             X_live = preprocessor.transform(features_df)
             X_model = X_live[preprocessor.feature_cols]
 
-            # ── STEP 4: Setup Combined CSV & Report tracking ──────────────────
-            combined_csv_df = features_df[["timestamp"]].copy().reset_index(drop=True)
+            # ── STEP 4: Setup Combined CSV & Report tracking (Clipped to active window) 
+            features_df_clipped = features_df[features_df["timestamp"].astype(str) >= self.start_date].copy()
+            features_with_target_clipped = features_with_target[
+                features_with_target["timestamp"].astype(str) >= self.start_date
+            ].copy()
+
+            combined_csv_df = features_df_clipped[["timestamp"]].copy().reset_index(drop=True)
             combined_csv_df["timestamp"] = pd.to_datetime(combined_csv_df["timestamp"], utc=True)
-            if "target" in features_with_target.columns:
-                target_df = features_with_target[["timestamp", "target"]].copy()
+            if "target" in features_with_target_clipped.columns:
+                target_df = features_with_target_clipped[["timestamp", "target"]].copy()
                 target_df["timestamp"] = pd.to_datetime(target_df["timestamp"], utc=True)
                 combined_csv_df = combined_csv_df.merge(target_df, on="timestamp", how="left")
                 combined_csv_df.rename(columns={"target": "actual_signal"}, inplace=True)
@@ -326,7 +352,7 @@ class InferencePipeline:
                 if results_df is None:
                     continue
 
-                self.evaluate_predictions(symbol, model_name, results_df, features_with_target, inference_report)
+                self.evaluate_predictions(symbol, model_name, results_df, features_with_target_clipped, inference_report)
 
                 # Save individual model inference CSV
                 model_csv_path = self.csv_dir / f"{self.exchange}_{symbol}_{self.tf}_{self.task_type}_{model_name}_inference.csv"

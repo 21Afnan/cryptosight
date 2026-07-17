@@ -3,6 +3,7 @@ import json
 import yaml
 import pandas as pd
 
+import numpy as np
 from cryptosight.utils.logger import get_logger
 from cryptosight.utils.config import load_config, get_ml_artifacts_dir
 from cryptosight.ml.preprocessing.features import MLFeatureBuilder
@@ -201,6 +202,12 @@ class QuantMLPipeline:
                     if m_name in models_block:
                         models_block[m_name]["trading_metrics"] = trading_metrics
                         print(f"  [{m_name}] Trading metrics injected ✓")
+                    
+                    # Also inject into the corresponding leaderboard entry for full consistency
+                    leaderboard_block = quant_pipeline_run.get(model_key, {}).get("leaderboard", [])
+                    for entry in leaderboard_block:
+                        if entry.get("model") == m_name:
+                            entry["trading_metrics"] = trading_metrics
                 else:
                     print(f"  [{m_name}] No trades — trading_metrics skipped.")
 
@@ -258,11 +265,8 @@ class QuantMLPipeline:
             )
 
             if self.model_type == "regression":
-                thresh = float(self.config.get("regression", {}).get("signal_threshold", 0.002))
-                merged["ml_signal"]  = 0
-                merged.loc[merged[pred_col] >  thresh, "ml_signal"] =  1
-                merged.loc[merged[pred_col] < -thresh, "ml_signal"] = -1
-                merged["match"] = merged["ml_signal"] == merged["inference_signal"]
+                # Compare continuous regression predictions directly to verify mathematical consistency
+                merged["match"] = np.isclose(merged[pred_col], merged["inference_signal"], atol=1e-6)
             else:
                 merged["match"] = merged[pred_col] == merged["inference_signal"]
 

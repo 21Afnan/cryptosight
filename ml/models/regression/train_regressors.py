@@ -47,23 +47,7 @@ class RegressorPipeline:
         except Exception:
             return params
 
-    def extract_hyperparams(self, model) -> dict:
-        """Extracts clean, JSON-safe hyperparameters from a fitted model."""
-        try:
-            raw = model.get_params() if hasattr(model, "get_params") else {}
-        except Exception:
-            return {}
-        result = {}
-        for k, v in raw.items():
-            if v is None or v is False or str(v) in ("None", "nan"):
-                continue
-            if isinstance(v, float) and (np.isnan(v) or v == 0.0):
-                continue
-            if isinstance(v, int) and v == 0:
-                continue
-            if isinstance(v, (str, int, float, bool)):
-                result[str(k)] = round(v, 6) if isinstance(v, float) else v
-        return result
+
 
     def save_predictions(self, df: pd.DataFrame, predictions: np.ndarray, save_path: Path) -> pd.DataFrame:
         """Saves timestamp + target + predicted_target to CSV. Returns the DataFrame."""
@@ -147,7 +131,9 @@ class RegressorPipeline:
                         self.fitted_models[model_name] = model
 
                         metrics, preds  = evaluate_regression(model, X_train, y_train, X_val, y_val, X_test, y_test)
-                        trained_params  = self.extract_hyperparams(model)
+                        # Extract hyperparameters directly from the model object, keeping only configured keys
+                        raw_params = model.get_params() if hasattr(model, "get_params") else {}
+                        trained_params = {k: v for k, v in raw_params.items() if k in params}
 
                         save_path = model_dir / f"{self.exchange}_{clean_sym}_{self.tf}_regression_{model_name}.joblib"
                         save_model(model, str(save_path))
