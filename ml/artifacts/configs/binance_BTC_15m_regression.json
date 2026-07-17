@@ -231,42 +231,6 @@
                 "test_mae": 0.001637,
                 "test_r2": -0.1617,
                 "test_total": 7841
-            },
-            {
-                "model": "lstm_regressor",
-                "hyperparameters": {
-                    "hidden_size": 64,
-                    "num_layers": 1,
-                    "epochs": 15,
-                    "batch_size": 128,
-                    "learning_rate": 0.0005,
-                    "dropout": 0.0,
-                    "lookback_window": 15
-                },
-                "trading_metrics": {
-                    "cagr": -0.35616,
-                    "calmar": -2.024709,
-                    "max_drawdown": -0.175907,
-                    "profit_factor": 0.783497,
-                    "recovery_factor": 0.759239,
-                    "risk_of_ruin": 0.0,
-                    "sharpe": -1.863751,
-                    "sortino": -2.812746,
-                    "win_rate": 0.320988
-                },
-                "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\binance_BTC_15m_regression_lstm_regressor.pt",
-                "train_rmse": 0.0043,
-                "train_mae": 0.003394,
-                "train_r2": -2.3127,
-                "train_total": 36574,
-                "val_rmse": 0.005838,
-                "val_mae": 0.004585,
-                "val_r2": -2.6731,
-                "val_total": 7825,
-                "test_rmse": 0.005232,
-                "test_mae": 0.004195,
-                "test_r2": -4.5328,
-                "test_total": 7826
             }
         ],
         "models": {
@@ -334,45 +298,6 @@
                     "sortino": -4.973608,
                     "win_rate": 0.275
                 }
-            },
-            "lstm_regressor": {
-                "hyperparameters": {
-                    "hidden_size": 64,
-                    "num_layers": 1,
-                    "epochs": 15,
-                    "batch_size": 128,
-                    "learning_rate": 0.0005,
-                    "dropout": 0.0,
-                    "lookback_window": 15
-                },
-                "accuracy_metrics": {
-                    "train_rmse": 0.0043,
-                    "train_mae": 0.003394,
-                    "train_r2": -2.3127,
-                    "train_total": 36574,
-                    "val_rmse": 0.005838,
-                    "val_mae": 0.004585,
-                    "val_r2": -2.6731,
-                    "val_total": 7825,
-                    "test_rmse": 0.005232,
-                    "test_mae": 0.004195,
-                    "test_r2": -4.5328,
-                    "test_total": 7826
-                },
-                "artifacts": {
-                    "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\binance_BTC_15m_regression_lstm_regressor.pt"
-                },
-                "trading_metrics": {
-                    "cagr": -0.35616,
-                    "calmar": -2.024709,
-                    "max_drawdown": -0.175907,
-                    "profit_factor": 0.783497,
-                    "recovery_factor": 0.759239,
-                    "risk_of_ruin": 0.0,
-                    "sharpe": -1.863751,
-                    "sortino": -2.812746,
-                    "win_rate": 0.320988
-                }
             }
         }
     },
@@ -416,21 +341,15 @@
         "models": {
             "lightgbm_regressor": {
                 "total_rows": 7840,
-                "rmse": 0.002402,
-                "mae": 0.001645,
-                "r2": -0.1668
+                "rmse": 0.002397,
+                "mae": 0.001637,
+                "r2": -0.1616
             },
             "linear_regression": {
                 "total_rows": 7840,
                 "rmse": 0.00223,
                 "mae": 0.001464,
-                "r2": -0.0053
-            },
-            "lstm_regressor": {
-                "total_rows": 7840,
-                "rmse": 0.005286,
-                "mae": 0.004245,
-                "r2": -4.6501
+                "r2": -0.0056
             }
         }
     }

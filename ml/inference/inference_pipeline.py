@@ -34,6 +34,7 @@ class InferencePipeline:
         self.exchange  = str(data_cfg.get("exchange")).lower().strip()
         self.timeframe = str(data_cfg.get("timeframe")).strip()        # base: e.g. "1m"
         self.tf        = str(data_cfg.get("target_timeframe")).strip()  # target: e.g. "15m"
+        self.train_start_date = str(data_cfg.get("start_date")).strip() # e.g. "2025-01-01"
 
         # Read inference configurations
         inf_cfg = self.config.get("inference", {})
@@ -58,26 +59,14 @@ class InferencePipeline:
         logger.info(f"InferencePipeline initialized | task={self.task_type} | models={self.models}")
 
     def fetch_data(self, symbol: str) -> pd.DataFrame:
-        """Downloads base timeframe data (with 10-day warmup) and resamples to target timeframe."""
-        logger.info(f"[{symbol}] Fetching base data ({self.start_date} to {self.end_date})...")
+        """Downloads base timeframe data (starting from training start_date to align indicator warmup memory)."""
+        logger.info(f"[{symbol}] Fetching base data from {self.train_start_date} to {self.end_date}...")
         dl = Downloader(exchange=self.exchange, symbol=symbol, timeframe=self.timeframe)
 
-        # 10-day warmup prevents indicator boundary issues (NaNs)
-        try:
-            warmup_start = (
-                datetime.strptime(self.start_date, "%Y-%m-%d %H:%M:%S") - timedelta(days=10)
-            ).strftime("%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            # Fall back if start_date is date-only string
-            warmup_start = (
-                datetime.strptime(self.start_date, "%Y-%m-%d") - timedelta(days=10)
-            ).strftime("%Y-%m-%d")
-        except Exception:
-            warmup_start = self.start_date
-
+        # Download from training start date to match EMA/MACD warmups exactly
         _, resampled_df = dl.resample(
             target_timeframe=self.tf,
-            start_time=warmup_start,
+            start_time=self.train_start_date,
             end_time=self.end_date,
             max_retries=3,
             retry_delay=5
@@ -85,14 +74,10 @@ class InferencePipeline:
         return resampled_df
 
     def engineer_features(self, resampled_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """
-        Engineers technical features and computes target returns.
-        Keeps full warmup history (unclipped) so sequence models (LSTMs) can predict correctly.
-        Returns: (features_df, features_with_target)
-        """
+        """Engineers technical features and computes target returns on contiguous history."""
         logger.info(f"Engineering technical indicators & features...")
         inf_cfg = copy.deepcopy(self.config)
-        inf_cfg["data"]["start_date"] = self.start_date
+        inf_cfg["data"]["start_date"] = self.train_start_date
         inf_cfg["data"]["end_date"]   = self.end_date
 
         builder = MLFeatureBuilder(config=inf_cfg)
@@ -115,14 +100,14 @@ class InferencePipeline:
 
     def build_inference_sequences(self, X: np.ndarray, lookback: int) -> np.ndarray:
         """
-        Converts unclipped 2D tabular features of shape (N, features) into
+        Converts 2D tabular features of shape (N, features) into
         sliding 3D sequences of shape (N, lookback, features) expected by the LSTM.
         For indexes < lookback, pads using the first available row features.
         """
         X_seqs = []
         for i in range(len(X)):
             if i < lookback:
-                # Pad early rows with copies of the first row to keep array shapes aligned
+                # Pad early rows with copies of the first row
                 pad_len = lookback - i
                 seq = np.vstack([np.tile(X[0], (pad_len, 1)), X[0 : i]])
             else:
@@ -135,7 +120,6 @@ class InferencePipeline:
         """
         Loads the trained model checkpoint and generates prediction signals.
         Supports both scikit-learn models (.joblib) and PyTorch LSTMs (.pt).
-        Clips predictions to the requested inference window (>= start_date) before returning.
         Returns a signal DataFrame with columns ['timestamp', 'signal'].
         """
         import torch
@@ -161,7 +145,7 @@ class InferencePipeline:
             num_layers  = int(lstm_params.get("num_layers", 1))
             lookback    = int(lstm_params.get("lookback_window", 15))
 
-            # Build sliding sequences using warmup history
+            # Build sliding sequences
             X_seq = self.build_inference_sequences(X_arr, lookback)
 
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -185,9 +169,6 @@ class InferencePipeline:
             "timestamp": features_df["timestamp"].reset_index(drop=True),
             "signal":    signals
         })
-
-        # Clip predictions to the active inference window (>= start_date)
-        results_df = results_df[results_df["timestamp"].astype(str) >= self.start_date].reset_index(drop=True)
         return results_df
 
     def evaluate_predictions(self, symbol: str, model_name: str, results_df: pd.DataFrame,
@@ -301,35 +282,25 @@ class InferencePipeline:
         all_results = {}
 
         for symbol in self.symbols:
-            # ── STEP 1: Fetch base market data & resample ───────────────────
+            # ── STEP 1: Fetch base market data & resample starting from training start_date ───────────────────
             resampled_df = self.fetch_data(symbol)
             if resampled_df is None or resampled_df.empty:
                 logger.error(f"[{symbol}] No data loaded. Skipping.")
                 continue
 
-            # ── STEP 2: Engineer technical indicators & targets ──────────────
-            # Kept unclipped with full warmup history
+            # ── STEP 2: Engineer technical indicators & targets (full contiguous history) ──────────────
             features_df, features_with_target = self.engineer_features(resampled_df)
             if features_df.empty:
-                logger.error(f"[{symbol}] No candles in inference range. Skipping.")
+                logger.error(f"[{symbol}] No candles engineered. Skipping.")
                 continue
 
-            # ── STEP 3: Load Preprocessor Scaler & transform live data ────────
-            try:
-                preprocessor = self.load_preprocessor(symbol)
-            except Exception as e:
-                logger.error(f"[{symbol}] Preprocessor load failed: {e}. Skipping.")
-                continue
-
-            X_live = preprocessor.transform(features_df)
-            X_model = X_live[preprocessor.feature_cols]
-
-            # ── STEP 4: Setup Combined CSV & Report tracking (Clipped to active window) 
-            features_df_clipped = features_df[features_df["timestamp"].astype(str) >= self.start_date].copy()
+            # ── STEP 3: Slice to inference range BEFORE preprocessing transform to match training split isolation
+            features_df_clipped = features_df[features_df["timestamp"].astype(str) >= self.start_date].copy().reset_index(drop=True)
             features_with_target_clipped = features_with_target[
                 features_with_target["timestamp"].astype(str) >= self.start_date
-            ].copy()
+            ].copy().reset_index(drop=True)
 
+            # ── STEP 4: Setup Combined CSV & Report tracking (using clipped target window) 
             combined_csv_df = features_df_clipped[["timestamp"]].copy().reset_index(drop=True)
             combined_csv_df["timestamp"] = pd.to_datetime(combined_csv_df["timestamp"], utc=True)
             if "target" in features_with_target_clipped.columns:
@@ -337,6 +308,16 @@ class InferencePipeline:
                 target_df["timestamp"] = pd.to_datetime(target_df["timestamp"], utc=True)
                 combined_csv_df = combined_csv_df.merge(target_df, on="timestamp", how="left")
                 combined_csv_df.rename(columns={"target": "actual_signal"}, inplace=True)
+
+            try:
+                preprocessor = self.load_preprocessor(symbol)
+            except Exception as e:
+                logger.error(f"[{symbol}] Preprocessor load failed: {e}. Skipping.")
+                continue
+
+            # Scale/transform starting exactly at inference start_date (0 warmup for scaling, matching test_prep)
+            X_live = preprocessor.transform(features_df_clipped)
+            X_model = X_live[preprocessor.feature_cols]
 
             inference_report = {
                 "symbol":    symbol,
@@ -348,7 +329,8 @@ class InferencePipeline:
 
             # ── STEP 5: Run predictions, evaluate metrics, and save ledger CSVs
             for model_name in self.models:
-                results_df = self.predict_model(symbol, model_name, X_model, features_df)
+                # predict_model will output predictions for the clipped features range
+                results_df = self.predict_model(symbol, model_name, X_model, features_df_clipped)
                 if results_df is None:
                     continue
 
