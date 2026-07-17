@@ -136,10 +136,13 @@ class ClassifierPipeline:
                 pred_df = self.save_predictions(val_df, val_predictions, pred_save_path)
 
                 test_pred_save_path = pred_csv_dir / f"{self.exchange}_{clean_sym}_{self.tf}_classification_{model_name}_test_predicted.csv"
-                self.save_predictions(test_df, test_predictions, test_pred_save_path)
+                test_pred_df = self.save_predictions(test_df, test_predictions, test_pred_save_path)
 
-                # Store in returned dictionary (validation DataFrame with predicted column for backtesting)
-                all_predictions[clean_sym][model_name] = pred_df
+                # Store in returned dictionary both val and test DataFrames
+                all_predictions[clean_sym][model_name] = {
+                    "val": pred_df,
+                    "test": test_pred_df
+                }
 
                 # Extract live trained hyperparameters directly from the fitted model (never copy from config)
                 try:
