@@ -9,7 +9,6 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from cryptosight.ml.evaluation.evaluator import evaluate_classification, create_leaderboard_entry
-from cryptosight.stats.metrices import compute_all_metrics
 import lightgbm as lgb
 import xgboost as xgb
 
@@ -34,7 +33,7 @@ class ClassifierPipeline:
 
     def save_predictions(self, df: pd.DataFrame, predictions: np.ndarray, save_path: Path) -> pd.DataFrame:
         """Helper to copy dataframe, set actual and predicted target columns, and save to CSV."""
-        pred_df = df.copy()
+        pred_df = df
         pred_df["actual"] = df["target"]
         pred_df["predicted"] = predictions
         save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,6 +54,7 @@ class ClassifierPipeline:
 
         for symbol in self.symbols:
             clean_sym = str(symbol).upper().strip()
+            all_predictions[clean_sym] = {}
 
             # Extract features and target values
             feature_cols = [c for c in train_df.columns if c not in ["timestamp", "target"]]
@@ -139,7 +139,7 @@ class ClassifierPipeline:
                 self.save_predictions(test_df, test_predictions, test_pred_save_path)
 
                 # Store in returned dictionary (validation DataFrame with predicted column for backtesting)
-                all_predictions[model_name] = pred_df
+                all_predictions[clean_sym][model_name] = pred_df
 
                 # Extract live trained hyperparameters directly from the fitted model (never copy from config)
                 try:
@@ -163,42 +163,6 @@ class ClassifierPipeline:
                 except Exception:
                     trained_params = {}
 
-                # Compute exact 9 requested QuantStats trading metrics from out-of-sample strategy returns
-                try:
-                    if "close" in test_df.columns:
-                        asset_returns = test_df["close"].pct_change().fillna(0.0)
-                    else:
-                        asset_returns = pd.Series(0.0, index=test_df.index)
-                    strat_returns = asset_returns * pd.Series(test_predictions, index=test_df.index).shift(1).fillna(0.0)
-                    raw_stats = compute_all_metrics(strat_returns, is_percentage=False)
-                    
-                    desired_metrics = {
-                        "Sharpe Ratio": "sharpe",
-                        "Sortino Ratio": "sortino",
-                        "Calmar Ratio": "calmar",
-                        "Maximum Drawdown": "max_drawdown",
-                        "CAGR": "cagr",
-                        "Profit Factor": "profit_factor",
-                        "Win Rate": "win_rate",
-                        "Recovery Factor": "recovery_factor",
-                        "Risk of Ruin": "risk_of_ruin"
-                    }
-                    trading_stats = {}
-                    for label, key in desired_metrics.items():
-                        val = raw_stats.get(key)
-                        if val is not None and not isinstance(val, dict):
-                            if key in ["max_drawdown", "cagr", "win_rate", "risk_of_ruin"]:
-                                trading_stats[label] = f"{float(val) * 100.0:.2f}%"
-                            elif isinstance(val, (int, float)):
-                                trading_stats[label] = round(float(val), 4)
-                            else:
-                                trading_stats[label] = val
-                        else:
-                            trading_stats[label] = "N/A"
-                except Exception as e_stat:
-                    logger.warning(f"Could not compute QuantStats trading metrics for {model_name}: {e_stat}")
-                    trading_stats = {label: "N/A" for label in ["Sharpe Ratio", "Sortino Ratio", "Calmar Ratio", "Maximum Drawdown", "CAGR", "Profit Factor", "Win Rate", "Recovery Factor", "Risk of Ruin"]}
-
                 entry = create_leaderboard_entry(
                     task="classification",
                     model_name=model_name,
@@ -206,7 +170,7 @@ class ClassifierPipeline:
                     model_save_path=model_save_path,
                     pred_save_path=pred_save_path,
                     hyperparameters=trained_params,
-                    trading_metrics=trading_stats
+                    trading_metrics={}
                 )
                 entry.pop("prediction_file", None)
                 leaderboard.append(entry)

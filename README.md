@@ -158,14 +158,17 @@ Click on any expandable card below to inspect the complete mathematical, archite
 <summary><b>6️⃣ Quantitative ML Feature & Target Engine (`cryptosight.ml`)</b></summary>
 <br>
 
-* **Decoupled Single Source of Truth**: Central `main.py` orchestrates disk I/O and configuration (`load_config`), feeding `MLFeatureBuilder` (`features.py`).
+* **Decoupled Single Source of Truth**: Central `main.py` orchestrates disk I/O and configuration (`ml_config.yaml`), passing raw parameters to specialized sub-engines.
 * **3-Step In-Memory Quant Flow**:
-  1. *Resample*: Converts `1m` database bars into any target timeframe (`15m`, `1h`, `4h`).
-  2. *Lagged Features (`.shift(1)`)*: Calculates `EMA`, `RSI`, `MACD`, `DOJI`, and `ENGULFING` patterns, immediately shifting all features by 1 period to guarantee zero data leakage.
+  1. *Resample*: Converts `1m` database bars into target timeframes (`15m`, `1h`, `4h`).
+  2. *Lagged Features (`.shift(1)`)*: Computes `EMA`, `RSI`, `MACD`, `DOJI`, etc., immediately shifting all features by 1 period to mathematically prevent data leakage.
   3. *Target Paradigms*:
-     * **Regression (Log Return)**: Continuous log return (`np.log(Close_future / Close_current)`) shifted `-horizon` bars into the future.
-     * **Classification (Threshold Gate)**: Directional classes (`+1` Buy, `-1` Sell, `0` Hold) gated by `threshold: 0.002` (`0.20%`) so labels only trigger when price movement exceeds broker commissions and slippage.
-     * **TimeSeries**: Raw future price sequence shifting (`shift(-horizon)`).
+     * **Regression (Log Return)**: Continuous percentage targets for regression predictors.
+     * **Classification (Threshold Gate)**: Directional classes (`+1` Buy, `-1` Sell, `0` Hold) gated by a strict `threshold: 0.002` to overcome broker commissions.
+* **Advanced Multi-Paradigm Modeling**:
+  * *Traditional ML*: Scikit-Learn pipelines evaluating `XGBoost`, `LightGBM`, `RandomForest`, and `LogisticRegression`.
+  * *Deep Learning*: Custom PyTorch `LSTMNet` architectures utilizing $n$-period sliding sequence windows (`Lookback = 60`) dynamically generated for memory-efficient forward passes.
+* **Master JSON & Modular Signals**: Generates a single unified `master_pipeline.json` logging hyperparameter configurations and accuracy stats (`RMSE, R2`). Decouples inference and discrete signal generation (`regression_signals.py`) into independent automated modules mapped directly to the `backtesting` engine.
 </details>
 
 <details>
@@ -238,11 +241,16 @@ cryptosight/
 ├── signals/                       # YAML-driven quant signal generator & multi-crossover rule engine
 ├── backtesting/                   # Vectorized 10-step backtester modeling commissions, slippage & SQL ledger
 ├── sentiment/                     # PRAW Reddit scraper, text cleaning engine & Hugging Face FinBERT classifier
-├── ml/                            # Single-responsibility quant ML pipeline: resampler -> features -> targets
-│   ├── main.py                    # Master I/O orchestrator and configuration loader
-│   ├── features.py                # MLFeatureBuilder (Resampler + .shift(1) features + Log Return targets)
-│   ├── ml_config.yaml             # YAML specifications for timeframes, features, and target horizons
-│   └── datasets/                  # Auto-generated CSV datasets ready for model training
+├── ml/                            # Comprehensive end-to-end Machine Learning ecosystem
+│   ├── main.py                    # Master orchestrator for feature generation, chron-splitting, training, and inference
+│   ├── ml_config.yaml             # Centralized YAML spec for features, models, splits, and signal thresholds
+│   ├── preprocessing/             # Robust in-memory QuantPreprocessors and MLFeatureBuilders
+│   ├── models/                    # Modular training pipelines
+│   │   ├── classification/        # Classifier pipelines (XGB, LGBM, RF, Logistic)
+│   │   └── regression/            # Regressor pipelines & PyTorch LSTM with dynamic sliding sequence windows
+│   ├── inference/                 # Standalone out-of-sample forward-inference engine (`inference_pipeline.py`)
+│   ├── signals/                   # Discrete 1, 0, -1 trading signal generators mapping ML outputs to backtesting
+│   └── evaluation/                # Master JSON report builders linking hyperparameters to evaluation metrics
 ├── preprocessing/                 # Preprocessing benchmark suite & multi-model evaluation leaderboard
 │   ├── pp.config.yaml             # YAML configurations for methods, model tasks & threshold gates
 │   ├── main.py                    # Entry point executing stationarity -> transforms -> PnL leaderboard

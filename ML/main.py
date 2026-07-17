@@ -170,7 +170,7 @@ def orchestrate_ml_pipeline(config_path: str | Path = None) -> dict[str, pd.Data
                 if model_type == "regression":
                     try:
                         from cryptosight.ml.signals.regression_signals import generate_regression_signals
-                        test_preds_only = {m: dfs["test"] for m, dfs in val_predictions.items()}
+                        test_preds_only = {m: dfs["test"] for m, dfs in val_predictions.get(clean_sym, {}).items()}
                         generate_regression_signals(test_preds_only, config, clean_sym)
                     except Exception as e_sig:
                         print(f"  Could not generate regression signals: {e_sig}")
@@ -187,7 +187,7 @@ def orchestrate_ml_pipeline(config_path: str | Path = None) -> dict[str, pd.Data
 
                     test_pred_dir = out_dir / model_type / "model_predicted"
 
-                    for model_name, dfs in val_predictions.items():
+                    for model_name, dfs in val_predictions.get(clean_sym, {}).items():
                         test_csv = test_pred_dir / f"{exchange}_{clean_sym}_{clean_tf}_{model_type}_{model_name}_test_predicted.csv"
                         inf_key = f"{clean_sym}_{model_name}"
 

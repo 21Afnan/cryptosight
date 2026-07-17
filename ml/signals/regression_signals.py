@@ -16,7 +16,7 @@ def generate_regression_signals(predictions_dict: dict, config: dict, symbol: st
     threshold = float(config.get("regression", {}).get("signal_threshold", 0.002))
     clean_sym = str(symbol).upper().strip()
 
-    base_dir = Path(__file__).resolve().parent.parent.parent / "csv_files" / "regression"
+    base_dir = Path(__file__).resolve().parent.parent / "csv_files" / "regression"
     signal_dir = base_dir / "signals"
     signal_dir.mkdir(parents=True, exist_ok=True)
 

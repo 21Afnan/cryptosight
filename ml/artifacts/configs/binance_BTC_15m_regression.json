@@ -1,0 +1,274 @@
+{
+    "1_dataset_info": {
+        "symbol": "BTC",
+        "exchange": "binance",
+        "base_timeframe": "1m",
+        "target_timeframe": "15m",
+        "start_date": "2025-01-01",
+        "end_date": "2026-06-30",
+        "total_dataset_rows": 52270,
+        "features_generated_count": 13,
+        "features_summary": {
+            "ohlcv": "enabled",
+            "features_list": [
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "ind_EMA_20",
+                "ind_EMA_50",
+                "ind_RSI_14",
+                "ind_MACD_12_26_9",
+                "ind_MACD_SIGNAL_12_26_9",
+                "ind_MACD_HIST_12_26_9",
+                "pat_DOJI",
+                "pat_BULLISH_ENGULFING"
+            ],
+            "indicators": [
+                {
+                    "name": "EMA",
+                    "parameters": {
+                        "timeperiod": 20
+                    }
+                },
+                {
+                    "name": "EMA",
+                    "parameters": {
+                        "timeperiod": 50
+                    }
+                },
+                {
+                    "name": "RSI",
+                    "parameters": {
+                        "timeperiod": 14
+                    }
+                },
+                {
+                    "name": "MACD",
+                    "parameters": {
+                        "fastperiod": 12,
+                        "slowperiod": 26,
+                        "signalperiod": 9
+                    }
+                }
+            ],
+            "patterns": [
+                "DOJI",
+                "BULLISH_ENGULFING"
+            ]
+        }
+    },
+    "2_preprocessing_info": {
+        "splitting_ratios": {
+            "train_ratio": 0.7,
+            "val_ratio": 0.15,
+            "test_ratio": 0.15
+        },
+        "chronological_splits": {
+            "train": {
+                "rows": 36589,
+                "start_timestamp": "2025-01-01 12:30:00+00:00",
+                "end_timestamp": "2026-01-17 15:30:00+00:00"
+            },
+            "validation": {
+                "rows": 7840,
+                "start_timestamp": "2026-01-17 15:45:00+00:00",
+                "end_timestamp": "2026-04-09 07:30:00+00:00"
+            },
+            "test": {
+                "rows": 7841,
+                "start_timestamp": "2026-04-09 07:45:00+00:00",
+                "end_timestamp": "2026-06-29 23:45:00+00:00"
+            }
+        },
+        "scaler_joblib_path": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\preprocessors\\binance_BTC_15m_preprocessor.joblib",
+        "preprocessor_parameters": {
+            "winsor_limit": 0.01,
+            "frac_step": 0.05,
+            "feature_cols": [
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "ind_EMA_20",
+                "ind_EMA_50",
+                "ind_RSI_14",
+                "ind_MACD_12_26_9",
+                "ind_MACD_SIGNAL_12_26_9",
+                "ind_MACD_HIST_12_26_9",
+                "pat_DOJI",
+                "pat_BULLISH_ENGULFING"
+            ],
+            "optimal_d_values": {
+                "open": 0.15,
+                "high": 0.15,
+                "low": 0.15,
+                "close": 0.15,
+                "volume": 0.0,
+                "ind_EMA_20": 0.15,
+                "ind_EMA_50": 0.2,
+                "ind_RSI_14": 0.0,
+                "ind_MACD_12_26_9": 0.0,
+                "ind_MACD_SIGNAL_12_26_9": 0.0,
+                "ind_MACD_HIST_12_26_9": 0.0,
+                "pat_DOJI": 0.0,
+                "pat_BULLISH_ENGULFING": 0.0
+            },
+            "winsor_bounds": {
+                "open": [
+                    27519.052853028887,
+                    43766.057852402955
+                ],
+                "high": [
+                    27637.474334717535,
+                    43824.27326295436
+                ],
+                "low": [
+                    27398.85535171496,
+                    43691.11951322617
+                ],
+                "close": [
+                    27519.038155867027,
+                    43745.02915719114
+                ],
+                "volume": [
+                    22.4037548,
+                    1344.8581456000081
+                ],
+                "ind_EMA_20": [
+                    27692.87005918933,
+                    43698.036756763286
+                ],
+                "ind_EMA_50": [
+                    19521.93817027277,
+                    30984.369959756164
+                ],
+                "ind_RSI_14": [
+                    22.554764526793566,
+                    77.01390746108747
+                ],
+                "ind_MACD_12_26_9": [
+                    -803.0873873140989,
+                    670.6159217723018
+                ],
+                "ind_MACD_SIGNAL_12_26_9": [
+                    -755.7592356950007,
+                    619.3139559625348
+                ],
+                "ind_MACD_HIST_12_26_9": [
+                    -228.59581004125837,
+                    214.3662415240146
+                ],
+                "pat_DOJI": [
+                    0.0,
+                    100.0
+                ],
+                "pat_BULLISH_ENGULFING": [
+                    0.0,
+                    100.0
+                ]
+            }
+        }
+    },
+    "3_regression_models": {
+        "leaderboard": [
+            {
+                "model": "lstm_regressor",
+                "hyperparameters": {
+                    "hidden_size": 128,
+                    "num_layers": 2,
+                    "epochs": 10,
+                    "batch_size": 64,
+                    "learning_rate": 0.001,
+                    "dropout": 0.2,
+                    "lookback_window": 60
+                },
+                "trading_metrics": {},
+                "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\binance_BTC_15m_regression_lstm_regressor.pt",
+                "train_rmse": 0.002608,
+                "train_mae": 0.001846,
+                "train_r2": -0.2176,
+                "train_total": 36529,
+                "val_rmse": 0.00325,
+                "val_mae": 0.002231,
+                "val_r2": -0.1319,
+                "val_total": 7780,
+                "test_rmse": 0.002496,
+                "test_mae": 0.001791,
+                "test_r2": -0.2638,
+                "test_total": 7781
+            }
+        ],
+        "models": {
+            "lstm_regressor": {
+                "hyperparameters": {
+                    "hidden_size": 128,
+                    "num_layers": 2,
+                    "epochs": 10,
+                    "batch_size": 64,
+                    "learning_rate": 0.001,
+                    "dropout": 0.2,
+                    "lookback_window": 60
+                },
+                "accuracy_metrics": {
+                    "train_rmse": 0.002608,
+                    "train_mae": 0.001846,
+                    "train_r2": -0.2176,
+                    "train_total": 36529,
+                    "val_rmse": 0.00325,
+                    "val_mae": 0.002231,
+                    "val_r2": -0.1319,
+                    "val_total": 7780,
+                    "test_rmse": 0.002496,
+                    "test_mae": 0.001791,
+                    "test_r2": -0.2638,
+                    "test_total": 7781
+                },
+                "artifacts": {
+                    "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\binance_BTC_15m_regression_lstm_regressor.pt"
+                }
+            }
+        }
+    },
+    "4_system_configs": {
+        "backtesting_config": {
+            "exchange": "bybit",
+            "symbol": "btc",
+            "timeframe": "1m",
+            "start_time": "2026-04-01",
+            "end_time": "2026-06-01",
+            "initial_balance": 10000.0,
+            "position_size": {
+                "type": "fixed_percentage",
+                "value": 10.0
+            },
+            "commission": 0.0005,
+            "slippage": 0.0002,
+            "allow_long": true,
+            "allow_short": true,
+            "max_open_positions": 1,
+            "take_profit": {
+                "type": "percentage",
+                "value": 2.0
+            },
+            "stop_loss": {
+                "type": "percentage",
+                "value": 1.0
+            },
+            "entry_price": "next_open",
+            "exit_price": "next_open"
+        }
+    },
+    "inference_report": {
+        "symbol": "BTC",
+        "timeframe": "15m",
+        "task_type": "regression",
+        "period": {
+            "start": "2026-04-09 08:00:00",
+            "end": "2026-06-30 00:00:00"
+        },
+        "models": {}
+    }
+}

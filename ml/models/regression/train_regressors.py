@@ -50,7 +50,16 @@ class RegressorPipeline:
             pred_df["timestamp"] = df.index
 
         pred_df["target"] = df["target"].values if "target" in df.columns else np.nan
-        pred_df["predicted_target"] = predictions
+        
+        diff = len(df) - len(predictions)
+        if diff > 0:
+            padded_preds = np.pad(predictions, (diff, 0), constant_values=np.nan)
+            pred_df["predicted_target"] = padded_preds
+        else:
+            pred_df["predicted_target"] = predictions
+
+        # Drop NaNs before saving so we only keep valid prediction rows (crucial for LSTM sliding windows)
+        pred_df = pred_df.dropna(subset=["predicted_target"])
 
         save_path.parent.mkdir(parents=True, exist_ok=True)
         pred_df.to_csv(save_path, index=False, encoding="utf-8")
@@ -67,6 +76,7 @@ class RegressorPipeline:
 
         for symbol in self.symbols:
             clean_sym = str(symbol).upper().strip()
+            all_predictions[clean_sym] = {}
             leaderboard = []
 
             feature_cols = [c for c in train_df.columns if c not in ["timestamp", "target"]]
@@ -146,7 +156,7 @@ class RegressorPipeline:
                 test_pred_save_path = pred_csv_dir / f"{self.exchange}_{clean_sym}_{self.tf}_regression_{model_name}_test_predicted.csv"
                 test_pred_df = self.save_predictions(test_df, test_predictions, test_pred_save_path)
 
-                all_predictions[model_name] = {
+                all_predictions[clean_sym][model_name] = {
                     "val": pred_df,
                     "test": test_pred_df
                 }
