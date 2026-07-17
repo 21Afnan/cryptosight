@@ -11,9 +11,9 @@ def generate_regression_signals(predictions_dict: dict, config: dict, symbol: st
     
     predictions_dict: dict mapping model_name to its test prediction DataFrame.
     """
-    exchange = str(config.get("data", {}).get("exchange", "binance")).lower().strip()
-    tf = str(config.get("data", {}).get("target_timeframe", "15m")).lower().strip()
-    threshold = float(config.get("regression", {}).get("signal_threshold", 0.002))
+    exchange = str(config.get("data", {}).get("exchange")).lower().strip()
+    tf = str(config.get("data", {}).get("target_timeframe")).lower().strip()
+    threshold = float(config.get("regression", {}).get("signal_threshold"))
     clean_sym = str(symbol).upper().strip()
 
     base_dir = Path(__file__).resolve().parent.parent / "csv_files" / "regression"
