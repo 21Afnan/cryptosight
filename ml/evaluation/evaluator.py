@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.metrics import accuracy_score, precision_score, recall_score, log_loss
+from sklearn.metrics import accuracy_score, precision_score, recall_score, log_loss, mean_squared_error, mean_absolute_error, r2_score
 
 def evaluate_classification(model, X_train, y_train, X_val, y_val, X_test, y_test):
     """
@@ -65,13 +65,49 @@ def evaluate_classification(model, X_train, y_train, X_val, y_val, X_test, y_tes
 
     return metrics, predictions
 
-def create_leaderboard_entry(task: str, model_name: str, metrics: dict, model_save_path: str, pred_save_path: str, hyperparameters: dict = None) -> dict:
+
+def evaluate_regression(model, X_train, y_train, X_val, y_val, X_test, y_test):
+    """
+    Evaluates a sklearn-compatible regression model on train, validation, and test datasets.
+    Returns a dictionary of formatted metrics and continuous prediction arrays.
+    NOTE: For lstm_regressor (PyTorch), metrics are computed inside pytorch_lstm.py directly.
+    """
+    train_preds = model.predict(X_train)
+    val_preds   = model.predict(X_val)
+    test_preds  = model.predict(X_test)
+
+    metrics = {
+        "train_rmse":  round(float(np.sqrt(mean_squared_error(y_train, train_preds))), 6),
+        "val_rmse":    round(float(np.sqrt(mean_squared_error(y_val,   val_preds))),   6),
+        "test_rmse":   round(float(np.sqrt(mean_squared_error(y_test,  test_preds))),  6),
+        "train_mae":   round(float(mean_absolute_error(y_train, train_preds)), 6),
+        "val_mae":     round(float(mean_absolute_error(y_val,   val_preds)),   6),
+        "test_mae":    round(float(mean_absolute_error(y_test,  test_preds)),  6),
+        "train_r2":    round(float(r2_score(y_train, train_preds)), 4),
+        "val_r2":      round(float(r2_score(y_val,   val_preds)),   4),
+        "test_r2":     round(float(r2_score(y_test,  test_preds)),  4),
+        "total_train": int(len(y_train)),
+        "total_val":   int(len(y_val)),
+        "total_test":  int(len(y_test))
+    }
+
+    predictions = {
+        "train_preds": train_preds,
+        "val_preds":   val_preds,
+        "test_preds":  test_preds
+    }
+
+    return metrics, predictions
+
+
+def create_leaderboard_entry(task: str, model_name: str, metrics: dict, model_save_path: str, pred_save_path: str, hyperparameters: dict = None, trading_metrics: dict = None) -> dict:
     """
     Creates a standardized leaderboard dictionary entry for any model type.
     """
     entry = {
         "model": model_name,
         "hyperparameters": hyperparameters or {},
+        "trading_metrics": trading_metrics or {},
         "model_file": str(model_save_path),
         "prediction_file": str(pred_save_path)
     }
@@ -96,7 +132,19 @@ def create_leaderboard_entry(task: str, model_name: str, metrics: dict, model_sa
             "test_loss": round(metrics.get('test_loss', 0), 4),
         })
     elif task == "regression":
-        # Regression metrics formatting will be added here
-        pass
+        entry.update({
+            "train_rmse":  metrics.get("train_rmse"),
+            "train_mae":   metrics.get("train_mae"),
+            "train_r2":    metrics.get("train_r2"),
+            "train_total": metrics.get("total_train"),
+            "val_rmse":    metrics.get("val_rmse"),
+            "val_mae":     metrics.get("val_mae"),
+            "val_r2":      metrics.get("val_r2"),
+            "val_total":   metrics.get("total_val"),
+            "test_rmse":   metrics.get("test_rmse"),
+            "test_mae":    metrics.get("test_mae"),
+            "test_r2":     metrics.get("test_r2"),
+            "test_total":  metrics.get("total_test"),
+        })
 
     return entry

@@ -2,9 +2,11 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from datetime import datetime, timedelta
-from sklearn.metrics import precision_score, recall_score
+from sklearn.metrics import precision_score, recall_score, mean_squared_error, mean_absolute_error, r2_score
+import json
+import copy
 
-from cryptosight.utils.config import load_config, get_ml_artifacts_dir, save_config_artifact
+from cryptosight.utils.config import load_config, get_ml_artifacts_dir
 from cryptosight.ml.preprocessing.preproc import QuantPreprocessor
 from cryptosight.ml.models.model_utills import load_model
 from cryptosight.utils.logger import get_logger
@@ -62,6 +64,8 @@ class InferencePipeline:
         all_results = {}
 
         for symbol in self.symbols:
+            csv_dir = Path(__file__).resolve().parent.parent / "csv_files" / "inference"
+            csv_dir.mkdir(parents=True, exist_ok=True)
 
             # ── STEP 1: Fetch & Resample ──────────────────────────────────────────
             logger.info(f"[{symbol}] Fetching {self.timeframe} data ({self.start_date} → {self.end_date})...")
@@ -90,7 +94,6 @@ class InferencePipeline:
             # ── STEP 2: Engineer Features (no target — we are predicting it!) ─────
             logger.info(f"[{symbol}] Engineering technical features on {len(resampled_df)} candles...")
             # Override training dates with inference dates so MLFeatureBuilder logs correctly
-            import copy
             inf_scoped_config = copy.deepcopy(self.config)
             inf_scoped_config["data"]["start_date"] = self.start_date
             inf_scoped_config["data"]["end_date"] = self.end_date
@@ -121,14 +124,14 @@ class InferencePipeline:
 
             # ── STEP 4: Load Preprocessor (shared across all models for this symbol)
             preproc_dir = get_ml_artifacts_dir("preprocessor")
-            preproc_path = preproc_dir / "preprocessor.joblib"   # exact filename saved by QuantPreprocessor.save()
+            preproc_path = preproc_dir / f"{self.exchange}_{symbol}_{self.tf}_preprocessor.joblib"   # exact filename saved by QuantPreprocessor.save()
             if not preproc_path.exists():
                 logger.error(f"[{symbol}] Preprocessor not found at {preproc_path}. Skipping.")
                 continue
 
             preprocessor = load_model(str(preproc_path))  # joblib.load under the hood
-            timestamps = features_df["timestamp"].values
             X_live = preprocessor.transform(features_df)
+            X_model = X_live[preprocessor.feature_cols]
 
             # ── STEP 5: Loop Models, Predict, Collect Metrics ─────────────────────
             # One report dict for ALL models on this symbol
@@ -152,124 +155,169 @@ class InferencePipeline:
                 combined_csv_df = combined_csv_df.merge(target_df, on="timestamp", how="left")
                 combined_csv_df.rename(columns={"target": "actual_signal"}, inplace=True)
 
+            model_dir = get_ml_artifacts_dir("model")
             for model_name in self.models:
-                model_dir = get_ml_artifacts_dir("model")
-                model_path = model_dir / f"{symbol}_{self.tf}_{model_name}.joblib"
+
+                # --- Resolve model path: .pt for lstm_regressor, .joblib for everything else ---
+                if model_name == "lstm_regressor":
+                    model_path = model_dir / f"{self.exchange}_{symbol}_{self.tf}_{self.task_type}_{model_name}.pt"
+                else:
+                    model_path = model_dir / f"{self.exchange}_{symbol}_{self.tf}_{self.task_type}_{model_name}.joblib"
 
                 if not model_path.exists():
-                    logger.warning(f"[{symbol}] Model '{model_name}' not found. Skipping.")
+                    logger.warning(f"[{symbol}] Model '{model_name}' not found at {model_path}. Skipping.")
                     continue
 
-                model    = load_model(str(model_path))
-                
-                # Pass ONLY the feature columns to the model (drops timestamp)
-                X_model = X_live[preprocessor.feature_cols]
-                
-                raw_preds = model.predict(
-                    X_model.values if isinstance(X_model, pd.DataFrame) else X_model
-                )
+                # --- Load model and run predictions ---
+                if model_name == "lstm_regressor":
+                    import torch
+                    from cryptosight.ml.models.regression.pytorch_lstm import LSTMNet
+                    X_arr = X_model.values if isinstance(X_model, pd.DataFrame) else X_model
+                    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                    checkpoint = torch.load(str(model_path), map_location=device)
+                    lstm_model = LSTMNet(
+                        input_size=X_arr.shape[1],
+                        hidden_size=checkpoint.get("params", {}).get("hidden_size", 128) if isinstance(checkpoint, dict) else 128,
+                        num_layers=checkpoint.get("params", {}).get("num_layers", 2) if isinstance(checkpoint, dict) else 2
+                    ).to(device)
+                    state_dict = checkpoint["state_dict"] if isinstance(checkpoint, dict) else checkpoint
+                    lstm_model.load_state_dict(state_dict)
+                    lstm_model.eval()
+                    with torch.no_grad():
+                        raw_preds = lstm_model(
+                            torch.tensor(X_arr, dtype=torch.float32).to(device)
+                        ).cpu().numpy()
+                else:
+                    model = load_model(str(model_path))
+                    raw_preds = model.predict(
+                        X_model.values if isinstance(X_model, pd.DataFrame) else X_model
+                    )
 
-                # Map [0,1,2] → [-1,0,1] for classification
-                signals    = raw_preds - 1 if self.task_type == "classification" else raw_preds
-                
-                # Build results_df preserving the exact pandas series for timestamps
+                # Classification: remap [0,1,2] → [-1,0,1] | Regression: use continuous returns as-is
+                signals = raw_preds - 1 if self.task_type == "classification" else raw_preds
+
                 results_df = pd.DataFrame({
                     "timestamp": features_df["timestamp"].reset_index(drop=True),
                     "signal": signals
                 })
 
-                # ── Compute Metrics ───────────────────────────────────────────────
+                # ── Compute Metrics (dynamic per task_type) ───────────────────────
                 if "target" in features_with_target.columns:
-                    # Force both to UTC to prevent merge conflicts
                     results_df["timestamp"] = pd.to_datetime(results_df["timestamp"], utc=True)
                     features_with_target["timestamp"] = pd.to_datetime(features_with_target["timestamp"], utc=True)
 
-                    merged    = results_df.merge(
+                    merged = results_df.merge(
                         features_with_target[["timestamp", "target"]],
                         on="timestamp", how="inner"
                     )
                     actual    = merged["target"].values
                     predicted = merged["signal"].values
                     total     = len(actual)
-                    correct   = int(np.sum(actual == predicted))
-                    accuracy  = correct / total * 100.0 if total > 0 else 0.0
 
-                    prec = precision_score(actual, predicted, average="macro", zero_division=0) * 100.0
-                    rec  = recall_score(actual, predicted, average="macro", zero_division=0) * 100.0
+                    if self.task_type == "classification":
+                        correct  = int(np.sum(actual == predicted))
+                        accuracy = correct / total * 100.0 if total > 0 else 0.0
+                        prec = precision_score(actual, predicted, average="macro", zero_division=0) * 100.0
+                        rec  = recall_score(actual, predicted, average="macro", zero_division=0) * 100.0
 
-                    # Count predicted signal distribution
-                    preds_series   = pd.Series(predicted)
-                    buy_count      = int((preds_series == 1).sum())
-                    hold_count     = int((preds_series == 0).sum())
-                    sell_count     = int((preds_series == -1).sum())
+                        preds_series  = pd.Series(predicted)
+                        actual_series = pd.Series(actual)
 
-                    # Count actual signal distribution
-                    actual_series  = pd.Series(actual)
-                    actual_buy     = int((actual_series == 1).sum())
-                    actual_hold    = int((actual_series == 0).sum())
-                    actual_sell    = int((actual_series == -1).sum())
+                        print("\n" + "=" * 65)
+                        print(f"  INFERENCE  |  {symbol}  |  {model_name.upper()}  |  {self.tf}")
+                        print("=" * 65)
+                        print(f"  Period    : {self.start_date}  →  {self.end_date}")
+                        print(f"  Total Rows: {total}")
+                        print(f"  Correct   : {correct}/{total} ({accuracy:.2f}%)")
+                        print(f"  Precision : {prec:.2f}%    Recall: {rec:.2f}%")
+                        print("-" * 65)
+                        print(f"  {'Signal':<12} {'Actual':>10} {'Predicted':>12}")
+                        print(f"  {'Buy  (+1)':<12} {int((actual_series==1).sum()):>10} {int((preds_series==1).sum()):>12}")
+                        print(f"  {'Hold (0)':<12} {int((actual_series==0).sum()):>10} {int((preds_series==0).sum()):>12}")
+                        print(f"  {'Sell (-1)':<12} {int((actual_series==-1).sum()):>10} {int((preds_series==-1).sum()):>12}")
+                        print("-" * 65)
+                        print(f"  {'Timestamp':<26} {'Actual':>8} {'Predicted':>12}")
+                        print("-" * 65)
+                        for _, row in merged.head(20).iterrows():
+                            mark = "✓" if row["target"] == row["signal"] else "✗"
+                            print(f"  {str(row['timestamp']):<26} {int(row['target']):>8} {int(row['signal']):>12}  {mark}")
+                        print("=" * 65)
 
-                    # Print to console
-                    print("\n" + "=" * 65)
-                    print(f"  INFERENCE  |  {symbol}  |  {model_name.upper()}  |  {self.tf}")
-                    print("=" * 65)
-                    print(f"  Period    : {self.start_date}  →  {self.end_date}")
-                    print(f"  Total Rows: {total}")
-                    print(f"  Correct   : {correct} rows where Actual == Predicted")
-                    print(f"  Accuracy  : {correct}/{total} ({accuracy:.2f}%)")
-                    print(f"  Precision : {prec:.2f}%    Recall: {rec:.2f}%")
-                    print("-" * 65)
-                    print(f"  {'Signal':<12} {'Actual':>10} {'Predicted':>12}")
-                    print(f"  {'Buy  (+1)':<12} {actual_buy:>10} {buy_count:>12}")
-                    print(f"  {'Hold (0)':<12} {actual_hold:>10} {hold_count:>12}")
-                    print(f"  {'Sell (-1)':<12} {actual_sell:>10} {sell_count:>12}")
-                    print("-" * 65)
-                    print(f"  {'Timestamp':<26} {'Actual':>8} {'Predicted':>12} {'':>6}")
-                    print("-" * 65)
-                    for _, row in merged.head(20).iterrows():
-                        mark = "✓" if row["target"] == row["signal"] else "✗"
-                        print(f"  {str(row['timestamp']):<26} {int(row['target']):>8} {int(row['signal']):>12}  {mark}")
-                    print("=" * 65)
-
-                    # Append into the single report dict under this model's key
-                    inference_report["models"][model_name] = {
-                        "total_rows":       total,
-                        "correct":          correct,
-                        "accuracy":         f"{accuracy:.2f}%",
-                        "precision":        f"{prec:.2f}%",
-                        "recall":           f"{rec:.2f}%",
-                        "signal_distribution": {
-                            "buy  (+1)": {"actual": actual_buy,  "predicted": buy_count},
-                            "hold (0)":  {"actual": actual_hold, "predicted": hold_count},
-                            "sell (-1)": {"actual": actual_sell, "predicted": sell_count},
+                        inference_report["models"][model_name] = {
+                            "total_rows": total,
+                            "correct":    correct,
+                            "accuracy":   f"{accuracy:.2f}%",
+                            "precision":  f"{prec:.2f}%",
+                            "recall":     f"{rec:.2f}%",
+                            "signal_distribution": {
+                                "buy  (+1)": {"actual": int((pd.Series(actual)==1).sum()),  "predicted": int((preds_series==1).sum())},
+                                "hold (0)":  {"actual": int((pd.Series(actual)==0).sum()),  "predicted": int((preds_series==0).sum())},
+                                "sell (-1)": {"actual": int((pd.Series(actual)==-1).sum()), "predicted": int((preds_series==-1).sum())},
+                            }
                         }
-                    }
 
-                # Save individual model's inference CSV to ml/csv_files/inference/
-                csv_dir = Path(__file__).resolve().parent.parent / "csv_files" / "inference"
+                    else:  # regression
+                        rmse = float(np.sqrt(mean_squared_error(actual, predicted)))
+                        mae  = float(mean_absolute_error(actual, predicted))
+                        r2   = float(r2_score(actual, predicted))
+
+                        print("\n" + "=" * 65)
+                        print(f"  REGRESSION INFERENCE  |  {symbol}  |  {model_name.upper()}  |  {self.tf}")
+                        print("=" * 65)
+                        print(f"  Period    : {self.start_date}  →  {self.end_date}")
+                        print(f"  Total Rows: {total}")
+                        print(f"  RMSE      : {rmse:.6f}")
+                        print(f"  MAE       : {mae:.6f}")
+                        print(f"  R2 Score  : {r2:.4f}")
+                        print("-" * 65)
+                        print(f"  {'Timestamp':<26} {'Actual':>14} {'Predicted':>14}")
+                        print("-" * 65)
+                        for _, row in merged.head(20).iterrows():
+                            print(f"  {str(row['timestamp']):<26} {float(row['target']):>14.6f} {float(row['signal']):>14.6f}")
+                        print("=" * 65)
+
+                        inference_report["models"][model_name] = {
+                            "total_rows": total,
+                            "rmse":       round(rmse, 6),
+                            "mae":        round(mae, 6),
+                            "r2":         round(r2, 4),
+                        }
+
+                # Save individual model inference CSV
                 csv_dir.mkdir(parents=True, exist_ok=True)
-                model_csv_path = csv_dir / f"{symbol}_{self.tf}_{model_name}_inference.csv"
+                model_csv_path = csv_dir / f"{self.exchange}_{symbol}_{self.tf}_{self.task_type}_{model_name}_inference.csv"
                 results_df.to_csv(model_csv_path, index=False, encoding="utf-8")
 
-                # Add this model's signals to the unified CSV DataFrame
+                # Add to combined CSV
                 results_df["timestamp"] = pd.to_datetime(results_df["timestamp"], utc=True)
                 combined_csv_df = combined_csv_df.merge(results_df, on="timestamp", how="left")
                 combined_csv_df.rename(columns={"signal": f"{model_name}_predicted_signal"}, inplace=True)
 
                 all_results[f"{symbol}_{model_name}"] = results_df
 
-            # ── STEP 6: Save ONE unified inference report to artifacts ────────────
-            save_config_artifact(
-                inference_report,
-                f"inference_{symbol}_{self.tf}.yaml",
-                asset_type="config"
-            )
-            logger.info(f"[{symbol}] Saved inference report to artifacts/configs/inference_{symbol}_{self.tf}.yaml")
+            # ── STEP 6: Update the unified pipeline JSON in artifacts/configs/ ────────────
+            config_dir = get_ml_artifacts_dir("config")
+            unified_json_path = config_dir / f"{self.exchange}_{symbol}_{self.tf}_{self.task_type}.json"
+            
+            existing_pipeline_data = {}
+            if unified_json_path.exists():
+                try:
+                    with open(unified_json_path, "r", encoding="utf-8") as f:
+                        existing_pipeline_data = json.load(f) or {}
+                except Exception as e_read:
+                    logger.warning(f"Could not read existing unified JSON {unified_json_path}: {e_read}")
+            
+            existing_pipeline_data["inference_report"] = inference_report
+            try:
+                with open(unified_json_path, "w", encoding="utf-8") as f:
+                    json.dump(existing_pipeline_data, f, indent=4, default=str)
+                logger.info(f"[{symbol}] Updated unified pipeline JSON with inference report -> {unified_json_path}")
+            except Exception as e_write:
+                logger.error(f"[{symbol}] Failed to update unified pipeline JSON: {e_write}")
             
             # ── STEP 7: Save ONE unified easy-to-read CSV inside ml/csv_files/inference/ ────────────
-            csv_dir = Path(__file__).resolve().parent.parent / "csv_files" / "inference"
             csv_dir.mkdir(parents=True, exist_ok=True)
-            csv_path = csv_dir / f"{symbol}_{self.tf}_combined_inference.csv"
+            csv_path = csv_dir / f"{self.exchange}_{symbol}_{self.tf}_{self.task_type}_combined_inference.csv"
             combined_csv_df.to_csv(csv_path, index=False)
             logger.info(f"[{symbol}] Saved combined CSV to {csv_path}")
 

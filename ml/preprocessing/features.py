@@ -16,15 +16,16 @@ class MLFeatureBuilder:
         if not isinstance(config, dict) or not config:
             raise ValueError("MLFeatureBuilder requires a valid loaded `config: dict` dictionary.")
         self.config = config
-        data_cfg = self.config.get("data")
+        self.data_cfg = self.config.get("data")
+        self.model_type = str(self.config.get("model_type", "regression")).lower()
 
         logger.info("=== ML Module Config Initialized ===")
         logger.info(f"Model Type       : {self.config.get('model_type')}")
-        logger.info(f"Exchange         : {data_cfg.get('exchange')}")
-        logger.info(f"Symbols          : {data_cfg.get('symbols')}")
-        logger.info(f"Base Timeframe   : {data_cfg.get('timeframe')}")
-        logger.info(f"Target Timeframe : {data_cfg.get('target_timeframe')}")
-        logger.info(f"Date Range       : {data_cfg.get('start_date')} to {data_cfg.get('end_date')}")
+        logger.info(f"Exchange         : {self.data_cfg.get('exchange')}")
+        logger.info(f"Symbols          : {self.data_cfg.get('symbols')}")
+        logger.info(f"Base Timeframe   : {self.data_cfg.get('timeframe')}")
+        logger.info(f"Target Timeframe : {self.data_cfg.get('target_timeframe')}")
+        logger.info(f"Date Range       : {self.data_cfg.get('start_date')} to {self.data_cfg.get('end_date')}")
 
     def fetch_and_resample_data(self) -> dict[str, pd.DataFrame]:
         """
@@ -32,7 +33,7 @@ class MLFeatureBuilder:
         directly runs `dl.resample()`, and returns a dictionary of clean resampled DataFrames:
         {"BTC": df_btc, "ETH": df_eth}.
         """
-        data_cfg = self.config.get("data")
+        data_cfg = self.data_cfg
 
         cfg_exchange = data_cfg.get("exchange")
         if isinstance(cfg_exchange, list):
@@ -112,7 +113,7 @@ class MLFeatureBuilder:
         if df.empty:
             return df
 
-        model_type = str(self.config.get("model_type")).lower()
+        model_type = self.model_type
         target_cfg = self.config.get("target")
         horizon = int(target_cfg.get("horizon"))
         source_col = target_cfg.get("source")
@@ -177,7 +178,7 @@ class MLFeatureBuilder:
 
                 # If `data.enabled` is false, drop base OHLCV columns (`open`, `high`, `low`, `close`, `volume`)
                 # so only the calculated indicators/patterns (and target) are shown in the final DataFrame.
-                if not self.config.get("data").get("enabled"):
+                if not self.data_cfg.get("enabled"):
                     ohlcv_cols = ["open", "high", "low", "close", "volume"]
                     cols_to_drop = [c for c in ohlcv_cols if c in processed_df.columns]
                     processed_df = processed_df.drop(columns=cols_to_drop)
@@ -185,7 +186,7 @@ class MLFeatureBuilder:
 
                 feature_data[sym] = processed_df
 
-                logger.info(f"=== {sym} Ready [{str(self.config.get('model_type', 'regression')).upper()} | Shape: {processed_df.shape}] ===")
+                logger.info(f"=== {sym} Ready [{self.model_type.upper()} | Shape: {processed_df.shape}] ===")
 
                 print(f" [{sym}] QUANT ML DATASET PREVIEW (Total Columns: {len(processed_df.columns)})")
                 print("=" * 85)

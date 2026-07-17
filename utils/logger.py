@@ -31,6 +31,7 @@ def detect_exchange(name: str) -> str:
             cfg_paths = [root_dir / "backtesting" / "backt_config.yaml"]
         else:
             cfg_paths = [
+                root_dir / "ml" / "ml_config.yaml",
                 root_dir / "signals" / "strategy_config.yaml",
                 root_dir / "backtesting" / "backt_config.yaml",
                 root_dir / "indicators" / "tal_Indicators_config.yaml",

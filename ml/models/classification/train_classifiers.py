@@ -1,9 +1,7 @@
-import sys
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from cryptosight.utils.config import load_config, get_ml_artifacts_dir, save_config_artifact
-import json
+from cryptosight.utils.config import get_ml_artifacts_dir
 from cryptosight.utils.logger import get_logger
 from cryptosight.ml.models.model_utills import train_model, save_model
 from sklearn.linear_model import LogisticRegression
@@ -11,6 +9,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from cryptosight.ml.evaluation.evaluator import evaluate_classification, create_leaderboard_entry
+from cryptosight.stats.metrices import compute_all_metrics
 import lightgbm as lgb
 import xgboost as xgb
 
@@ -29,19 +28,30 @@ class ClassifierPipeline:
         self.config = config
         self.symbols = config.get("data").get("symbols")
         self.tf = str(config.get("data").get("target_timeframe")).strip()
+        self.exchange = str(config.get("data").get("exchange")).lower().strip()
         self.models_to_train = config.get("classification").get("models")
         self.fitted_models = {}
 
-    def train(self, train_df: pd.DataFrame, val_df: pd.DataFrame, test_df: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    def save_predictions(self, df: pd.DataFrame, predictions: np.ndarray, save_path: Path) -> pd.DataFrame:
+        """Helper to copy dataframe, set actual and predicted target columns, and save to CSV."""
+        pred_df = df.copy()
+        pred_df["actual"] = df["target"]
+        pred_df["predicted"] = predictions
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        pred_df.to_csv(save_path, index=False, encoding="utf-8")
+        return pred_df
+
+    def train(self, train_df: pd.DataFrame, val_df: pd.DataFrame, test_df: pd.DataFrame) -> tuple[dict[str, pd.DataFrame], dict[str, dict]]:
         """
         Trains all configured classification models on training data,
-        evaluates validation/testing sets, saves models, and returns predictions.
+        evaluates validation/testing sets, saves models, and returns predictions along with unified run metadata (dict keyed by symbol).
         """
         if not self.models_to_train:
             logger.warning("No classification models configured in ml_config.yaml!")
-            return {}
+            return {}, {}
 
         all_predictions = {}
+        run_meta = {}
 
         for symbol in self.symbols:
             clean_sym = str(symbol).upper().strip()
@@ -65,6 +75,10 @@ class ClassifierPipeline:
             y_test_mapped = (y_test + 1).astype(int)
 
             leaderboard = []
+
+            # Create prediction CSV directory once per symbol
+            pred_csv_dir = Path(__file__).resolve().parent.parent.parent / "csv_files" / "classification" / "model_predicted"
+            pred_csv_dir.mkdir(parents=True, exist_ok=True)
 
             # Loop and train each configured model
             for model_cfg in self.models_to_train:
@@ -110,33 +124,80 @@ class ClassifierPipeline:
 
                 # Persist Model using standardized save method
                 model_dir = get_ml_artifacts_dir("model")
-                model_save_path = model_dir / f"{clean_sym}_{self.tf}_{model_name}.joblib"
+                model_save_path = model_dir / f"{self.exchange}_{clean_sym}_{self.tf}_classification_{model_name}.joblib"
                 save_model(model, str(model_save_path))
 
                 # Map predictions back to original trading targets [-1, 0, 1]
                 val_predictions = preds['val_preds'] - 1
                 test_predictions = preds.get('test_preds', preds['val_preds']) - 1
 
-                # Save predictions to CSV file under ml/csv_files/classification/model_predicted/
-                pred_csv_dir = Path(__file__).resolve().parent.parent.parent / "csv_files" / "classification" / "model_predicted"
-                pred_csv_dir.mkdir(parents=True, exist_ok=True)
-                pred_save_path = pred_csv_dir / f"{clean_sym}_{model_name}_predicted.csv"
+                # Save validation and test predictions using our helper
+                pred_save_path = pred_csv_dir / f"{self.exchange}_{clean_sym}_{self.tf}_classification_{model_name}_predicted.csv"
+                pred_df = self.save_predictions(val_df, val_predictions, pred_save_path)
 
-                # Store validation predictions along with input features, actual, and predicted targets
-                pred_df = val_df.copy()
-                pred_df["actual"] = val_df["target"]
-                pred_df["predicted"] = val_predictions
-                pred_df.to_csv(pred_save_path, index=False, encoding="utf-8")
-
-                # Store testing dataset predictions along with actual vs predicted (specifically requested)
-                test_pred_df = test_df.copy()
-                test_pred_df["actual"] = test_df["target"]
-                test_pred_df["predicted"] = test_predictions
-                test_pred_save_path = pred_csv_dir / f"{clean_sym}_{model_name}_test_predicted.csv"
-                test_pred_df.to_csv(test_pred_save_path, index=False, encoding="utf-8")
+                test_pred_save_path = pred_csv_dir / f"{self.exchange}_{clean_sym}_{self.tf}_classification_{model_name}_test_predicted.csv"
+                self.save_predictions(test_df, test_predictions, test_pred_save_path)
 
                 # Store in returned dictionary (validation DataFrame with predicted column for backtesting)
                 all_predictions[model_name] = pred_df
+
+                # Extract live trained hyperparameters directly from the fitted model (never copy from config)
+                try:
+                    if hasattr(model, "get_params"):
+                        trained_params = model.get_params()
+                    elif hasattr(model, "estimator") and hasattr(model.estimator, "get_params"):
+                        trained_params = model.estimator.get_params()
+                    else:
+                        trained_params = {}
+                    clean_params = {}
+                    for k, v in trained_params.items():
+                        if v is None or str(v) == "None":
+                            continue
+                        if isinstance(v, float) and np.isnan(v):
+                            continue
+                        if str(v) == "nan":
+                            continue
+                        if isinstance(v, (str, int, float, bool)):
+                            clean_params[str(k)] = round(v, 6) if isinstance(v, float) else v
+                    trained_params = clean_params
+                except Exception:
+                    trained_params = {}
+
+                # Compute exact 9 requested QuantStats trading metrics from out-of-sample strategy returns
+                try:
+                    if "close" in test_df.columns:
+                        asset_returns = test_df["close"].pct_change().fillna(0.0)
+                    else:
+                        asset_returns = pd.Series(0.0, index=test_df.index)
+                    strat_returns = asset_returns * pd.Series(test_predictions, index=test_df.index).shift(1).fillna(0.0)
+                    raw_stats = compute_all_metrics(strat_returns, is_percentage=False)
+                    
+                    desired_metrics = {
+                        "Sharpe Ratio": "sharpe",
+                        "Sortino Ratio": "sortino",
+                        "Calmar Ratio": "calmar",
+                        "Maximum Drawdown": "max_drawdown",
+                        "CAGR": "cagr",
+                        "Profit Factor": "profit_factor",
+                        "Win Rate": "win_rate",
+                        "Recovery Factor": "recovery_factor",
+                        "Risk of Ruin": "risk_of_ruin"
+                    }
+                    trading_stats = {}
+                    for label, key in desired_metrics.items():
+                        val = raw_stats.get(key)
+                        if val is not None and not isinstance(val, dict):
+                            if key in ["max_drawdown", "cagr", "win_rate", "risk_of_ruin"]:
+                                trading_stats[label] = f"{float(val) * 100.0:.2f}%"
+                            elif isinstance(val, (int, float)):
+                                trading_stats[label] = round(float(val), 4)
+                            else:
+                                trading_stats[label] = val
+                        else:
+                            trading_stats[label] = "N/A"
+                except Exception as e_stat:
+                    logger.warning(f"Could not compute QuantStats trading metrics for {model_name}: {e_stat}")
+                    trading_stats = {label: "N/A" for label in ["Sharpe Ratio", "Sortino Ratio", "Calmar Ratio", "Maximum Drawdown", "CAGR", "Profit Factor", "Win Rate", "Recovery Factor", "Risk of Ruin"]}
 
                 entry = create_leaderboard_entry(
                     task="classification",
@@ -144,38 +205,21 @@ class ClassifierPipeline:
                     metrics=metrics,
                     model_save_path=model_save_path,
                     pred_save_path=pred_save_path,
-                    hyperparameters=params
+                    hyperparameters=trained_params,
+                    trading_metrics=trading_stats
                 )
+                entry.pop("prediction_file", None)
                 leaderboard.append(entry)
 
-            # Save leaderboard YAML — main.py reads this to inject trading metrics,
-            # then writes the single authoritative quant_pipeline.json.
-            leaderboard = sorted(leaderboard, key=lambda x: float(x["val_accuracy"].replace("%", "")), reverse=True)
-            run_meta = {
-                "symbol": symbol,
-                "timeframe": self.tf,
-                "features_count": len(feature_cols),
-                "train_rows": len(train_df),
-                "val_rows": len(val_df),
-                "test_rows": len(test_df),
-                "leaderboard": leaderboard
-            }
-            save_config_artifact(run_meta, "classification_run.yaml", asset_type="config")
-
-            # ── DEDICATED MODEL METADATA JSON (separate from quant_pipeline.json) ──
-            # Contains ONLY model-level information: hyperparameters + all metrics.
-            # Named uniquely so multiple symbols/timeframes never collide.
-            model_metadata = {
-                "symbol": clean_sym,
-                "timeframe": self.tf,
-                "model_type": "classification",
-                "models": {}
-            }
+            # Build unified metadata dictionary in memory without creating extra files
+            leaderboard = sorted(leaderboard, key=lambda x: float(str(x.get("val_accuracy", "0%")).replace("%", "")), reverse=True)
+            
+            models_dict = {}
             for entry in leaderboard:
                 m = entry.get("model")
-                model_metadata["models"][m] = {
+                models_dict[m] = {
                     "hyperparameters": entry.get("hyperparameters", {}),
-                    "accuracy": {
+                    "accuracy_metrics": {
                         "train_accuracy": entry.get("train_accuracy"),
                         "train_correct": entry.get("train_correct"),
                         "train_total": entry.get("train_total"),
@@ -192,21 +236,18 @@ class ClassifierPipeline:
                         "test_loss": entry.get("test_loss"),
                     },
                     "trading_metrics": entry.get("trading_metrics", {}),
-                    "model_file": entry.get("model_file"),
-                    "prediction_file": entry.get("prediction_file"),
+                    "artifacts": {
+                        "model_file": entry.get("model_file")
+                    }
                 }
 
-            metadata_json_path = get_ml_artifacts_dir("config") / f"{clean_sym}_{self.tf}_classification_metadata.json"
-            try:
-                with open(metadata_json_path, "w", encoding="utf-8") as mf:
-                    json.dump(model_metadata, mf, indent=4, default=str)
-                logger.info(f"Model metadata JSON saved -> {metadata_json_path}")
-            except Exception as e_meta:
-                logger.error(f"Could not write model metadata JSON: {e_meta}")
+            run_meta[clean_sym] = {
+                "leaderboard": leaderboard,
+                "models": models_dict
+            }
+            logger.info(f"Classification training finished for {clean_sym} {self.tf}")
 
-            logger.info(f"Saved classification leaderboard YAML for {clean_sym} {self.tf}")
-
-        return all_predictions
+        return all_predictions, run_meta
 
 
 def get_signals(predictions_df: pd.DataFrame) -> pd.DataFrame:
@@ -227,4 +268,3 @@ def get_signals(predictions_df: pd.DataFrame) -> pd.DataFrame:
     signal_df.set_index("timestamp", inplace=True)
     
     return signal_df
-

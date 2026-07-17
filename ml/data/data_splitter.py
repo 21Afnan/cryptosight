@@ -1,5 +1,3 @@
-import os
-import yaml
 import pandas as pd
 from cryptosight.utils.logger import get_logger
 
@@ -11,18 +9,19 @@ def split_data_chronological(
     val_ratio: float, 
     test_ratio: float,
     config: dict = None,
-    save_yaml: bool = True
+    save_yaml: bool = False
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict]:
     """
     Splits a DataFrame chronologically into train, validation, and test sets.
-    Generates metadata about rows and timestamps and saves it to config files.
+    Generates metadata about rows and timestamps to be stored in the unified quant pipeline JSON.
     
     Args:
         df: Input DataFrame containing historical features.
         train_ratio: Proportion of data to assign to the training set.
         val_ratio: Proportion of data to assign to the validation set.
         test_ratio: Proportion of data to assign to the test set.
-        save_yaml: Whether to save split metadata to YAML configuration files.
+        config: Configuration dictionary from ml_config.yaml for metadata extraction.
+        save_yaml: Deprecated (defaults to False, unified JSON is used instead).
         
     Returns:
         tuple containing (train_df, val_df, test_df, split_info_dict)
@@ -59,8 +58,9 @@ def split_data_chronological(
     val_start, val_end_time = get_time_bounds(val_df)
     test_start, test_end_time = get_time_bounds(test_df)
 
+    exchange = symbols = timeframe = target_timeframe = start_date = end_date = None
     if config:
-        data_cfg = config.get("data")
+        data_cfg = config.get("data", {})
         exchange = data_cfg.get("exchange")
         symbols = data_cfg.get("symbols")
         timeframe = data_cfg.get("timeframe")
@@ -76,10 +76,10 @@ def split_data_chronological(
     patterns_info = []
     
     if config:
-        features_cfg = config.get("features")
+        features_cfg = config.get("features", {})
         if features_cfg and features_cfg.get("enabled"):
             # Parse indicators
-            indicators_dict = features_cfg.get("indicators")
+            indicators_dict = features_cfg.get("indicators", {})
             for ind_name, ind_list in indicators_dict.items():
                 if isinstance(ind_list, list):
                     for item in ind_list:
@@ -96,7 +96,7 @@ def split_data_chronological(
                     })
             
             # Parse patterns
-            patterns_dict = features_cfg.get("patterns")
+            patterns_dict = features_cfg.get("patterns", {})
             if patterns_dict:
                 for pat_name in patterns_dict.keys():
                     patterns_info.append(pat_name)
@@ -112,20 +112,8 @@ def split_data_chronological(
     has_ohlcv = any(col in feature_cols for col in ohlcv_cols)
     ohlcv_status = "enabled" if has_ohlcv else "no ohlcv"
 
-    # Compile the metadata config dictionary
+    # Compile the metadata config dictionary without any redundant dataset properties
     split_info = {
-        "dataset_summary": {
-            "exchange": exchange,
-            "symbols": symbols,
-            "timeframe": timeframe,
-            "target_timeframe": target_timeframe,
-            "start_date": start_date,
-            "end_date": end_date,
-            "total_rows": total_rows,
-            "train_ratio": train_ratio,
-            "val_ratio": val_ratio,
-            "test_ratio": test_ratio
-        },
         "features_summary": {
             "ohlcv": ohlcv_status,
             "features_list": feature_cols,
@@ -157,9 +145,5 @@ def split_data_chronological(
         f"Val: {len(val_df)} ({val_ratio*100:.0f}%) | "
         f"Test: {len(test_df)} ({test_ratio*100:.0f}%)"
     )
-
-    if save_yaml:
-        from cryptosight.utils.config import save_config_artifact
-        save_config_artifact(split_info, "dataset_info.yaml", asset_type="config")
 
     return train_df, val_df, test_df, split_info

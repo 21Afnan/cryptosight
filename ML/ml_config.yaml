@@ -1,7 +1,7 @@
 # ==============================================================================
 # CRYPTOSIGHT ML MODULE — DATASET CONFIGURATION
 
-model_type: classification  # Options: classification | regression | timeseries
+model_type: regression  # Options: classification | regression | timeseries
 
 # --- 1. MARKET DATA (Base OHLCV Dataset) ---
 data:
@@ -132,19 +132,9 @@ regression:
         verbosity: -1
 
     - name: linear_regression
-      parameters: {}              # no hyperparameters (baseline)
+      parameters: {}          # no hyperparameters (baseline)
 
-# ==============================================================================
-# --- 8. TIME SERIES / DEEP LEARNING MODELS ---
-# Feeds a sliding window of N past bars into an LSTM / GRU sequential model.
-# Activate with: model_type: timeseries
-# ==============================================================================
-timeseries:
-  lookback_window: 60            # number of past bars (15m candles) fed as input sequence
-  output_type: "classification"  # classification (Buy/Hold/Sell) | regression (% return)
-
-  models:
-    - name: lstm
+    - name: lstm_regressor        # Deep Learning LSTM tailored for regression (% return)
       parameters:
         hidden_size: 128
         num_layers: 2
@@ -152,19 +142,12 @@ timeseries:
         epochs: 50
         batch_size: 64
         learning_rate: 0.001
+        lookback_window: 60       # sequence window of past bars fed into LSTM layers
 
-    - name: gru
-      parameters:
-        hidden_size: 64
-        num_layers: 2
-        dropout: 0.2
-        epochs: 50
-        batch_size: 64
-        learning_rate: 0.001
 
 # --- 9. INFERENCE CONFIGURATION ---
 inference:
-  model_type: "classification"
+  model_type: "regression"
   models:
     - "xgboost"
     - "random_forest"
