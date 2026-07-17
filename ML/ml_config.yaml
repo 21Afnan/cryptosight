@@ -151,11 +151,6 @@ inference:
   models:
    - "lightgbm_regressor"
    - "linear_regression"
-    
-    
-
-   
-
   # Set to TEST SET range → enables direct test-prediction vs inference comparison
   start_date: "2026-04-09 08:00:00"
   end_date: "2026-06-30 00:00:00"
