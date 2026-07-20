@@ -22,7 +22,7 @@
 
 ## 🌟 Executive Summary & 8 Quantitative Pillars
 
-**CryptoSight** bridges the gap between raw exchange data feeds and institutional quantitative strategies. It eliminates boilerplate data cleaning, API pagination headaches, and indicator mapping complexities by providing an end-to-end automated framework organized into **8 Quantitative Pillars**:
+**CryptoSight** bridges the gap between raw exchange data feeds and institutional quantitative strategies. It eliminates boilerplate data cleaning, API pagination headaches, and indicator mapping complexities by providing an end-to-end automated framework organized into **9 Quantitative Pillars**:
 
 | Status | Pillar | Module | High-Level Institutional Functionality |
 | :---: | :--- | :--- | :--- |
@@ -34,6 +34,8 @@
 | 🛡️ **CLEAN** | **6. ML Data** | `cryptosight.ml` | **Quant ML Feature Builder** generating lag-free features (`.shift(1)`), Log Return (`np.log`), and 3-class target matrices. |
 | 📊 **BENCH** | **7. Evaluation** | `cryptosight.preprocessing` | **Institutional Preprocessing & Leaderboard** testing ADF/KPSS stationarity across `Robust, MinMax, FracDiff, Winsorize, Log, Gaussian`. |
 | 📉 **METRICS** | **8. Analytics** | `cryptosight.stats` | **QuantStats Analytics & Frontend Charts Engine** computing 59+ ratios (`CAGR, Sharpe, Calmar`) and exporting `all_charts.json`. |
+| ⚙️ **SIMUL** | **9. Simulation** | `cryptosight.simulator` | **Sequential Event-Driven Trading Simulator Engine** running minute-by-minute with TP/SL validation, dynamic reversal logic, and decoupled CSV/ledger persistence. |
+
 
 > [!IMPORTANT]
 > **Zero Data Leakage Guarantee (`.shift(1)`)**: Every single technical indicator, moving average, and pattern calculated inside CryptoSight is explicitly shifted forward by 1 period (`Bar T -> Bar T+1`) before generating target labels or execution signals. This mathematically prevents future look-ahead bias during historical backtests and ML cross-validation.
@@ -77,6 +79,11 @@ graph TD
         SQL_Check -->|"Load 1m Price Candles"| Backtester["Vectorized 10-Step Backtesting Engine"]
         Signals -->|"Send Execution Signals (+1, 0, -1)"| Backtester
         Backtester -->|"Simulate Commission, Slippage & TP/SL"| Ledger["Backtest Ledger SQL Table (backtests.strategy_id)"]
+        
+        SQL_Check -->|"Load 1m Candles via DB COPY"| Simulator["Sequential Event-Driven Simulator (cryptosight.simulator)"]
+        Signals -->|"Send Aligned Signals"| Simulator
+        Simulator -->|"Check TP/SL & Reversals"| SimLedger["Simulator Ledger (simulator_ledger.csv)"]
+        Simulator -->|"Track Open Trades"| SimPos["Active Position Table (simulator_positions.csv)"]
     end
 
     subgraph Machine Learning & Target Engineering Layer
@@ -201,6 +208,17 @@ Click on any expandable card below to inspect the complete mathematical, archite
   * `"raw_values"`: Direct JSON arrays (`[{"time": "...", "value": 1.8614}, ...]`) for Chart.js, Recharts, or custom React/Vue UI cards without parsing Plotly structures.
 </details>
 
+<details>
+<summary><b>9️⃣ Sequential Event-Driven Trading Simulator Engine (`cryptosight.simulator`)</b></summary>
+<br>
+
+* **Granular Minute-by-Minute Loop**: Joins 1h resampled strategy signals with raw 1m OHLCV price series and iterates sequentially. Monitors SL/TP targets in real-time on every 1m candle (using high/low) rather than waiting for hourly closures, ensuring institutional accuracy.
+* **Opposite Signal Reversals**: Dynamically force-closes any open trade at the current candle's open price if the strategy generates an opposite signal before TP/SL levels are reached, immediately executing a reversed entry.
+* **Decoupled CSV Storage Layer**: Isolates execution logic from database connections by tracking live open trades in `simulator_positions.csv` (1 row maximum with minute-by-minute unrealized PnL updates) and logging completed trade stats permanently inside `simulator_ledger.csv`.
+* **Central Orchestrator Runner (`main.py`)**: Executes both signals processing and simulator runs in a unified wrapper, checking configs and handling Windows file lock rollovers dynamically.
+</details>
+
+
 <div align="right"><a href="#top">⬆️ Back to Top</a></div>
 
 ---
@@ -223,6 +241,8 @@ All modules can be executed with single commands from your terminal within the a
 | **8. Preprocessing Suite** | `python -m cryptosight.preprocessing.main` | Runs stationarity checks, tests 6 scaling transforms, and cross-evaluates ML models. |
 | **9. Trade Ledger Audit** | `python -m cryptosight.preprocessing.analyze_backtest_ledger` | Audits win rates, TP/SL hit ratios, and commission drag across models. |
 | **10. Stats & Analytics** | `python -m cryptosight.stats.main` | Computes 59+ QuantStats metrics (`metrics_report.json`) and exports 6 charts (`all_charts.json`). |
+| **11. Trading Simulator** | `python -m cryptosight.simulator.main` | Executes the sequential event-driven trading simulator over 1m price data and hourly signals. |
+
 
 <div align="right"><a href="#top">⬆️ Back to Top</a></div>
 
@@ -265,8 +285,16 @@ cryptosight/
 │   ├── plots.py                   # Generates 6 quant charts + dual-format all_charts.json (plotly_figure + raw_values)
 │   ├── metrics_report.json        # Exported JSON report of all 59+ strategy performance ratios
 │   └── charts/                    # Directory containing all 6 HTML interactive charts and all_charts.json
+├── simulator/                     # Sequential event-driven trading simulator engine
+│   ├── main.py                    # Orchestrator runner triggering signals and simulator
+│   ├── config.yaml                # Simulation configuration profile (starting balance, TP/SL, fees)
+│   ├── simulation.py              # Main event-driven simulator engine logic
+│   ├── simulator_positions.csv    # Live active position tracker (max 1 row)
+│   ├── simulator_ledger.csv       # Ledger of completed trades
+│   └── simulator_input.csv        # Merged inputs tracking signals and OHLCV prices
 ├── csv_files/                     # Automated export directory for predictions, reports & master tables
 ├── logs/                          # Rotating execution logs (binance.log, bybit.log, db.log, nlp.log)
+
 ├── utils/                         # Shared utilities (config loader, PostgreSQL connection pooling & UTF-8 logger)
 ├── .env                           # Database & Reddit API credentials (git-ignored)
 └── requirements.txt               # Python package dependencies
