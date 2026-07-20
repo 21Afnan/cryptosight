@@ -1,0 +1,44 @@
+# Simulator Configuration
+
+# Market Selection
+exchange: "bybit"
+symbol: "btc"
+
+# Must always be 1m OHLCV for simulator checks
+timeframe: "1m"
+
+# Simulation period
+start_time: "2026-04-01"
+end_time: "2026-06-01"
+
+# Starting balance
+initial_balance: 10000.0
+
+# Position sizing: how much percentage of our capital is invested in a single trade
+position_size:
+  type: fixed_percentage
+  value: 10.0
+
+# Fees & Slippage
+# 0.05% fee per trade taken by the broker
+commission: 0.0005
+# 0.02% expected price slippage
+slippage: 0.0002
+
+# Trade Rules
+allow_long: true
+allow_short: true
+max_open_positions: 1
+
+# Exit Targets (% from entry)
+take_profit:
+  type: percentage
+  value: 2.0
+
+stop_loss:
+  type: percentage
+  value: 1.0
+
+# Execution Pricing
+entry_price: next_open
+exit_price: next_open
