@@ -1,7 +1,7 @@
 # ==============================================================================
 # CRYPTOSIGHT ML MODULE — DATASET CONFIGURATION
 
-model_type: regression  # Options: classification | regression | timeseries
+model_type: classification  # Options: classification | regression | timeseries
 
 # --- 1. MARKET DATA (Base OHLCV Dataset) ---
 data:
@@ -78,23 +78,33 @@ classification:
     #     class_weight: "balanced"
     #     max_depth: 5
 
-    - name: random_forest
-      parameters:
-        class_weight: "balanced"
-        n_estimators: 100
-        max_depth: 5
+    #- name: random_forest
+    #  parameters:
+    #    class_weight: "balanced"
+    #    n_estimators: 100
+    #    max_depth: 5
 
-    - name: lightgbm
-      parameters:
-        class_weight: "balanced"
-        n_estimators: 100
-        learning_rate: 0.05
-        verbosity: -1
+    #- name: lightgbm
+    #  parameters:
+    #    class_weight: "balanced"
+    #    n_estimators: 100
+    #    learning_rate: 0.05
+    #    verbosity: -1
 
-    - name: xgboost
+    #- name: xgboost
+    #  parameters:
+    #    n_estimators: 100
+    #    max_depth: 5
+
+    - name: lstm_classifier
       parameters:
-        n_estimators: 100
-        max_depth: 5
+        hidden_size: 64
+        num_layers: 1
+        dropout: 0.0
+        epochs: 5
+        batch_size: 128
+        learning_rate: 0.0005
+        lookback_window: 15
 
     # - name: svm
     #   parameters:
@@ -147,10 +157,10 @@ regression:
 
 # --- 9. INFERENCE CONFIGURATION ---
 inference:
-  model_type: "regression"
+  model_type: "classification"
   models:
-   - "lightgbm_regressor"
-   - "linear_regression"
+   - "xgboost"
+   - "lstm_classifier"
   # Set to TEST SET range → enables direct test-prediction vs inference comparison
   start_date: "2026-04-09 08:00:00"
   end_date: "2026-06-30 00:00:00"

@@ -124,7 +124,7 @@ class InferencePipeline:
         """
         import torch
 
-        is_lstm = (model_name == "lstm_regressor")
+        is_lstm = (model_name in ["lstm_regressor", "lstm_classifier"])
         ext = "pt" if is_lstm else "joblib"
         model_path = self.model_dir / f"{self.exchange}_{symbol}_{self.tf}_{self.task_type}_{model_name}.{ext}"
 
@@ -134,12 +134,18 @@ class InferencePipeline:
 
         # Predict
         if is_lstm:
-            from cryptosight.ml.models.regression.pytorch_lstm import LSTMNet
             X_arr = X_model.values if isinstance(X_model, pd.DataFrame) else X_model
 
             # Retrieve parameters from config
-            lstm_cfg = next((m for m in self.config.get("regression", {}).get("models", [])
-                             if m.get("name") == "lstm_regressor"), {})
+            if model_name == "lstm_classifier":
+                from cryptosight.ml.models.classification.pytorch_lstm_classifier import LSTMClassifierNet
+                lstm_cfg = next((m for m in self.config.get("classification", {}).get("models", [])
+                                 if m.get("name") == "lstm_classifier"), {})
+            else:
+                from cryptosight.ml.models.regression.pytorch_lstm import LSTMNet
+                lstm_cfg = next((m for m in self.config.get("regression", {}).get("models", [])
+                                 if m.get("name") == "lstm_regressor"), {})
+            
             lstm_params = lstm_cfg.get("parameters", {})
             hidden_size = int(lstm_params.get("hidden_size", 64))
             num_layers  = int(lstm_params.get("num_layers", 1))
@@ -151,13 +157,21 @@ class InferencePipeline:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             checkpoint = torch.load(str(model_path), map_location=device)
 
-            model = LSTMNet(input_size=X_arr.shape[1], hidden_size=hidden_size, num_layers=num_layers).to(device)
+            if model_name == "lstm_classifier":
+                model = LSTMClassifierNet(input_size=X_arr.shape[1], hidden_size=hidden_size, num_layers=num_layers, num_classes=3).to(device)
+            else:
+                model = LSTMNet(input_size=X_arr.shape[1], hidden_size=hidden_size, num_layers=num_layers).to(device)
+            
             state_dict = checkpoint["state_dict"] if (isinstance(checkpoint, dict) and "state_dict" in checkpoint) else checkpoint
             model.load_state_dict(state_dict)
             model.eval()
 
             with torch.no_grad():
-                raw_preds = model(torch.tensor(X_seq, dtype=torch.float32).to(device)).cpu().numpy()
+                logits = model(torch.tensor(X_seq, dtype=torch.float32).to(device))
+                if model_name == "lstm_classifier":
+                    raw_preds = torch.argmax(logits, dim=1).cpu().numpy()
+                else:
+                    raw_preds = logits.cpu().numpy()
         else:
             model = load_model(str(model_path))
             raw_preds = model.predict(X_model)

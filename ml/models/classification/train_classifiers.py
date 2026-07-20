@@ -33,9 +33,18 @@ class ClassifierPipeline:
 
     def save_predictions(self, df: pd.DataFrame, predictions: np.ndarray, save_path: Path) -> pd.DataFrame:
         """Helper to copy dataframe, set actual and predicted target columns, and save to CSV."""
-        pred_df = df
+        pred_df = df.copy()
         pred_df["actual"] = df["target"]
-        pred_df["predicted"] = predictions
+        
+        diff = len(df) - len(predictions)
+        if diff > 0:
+            padded = np.pad(predictions.astype(float), (diff, 0), constant_values=np.nan)
+            pred_df["predicted"] = padded
+            pred_df = pred_df.dropna(subset=["predicted"])
+            pred_df["predicted"] = pred_df["predicted"].astype(int)
+        else:
+            pred_df["predicted"] = predictions
+            
         save_path.parent.mkdir(parents=True, exist_ok=True)
         pred_df.to_csv(save_path, index=False, encoding="utf-8")
         return pred_df
@@ -87,45 +96,58 @@ class ClassifierPipeline:
 
                 logger.info(f"Fitting [{model_name}] classifier (Train: {len(X_train)} samples)...")
 
-                # Instantiate raw model
-                if model_name == "logistic_regression":
-                    raw_model = LogisticRegression(**params, random_state=42)
-                elif model_name == "decision_tree":
-                    raw_model = DecisionTreeClassifier(**params, random_state=42)
-                elif model_name == "random_forest":
-                    raw_model = RandomForestClassifier(**params, random_state=42)
-                elif model_name == "lightgbm":
-                    raw_model = lgb.LGBMClassifier(**params, random_state=42)
-                elif model_name == "xgboost":
-                    raw_model = xgb.XGBClassifier(**params, random_state=42)
-                elif model_name == "svm":
-                    raw_model = SVC(**params, random_state=42)
+                if model_name == "lstm_classifier":
+                    from cryptosight.ml.models.classification.pytorch_lstm_classifier import train_pytorch_lstm_classifier
+                    model_dir = get_ml_artifacts_dir("model")
+                    model_save_path = model_dir / f"{self.exchange}_{clean_sym}_{self.tf}_classification_{model_name}.pt"
+                    try:
+                        metrics, preds, trained_params, model = train_pytorch_lstm_classifier(
+                            X_train, y_train_mapped, X_val, y_val_mapped, X_test, y_test_mapped, params, model_save_path
+                        )
+                        self.fitted_models[model_name] = model
+                    except Exception as e:
+                        logger.error(f"[{model_name}] Training failed: {e}")
+                        continue
                 else:
-                    logger.warning(f"Unsupported classification model type: {model_name}. Skipping.")
-                    continue
+                    # Instantiate raw model
+                    if model_name == "logistic_regression":
+                        raw_model = LogisticRegression(**params, random_state=42)
+                    elif model_name == "decision_tree":
+                        raw_model = DecisionTreeClassifier(**params, random_state=42)
+                    elif model_name == "random_forest":
+                        raw_model = RandomForestClassifier(**params, random_state=42)
+                    elif model_name == "lightgbm":
+                        raw_model = lgb.LGBMClassifier(**params, random_state=42)
+                    elif model_name == "xgboost":
+                        raw_model = xgb.XGBClassifier(**params, random_state=42)
+                    elif model_name == "svm":
+                        raw_model = SVC(**params, random_state=42)
+                    else:
+                        logger.warning(f"Unsupported classification model type: {model_name}. Skipping.")
+                        continue
 
-                # Train the model using the generic functional utility
-                model = train_model(model_name, raw_model, X_train, y_train_mapped, task="classification")
+                    # Train the model using the generic functional utility
+                    model = train_model(model_name, raw_model, X_train, y_train_mapped, task="classification")
 
-                # Store the fitted wrapper object
-                self.fitted_models[model_name] = model
+                    # Store the fitted wrapper object
+                    self.fitted_models[model_name] = model
 
-                # Evaluate Model using the external evaluator
-                metrics, preds = evaluate_classification(
-                    model, X_train, y_train_mapped, X_val, y_val_mapped, X_test, y_test_mapped
-                )
+                    # Evaluate Model using the external evaluator
+                    metrics, preds = evaluate_classification(
+                        model, X_train, y_train_mapped, X_val, y_val_mapped, X_test, y_test_mapped
+                    )
 
-                logger.info(
-                    f"[{model_name}] Loss (Train/Val/Test): {metrics['train_loss']:.4f} / {metrics['val_loss']:.4f} / {metrics['test_loss']:.4f}\n"
-                    f"    - Train Acc: {metrics['train_acc'] * 100.0:.2f}% ({metrics['correct_train_count']}/{metrics['total_train']})\n"
-                    f"    - Val   Acc: {metrics['val_acc'] * 100.0:.2f}% ({metrics['correct_val_count']}/{metrics['total_val']}) | Prec: {metrics['val_prec'] * 100.0:.2f}% | Rec: {metrics['val_rec'] * 100.0:.2f}%\n"
-                    f"    - Test  Acc: {metrics['test_acc'] * 100.0:.2f}% ({metrics['correct_test_count']}/{metrics['total_test']})"
-                )
+                    logger.info(
+                        f"[{model_name}] Loss (Train/Val/Test): {metrics['train_loss']:.4f} / {metrics['val_loss']:.4f} / {metrics['test_loss']:.4f}\n"
+                        f"    - Train Acc: {metrics['train_acc'] * 100.0:.2f}% ({metrics['correct_train_count']}/{metrics['total_train']})\n"
+                        f"    - Val   Acc: {metrics['val_acc'] * 100.0:.2f}% ({metrics['correct_val_count']}/{metrics['total_val']}) | Prec: {metrics['val_prec'] * 100.0:.2f}% | Rec: {metrics['val_rec'] * 100.0:.2f}%\n"
+                        f"    - Test  Acc: {metrics['test_acc'] * 100.0:.2f}% ({metrics['correct_test_count']}/{metrics['total_test']})"
+                    )
 
-                # Persist Model using standardized save method
-                model_dir = get_ml_artifacts_dir("model")
-                model_save_path = model_dir / f"{self.exchange}_{clean_sym}_{self.tf}_classification_{model_name}.joblib"
-                save_model(model, str(model_save_path))
+                    # Persist Model using standardized save method
+                    model_dir = get_ml_artifacts_dir("model")
+                    model_save_path = model_dir / f"{self.exchange}_{clean_sym}_{self.tf}_classification_{model_name}.joblib"
+                    save_model(model, str(model_save_path))
 
                 # Map predictions back to original trading targets [-1, 0, 1]
                 val_predictions = preds['val_preds'] - 1
@@ -144,9 +166,10 @@ class ClassifierPipeline:
                     "test": test_pred_df
                 }
 
-                # Extract hyperparameters directly from the model object, keeping only configured keys
-                raw_params = model.get_params() if hasattr(model, "get_params") else {}
-                trained_params = {k: v for k, v in raw_params.items() if k in params}
+                if model_name != "lstm_classifier":
+                    # Extract hyperparameters directly from the model object, keeping only configured keys
+                    raw_params = model.get_params() if hasattr(model, "get_params") else {}
+                    trained_params = {k: v for k, v in raw_params.items() if k in params}
 
                 entry = create_leaderboard_entry(
                     task="classification",
