@@ -29,8 +29,11 @@ def detect_exchange(name: str) -> str:
         root_dir = Path(__file__).resolve().parent.parent
         if any("backtest" in arg.lower() for arg in sys.argv):
             cfg_paths = [root_dir / "backtesting" / "backt_config.yaml"]
+        elif any("simulator" in arg.lower() for arg in sys.argv):
+            cfg_paths = [root_dir / "simulator" / "config.yaml", root_dir / "signals" / "strategy_config.yaml"]
         else:
             cfg_paths = [
+                root_dir / "simulator" / "config.yaml",
                 root_dir / "ml" / "ml_config.yaml",
                 root_dir / "signals" / "strategy_config.yaml",
                 root_dir / "backtesting" / "backt_config.yaml",
@@ -48,9 +51,7 @@ def detect_exchange(name: str) -> str:
                             if "bybit" in line:
                                 return "bybit"
     except Exception:
-        pass
-    return None
-
+        return "unknown"
 
 def get_logger(name: str) -> logging.Logger:
     """

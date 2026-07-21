@@ -188,11 +188,11 @@ def upsert_sentiment_data(conn, symbol: str):
 
 # ── STRATEGY DATA ────────────────────────────────────────────────────────────
 
-def generate_strategy_id(exchange: str, symbol: str, target_timeframe: str, indicators_config: dict = None) -> str:
+def generate_strategy_id(exchange: str, symbol: str, target_timeframe: str, indicators_config: dict = None, strategy_config: dict = None, sim_params: dict = None) -> str:
     """
     Generates a deterministic, human-readable strategy_id based on exchange, symbol (coin),
-    target_timeframe, and all configured indicators plus their timeperiods.
-    Example: 'binance_btc_1h_rsi_14' or 'binance_btc_1h_ema_20_ema_50_rsi_14'
+    target_timeframe, indicators, and strategy exit settings (TP/SL).
+    Example: 'binance_btc_1h_rsi_14_tp5_sl2'
     """
     ind_parts = []
     if indicators_config and isinstance(indicators_config, dict):
@@ -210,7 +210,32 @@ def generate_strategy_id(exchange: str, symbol: str, target_timeframe: str, indi
                 ind_parts.append(str(ind_name).lower())
     
     ind_str = f"_{'_'.join(sorted(set(ind_parts)))}" if ind_parts else ""
-    return f"{exchange.lower()}_{symbol.lower()}_{target_timeframe.lower()}{ind_str}"
+
+    # Add TP and SL to the strategy ID to make them unique
+    strat_parts = []
+    if strategy_config and isinstance(strategy_config, dict):
+        tp = strategy_config.get('take_profit')
+        sl = strategy_config.get('stop_loss')
+        if tp is not None:
+            # TP/SL are now direct percentages (e.g., 5). 
+            # Replace decimals with underscore just in case someone uses 2.5% (e.g., tp2_5)
+            tp_str = str(tp).replace('.', '_')
+            strat_parts.append(f"tp{tp_str}")
+        if sl is not None:
+            sl_str = str(sl).replace('.', '_')
+            strat_parts.append(f"sl{sl_str}")
+            
+    if sim_params and isinstance(sim_params, dict):
+        import hashlib
+        # Hash the sim_params to avoid excessively long table names
+        sim_str = "_".join(f"{k}{v}" for k, v in sorted(sim_params.items()))
+        sim_hash = hashlib.md5(sim_str.encode()).hexdigest()[:6]
+        strat_parts.append(f"sim{sim_hash}")
+            
+    strat_str = f"_{'_'.join(strat_parts)}" if strat_parts else ""
+    
+    return f"{exchange.lower()}_{symbol.lower()}_{target_timeframe.lower()}{ind_str}{strat_str}"
+
 
 
 def create_strategy_data(conn):
@@ -269,7 +294,7 @@ def upsert_strategy_data(
     """
     create_strategy_data(conn)
 
-    strategy_id = generate_strategy_id(exchange, symbol, target_timeframe, indicators_config)
+    strategy_id = generate_strategy_id(exchange, symbol, target_timeframe, indicators_config, strategy_config)
     schema_name, table_name = get_signals_table_names(exchange, symbol, target_timeframe)
     full_signals_table = f"{schema_name}.{table_name}"
 
@@ -410,6 +435,52 @@ def upsert_backtest_data(conn, strategy_id: str, backtest_config: dict, ledger_d
         conn.rollback()
         logger.error(f"Error updating backtest metadata for '{strategy_id}': {error}")
         raise
+
+
+def fetch_strategy_from_db(conn, strategy_id: str) -> dict:
+    """
+    Fetches a strategy record from metadata.strategy_data by strategy_id.
+    Returns dict: strategy_id, exchange, symbol, target_timeframe, indicators_config, strategy_config.
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT strategy_id, exchange, symbol, target_timeframe, indicators_config, strategy_config "
+                "FROM metadata.strategy_data WHERE strategy_id = %s;",
+                (strategy_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                logger.error(f"Strategy '{strategy_id}' not found in metadata.strategy_data.")
+                return {}
+
+            ind_cfg = row[4] if isinstance(row[4], dict) else (json.loads(row[4]) if row[4] else {})
+            strat_cfg = row[5] if isinstance(row[5], dict) else (json.loads(row[5]) if row[5] else {})
+
+            return {
+                "strategy_id": row[0],
+                "exchange": row[1],
+                "symbol": row[2],
+                "target_timeframe": row[3],
+                "indicators_config": ind_cfg,
+                "strategy_config": strat_cfg,
+            }
+    except Exception as error:
+        logger.error(f"Error fetching strategy '{strategy_id}' from DB: {error}")
+        return {}
+
+
+def list_all_strategies(conn) -> list:
+    """Returns a list of all strategy_ids available in metadata.strategy_data."""
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT strategy_id FROM metadata.strategy_data ORDER BY strategy_id ASC;")
+            rows = cursor.fetchall()
+            return [r[0] for r in rows]
+    except Exception as error:
+        logger.error(f"Error listing strategies from DB: {error}")
+        return []
+
 
 
 if __name__ == "__main__":

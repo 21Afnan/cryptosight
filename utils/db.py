@@ -430,3 +430,302 @@ def insert_backtest_ledger(conn, exchange: str, symbol: str, timeframe: str, led
         conn.rollback()
         logger.error(f"Error inserting backtest ledger into '{full_table}': {error}")
         raise
+
+
+# ── SIMULATIONS ───────────────────────────────────────────────────────────────
+
+def fetch_signals_from_db(conn, exchange: str, symbol: str, target_timeframe: str) -> pd.DataFrame:
+    """
+    Fetches pre-computed signals directly from signals.{exchange}_{symbol}_{target_timeframe}.
+    Returns a DataFrame indexed by timestamp with a 'signal' column.
+    """
+    schema_name, table_name = get_signals_table_names(exchange, symbol, target_timeframe)
+    full_table = f"{schema_name}.{table_name}"
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = %s AND tablename = %s);", (schema_name, table_name))
+            if not cursor.fetchone()[0]:
+                logger.info(f"Signals table '{full_table}' does not exist yet.")
+                return pd.DataFrame()
+
+            cursor.execute(f"SELECT timestamp, signal FROM {full_table} ORDER BY timestamp ASC;")
+            rows = cursor.fetchall()
+
+        if not rows:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(rows, columns=["timestamp", "signal"])
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        df.set_index("timestamp", inplace=True)
+        if df.index.tz is None:
+            df.index = df.index.tz_localize("UTC")
+        logger.info(f"Fetched {len(df)} signal rows from '{full_table}'.")
+        return df
+    except Exception as error:
+        logger.warning(f"Could not fetch signals from '{full_table}': {error}")
+        return pd.DataFrame()
+
+
+def create_simulations_schema_and_tables(conn, strategy_id: str):
+    """
+    Creates the 'simulations' schema, shared positions & stats tables, and strategy-specific ledger table.
+    """
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS simulations;"
+
+    create_positions_sql = """
+    CREATE TABLE IF NOT EXISTS simulations.positions (
+        strategy_id    VARCHAR(128) PRIMARY KEY,
+        trade_id       VARCHAR(64)  NOT NULL,
+        direction      VARCHAR(8)   NOT NULL,
+        entry_time     TIMESTAMP WITH TIME ZONE NOT NULL,
+        entry_price    NUMERIC(18,8) NOT NULL,
+        quantity       NUMERIC(18,8) NOT NULL,
+        take_profit    NUMERIC(18,8) NOT NULL,
+        stop_loss      NUMERIC(18,8) NOT NULL,
+        current_price  NUMERIC(18,8) NOT NULL,
+        unrealized_pnl NUMERIC(18,8) NOT NULL,
+        status         VARCHAR(16)   NOT NULL DEFAULT 'Open',
+        exit_price     NUMERIC(18,8),
+        exit_time      TIMESTAMP WITH TIME ZONE,
+        exit_reason    VARCHAR(32),
+        last_updated   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+
+    create_stats_sql = """
+    CREATE TABLE IF NOT EXISTS simulations.stats (
+        strategy_id     VARCHAR(128) PRIMARY KEY,
+        metrics         JSONB,
+        initial_balance NUMERIC(18,8) NOT NULL,
+        final_balance   NUMERIC(18,8) NOT NULL,
+        total_pnl       NUMERIC(18,8) NOT NULL,
+        total_trades    INT NOT NULL,
+        winning_trades  INT NOT NULL,
+        losing_trades   INT NOT NULL,
+        win_rate        NUMERIC(5,2) NOT NULL,
+        last_updated    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+
+    strat_table_name = strategy_id.lower().replace('.', '_')
+    create_ledger_sql = f"""
+    CREATE TABLE IF NOT EXISTS simulations.{strat_table_name} (
+        trade_id       VARCHAR(64) PRIMARY KEY,
+        direction      VARCHAR(8)  NOT NULL,
+        entry_time     TIMESTAMP WITH TIME ZONE NOT NULL,
+        exit_time      TIMESTAMP WITH TIME ZONE NOT NULL,
+        entry_price    NUMERIC(18,8) NOT NULL,
+        exit_price     NUMERIC(18,8) NOT NULL,
+        quantity       NUMERIC(18,8) NOT NULL,
+        gross_pnl      NUMERIC(18,8) NOT NULL,
+        commission     NUMERIC(18,8) NOT NULL,
+        slippage       NUMERIC(18,8) NOT NULL,
+        net_pnl        NUMERIC(18,8) NOT NULL,
+        perc_pnl       NUMERIC(10,6) NOT NULL,
+        exit_reason    VARCHAR(32)   NOT NULL,
+        balance        NUMERIC(18,8) NOT NULL
+    );
+    """
+
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_positions_sql)
+            cursor.execute(create_stats_sql)
+            cursor.execute(create_ledger_sql)
+            conn.commit()
+            logger.info(f"Schema 'simulations' and table 'simulations.{strat_table_name}' verified/created.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating simulations tables for strategy '{strategy_id}': {error}")
+        raise
+
+def clear_simulation_data(conn, strategy_id: str):
+    """
+    Clears old ledger records and open positions for this strategy so that rerunning the simulator doesn't create duplicate trades.
+    """
+    strat_table_name = strategy_id.lower().replace('.', '_')
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(f"TRUNCATE TABLE simulations.{strat_table_name};")
+            cursor.execute("DELETE FROM simulations.positions WHERE strategy_id = %s;", (strategy_id,))
+            conn.commit()
+            logger.info(f"Cleared old simulation data for '{strategy_id}'.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error clearing old simulation data: {error}")
+
+
+def save_simulation_position(conn, strategy_id: str, position: dict):
+    """
+    Saves or updates active open position for a strategy in simulations.positions with status = 'Open'.
+    """
+    upsert_sql = """
+    INSERT INTO simulations.positions (
+        strategy_id, trade_id, direction, entry_time, entry_price, quantity,
+        take_profit, stop_loss, current_price, unrealized_pnl, status, last_updated
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Open', CURRENT_TIMESTAMP)
+    ON CONFLICT (strategy_id) DO UPDATE SET
+        trade_id       = EXCLUDED.trade_id,
+        direction      = EXCLUDED.direction,
+        entry_time     = EXCLUDED.entry_time,
+        entry_price    = EXCLUDED.entry_price,
+        quantity       = EXCLUDED.quantity,
+        take_profit    = EXCLUDED.take_profit,
+        stop_loss      = EXCLUDED.stop_loss,
+        current_price  = EXCLUDED.current_price,
+        unrealized_pnl = EXCLUDED.unrealized_pnl,
+        status         = 'Open',
+        exit_price     = NULL,
+        exit_time      = NULL,
+        exit_reason    = NULL,
+        last_updated   = CURRENT_TIMESTAMP;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(upsert_sql, (
+                strategy_id,
+                position["trade_id"],
+                position["direction"],
+                position["entry_time"],
+                position["entry_price"],
+                position["quantity"],
+                position["take_profit"],
+                position["stop_loss"],
+                position["current_price"],
+                position["unrealized_pnl"],
+            ))
+            conn.commit()
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error saving position for strategy '{strategy_id}': {error}")
+
+
+def close_simulation_position(conn, strategy_id: str, exit_data: dict = None):
+    """
+    Updates position status to 'Closed' in simulations.positions with exit details.
+    Keeps position record visible in DB table.
+    """
+    if exit_data is None:
+        exit_data = {}
+
+    update_sql = """
+    UPDATE simulations.positions SET
+        status         = 'Closed',
+        current_price  = COALESCE(%s, current_price),
+        unrealized_pnl = 0.0,
+        exit_price     = %s,
+        exit_time      = %s,
+        exit_reason    = %s,
+        last_updated   = CURRENT_TIMESTAMP
+    WHERE strategy_id = %s;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(update_sql, (
+                exit_data.get("exit_price"),
+                exit_data.get("exit_price"),
+                exit_data.get("exit_time"),
+                exit_data.get("exit_reason"),
+                strategy_id,
+            ))
+            conn.commit()
+            logger.info(f"Position for strategy '{strategy_id}' marked as Closed in simulations.positions.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error marking position closed for strategy '{strategy_id}': {error}")
+
+
+
+def insert_simulation_ledger(conn, strategy_id: str, trade: dict):
+    """
+    Appends a completed trade to strategy-specific table: simulations.<strategy_id>.
+    """
+    safe_strat_id = strategy_id.lower().replace('.', '_')
+    strat_table_name = f"simulations.{safe_strat_id}"
+    insert_sql = f"""
+    INSERT INTO {strat_table_name} (
+        trade_id, direction, entry_time, exit_time, entry_price, exit_price,
+        quantity, gross_pnl, commission, slippage, net_pnl, perc_pnl, exit_reason, balance
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (trade_id) DO UPDATE SET
+        direction   = EXCLUDED.direction,
+        entry_time  = EXCLUDED.entry_time,
+        exit_time   = EXCLUDED.exit_time,
+        entry_price = EXCLUDED.entry_price,
+        exit_price  = EXCLUDED.exit_price,
+        quantity    = EXCLUDED.quantity,
+        gross_pnl   = EXCLUDED.gross_pnl,
+        commission  = EXCLUDED.commission,
+        slippage    = EXCLUDED.slippage,
+        net_pnl     = EXCLUDED.net_pnl,
+        perc_pnl    = EXCLUDED.perc_pnl,
+        exit_reason = EXCLUDED.exit_reason,
+        balance     = EXCLUDED.balance;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(insert_sql, (
+                trade["trade_id"],
+                trade["direction"],
+                trade["entry_time"],
+                trade["exit_time"],
+                trade["entry_price"],
+                trade["exit_price"],
+                trade["quantity"],
+                trade["gross_pnl"],
+                trade["commission"],
+                trade["slippage"],
+                trade["net_pnl"],
+                trade["perc_pnl"],
+                trade["exit_reason"],
+                trade["balance"],
+            ))
+            conn.commit()
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error inserting trade into '{strat_table_name}': {error}")
+
+
+def upsert_simulation_stats(conn, strategy_id: str, stats_summary: dict, metrics_json: dict = None):
+    """
+    Upserts overall strategy performance metrics and timestamp into simulations.stats.
+    """
+    upsert_sql = """
+    INSERT INTO simulations.stats (
+        strategy_id, metrics, initial_balance, final_balance, total_pnl,
+        total_trades, winning_trades, losing_trades, win_rate, last_updated
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+    ON CONFLICT (strategy_id) DO UPDATE SET
+        metrics         = EXCLUDED.metrics,
+        initial_balance = EXCLUDED.initial_balance,
+        final_balance   = EXCLUDED.final_balance,
+        total_pnl       = EXCLUDED.total_pnl,
+        total_trades    = EXCLUDED.total_trades,
+        winning_trades  = EXCLUDED.winning_trades,
+        losing_trades   = EXCLUDED.losing_trades,
+        win_rate        = EXCLUDED.win_rate,
+        last_updated    = CURRENT_TIMESTAMP;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(upsert_sql, (
+                strategy_id,
+                json.dumps(metrics_json) if metrics_json else None,
+                stats_summary["initial_balance"],
+                stats_summary["final_balance"],
+                stats_summary["total_pnl"],
+                stats_summary["total_trades"],
+                stats_summary["winning_trades"],
+                stats_summary["losing_trades"],
+                stats_summary["win_rate"],
+            ))
+            conn.commit()
+            logger.info(f"Simulations stats saved to DB for '{strategy_id}'.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error saving simulation stats for strategy '{strategy_id}': {error}")
+

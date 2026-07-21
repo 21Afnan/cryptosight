@@ -121,31 +121,39 @@
 #         right: close
 #         persist_bars: 0
 indicators:
-  RSI:
+  BBANDS:
     - parameters:
-        timeperiod: 14       # Classic 14-bar RSI
+        timeperiod: 20
+        nbdevup: 2.0
+        nbdevdn: 2.0
       aliases:
-        rsi: "ind_rsi_14"    # Our custom column name
+        upper_band: "ind_bb_upper"
+        middle_band: "ind_bb_middle"
+        lower_band: "ind_bb_lower"
 
 strategy:
-  long:
+  # Strategy Exit Settings
+  take_profit: 4    # 4% Take Profit
+  stop_loss: 2      # 2% Stop Loss
+
+  long: 
     rule: AND
     conditions:
-      # Condition: Trigger BUY when RSI drops below 30 (Oversold)
-      - left: ind_rsi_14
-        operator: "<"
-        right: 30
+      # Trigger BUY when price drops below the lower band (oversold / bounce expected)
+      - left: close
+        operator: "cross_below"
+        right: ind_bb_lower
         persist_bars: 0
 
   short:
     rule: AND
     conditions:
-      # Condition: Trigger SHORT when RSI goes above 70 (Overbought)
-      - left: ind_rsi_14
-        operator: ">"
-        right: 70
+      # Trigger SHORT when price pumps above the upper band (overbought / rejection expected)
+      - left: close
+        operator: "cross_above"
+        right: ind_bb_upper
         persist_bars: 0
-
+  
 
 # ==========================================
 # MARKET CONFIGURATION
@@ -161,9 +169,9 @@ market:
   # The target timeframe to resample the 1m data to (e.g., "1m", "5m", "15m", "1h", "4h")
   target_timeframe: "1h"
   # The starting date/time for the historical data range in UTC (YYYY-MM-DD HH:MM:SS)
-  start_time: "2026-04-01 00:00:00"
+  start_time: "2026-07-19 00:00:00"
   # The ending date/time for the historical data range ("now" or YYYY-MM-DD HH:MM:SS)
-  end_time: "2026-06-01 00:00:00"
+  end_time: "now"
   # Maximum network request retries if exchange API calls fail
   max_retries: 5
   # Delay in seconds between retries

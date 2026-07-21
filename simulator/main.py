@@ -1,15 +1,13 @@
 from cryptosight.utils.logger import get_logger
-from cryptosight.simulator.simulation import SimulatorEngine
+from cryptosight.simulator.simulation import run_all_simulations
 
 logger = get_logger("Main")
 
 def main():
     logger.info("CRYPTOSIGHT QUANT SIMULATOR ORCHESTRATOR")
     try:
-        # Initialize simulation engine
-        engine = SimulatorEngine()    
-        # Run sequential paper trading simulation
-        engine.run_simulation()
+        # Run sequential paper trading simulation for all DB strategies
+        run_all_simulations()
     except Exception as e:
         logger.error(f"Simulation run failed: {e}")
 

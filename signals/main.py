@@ -15,31 +15,45 @@ logger = get_logger("SignalsMain")
 def run_signals_pipeline(
     config_path: str = None,
     market_overrides: dict = None,
+    strat_dict: dict = None,
 ) -> pd.DataFrame:
     """
-    Master signals pipeline: loads market configuration from YAML, fetches and resamples data,
-    calculates indicators, evaluates conditions, and generates trading signals.
-    Accepts market_overrides dict to dynamically override start_time, end_time, symbol, or exchange.
+    Master signals pipeline: loads market configuration from YAML or strategy dictionary,
+    fetches and resamples data, calculates indicators, evaluates conditions, and generates trading signals.
     """
-    if config_path is None:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        config_path = os.path.join(current_dir, "strategy_config.yaml")
+    if strat_dict and isinstance(strat_dict, dict):
+        strat_file = strat_dict
+    else:
+        if config_path is None:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            config_path = os.path.join(current_dir, "strategy_config.yaml")
 
-    logger.info(f"Loading configuration from {config_path}...")
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            strat_file = yaml.safe_load(f) or {}
-    except Exception as e:
-        logger.error(f"Failed to load config from {config_path}: {e}")
-        return pd.DataFrame()
+        logger.info(f"Loading configuration from {config_path}...")
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                strat_file = yaml.safe_load(f) or {}
+        except Exception as e:
+            logger.error(f"Failed to load config from {config_path}: {e}")
+            return pd.DataFrame()
 
-    market_cfg = strat_file.get("market", {})
+    market_cfg = strat_file.get("market") or {}
+    if not market_cfg and "exchange" in strat_file:
+        strat_rules_temp = strat_file.get("strategy_config") or {}
+        market_cfg = {
+            "exchange": strat_file.get("exchange"),
+            "symbol": strat_file.get("symbol"),
+            "timeframe": strat_file.get("timeframe"),
+            "target_timeframe": strat_file.get("target_timeframe"),
+            "start_time": strat_rules_temp.get("start_time"),
+            "end_time": strat_rules_temp.get("end_time"),
+        }
+
     if market_overrides:
         logger.info(f"Applying market config overrides from backtest: {market_overrides}")
         market_cfg.update({k: v for k, v in market_overrides.items() if v is not None})
 
-    indicator_config = strat_file.get("indicators", {})
-    strategy_config = strat_file.get("strategy", {})
+    indicator_config = strat_file.get("indicators", strat_file.get("indicators_config", {}))
+    strategy_config = strat_file.get("strategy", strat_file.get("strategy_config", {}))
 
 
     exchange = market_cfg.get("exchange")
@@ -48,12 +62,11 @@ def run_signals_pipeline(
     target_timeframe = market_cfg.get("target_timeframe")
     start_time = market_cfg.get("start_time")
     end_time = market_cfg.get("end_time")
-    max_retries = market_cfg.get("max_retries")
+    max_retries = market_cfg.get("max_retries") 
     retry_delay = market_cfg.get("retry_delay")
     logger.info(f"Fetching {symbol} from {exchange} ({base_timeframe} resampled to {target_timeframe})...")
     dl = Downloader(exchange=exchange, symbol=symbol, timeframe=base_timeframe)
     try:
-        # Always call resample() to fetch and resample the data directly
         _, df = dl.resample(
             target_timeframe=target_timeframe,
             start_time=start_time,
