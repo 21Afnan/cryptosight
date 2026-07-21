@@ -475,7 +475,6 @@ def create_simulations_schema_and_tables(conn, strategy_id: str):
     create_positions_sql = """
     CREATE TABLE IF NOT EXISTS simulations.positions (
         strategy_id    VARCHAR(128) PRIMARY KEY,
-        trade_id       VARCHAR(64)  NOT NULL,
         direction      VARCHAR(8)   NOT NULL,
         entry_time     TIMESTAMP WITH TIME ZONE NOT NULL,
         entry_price    NUMERIC(18,8) NOT NULL,
@@ -510,7 +509,7 @@ def create_simulations_schema_and_tables(conn, strategy_id: str):
     strat_table_name = strategy_id.lower().replace('.', '_')
     create_ledger_sql = f"""
     CREATE TABLE IF NOT EXISTS simulations.{strat_table_name} (
-        trade_id       VARCHAR(64) PRIMARY KEY,
+        id             SERIAL PRIMARY KEY,
         direction      VARCHAR(8)  NOT NULL,
         entry_time     TIMESTAMP WITH TIME ZONE NOT NULL,
         exit_time      TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -523,7 +522,7 @@ def create_simulations_schema_and_tables(conn, strategy_id: str):
         net_pnl        NUMERIC(18,8) NOT NULL,
         perc_pnl       NUMERIC(10,6) NOT NULL,
         exit_reason    VARCHAR(32)   NOT NULL,
-        balance        NUMERIC(18,8) NOT NULL
+        balance_after  NUMERIC(18,8) NOT NULL
     );
     """
 
@@ -562,12 +561,11 @@ def save_simulation_position(conn, strategy_id: str, position: dict):
     """
     upsert_sql = """
     INSERT INTO simulations.positions (
-        strategy_id, trade_id, direction, entry_time, entry_price, quantity,
+        strategy_id, direction, entry_time, entry_price, quantity,
         take_profit, stop_loss, current_price, unrealized_pnl, status, last_updated
     )
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Open', CURRENT_TIMESTAMP)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Open', CURRENT_TIMESTAMP)
     ON CONFLICT (strategy_id) DO UPDATE SET
-        trade_id       = EXCLUDED.trade_id,
         direction      = EXCLUDED.direction,
         entry_time     = EXCLUDED.entry_time,
         entry_price    = EXCLUDED.entry_price,
@@ -586,7 +584,6 @@ def save_simulation_position(conn, strategy_id: str, position: dict):
         with conn.cursor() as cursor:
             cursor.execute(upsert_sql, (
                 strategy_id,
-                position["trade_id"],
                 position["direction"],
                 position["entry_time"],
                 position["entry_price"],
@@ -605,7 +602,6 @@ def save_simulation_position(conn, strategy_id: str, position: dict):
 def close_simulation_position(conn, strategy_id: str, exit_data: dict = None):
     """
     Updates position status to 'Closed' in simulations.positions with exit details.
-    Keeps position record visible in DB table.
     """
     if exit_data is None:
         exit_data = {}
@@ -637,7 +633,6 @@ def close_simulation_position(conn, strategy_id: str, exit_data: dict = None):
         logger.error(f"Error marking position closed for strategy '{strategy_id}': {error}")
 
 
-
 def insert_simulation_ledger(conn, strategy_id: str, trade: dict):
     """
     Appends a completed trade to strategy-specific table: simulations.<strategy_id>.
@@ -646,29 +641,14 @@ def insert_simulation_ledger(conn, strategy_id: str, trade: dict):
     strat_table_name = f"simulations.{safe_strat_id}"
     insert_sql = f"""
     INSERT INTO {strat_table_name} (
-        trade_id, direction, entry_time, exit_time, entry_price, exit_price,
-        quantity, gross_pnl, commission, slippage, net_pnl, perc_pnl, exit_reason, balance
+        direction, entry_time, exit_time, entry_price, exit_price,
+        quantity, gross_pnl, commission, slippage, net_pnl, perc_pnl, exit_reason, balance_after
     )
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    ON CONFLICT (trade_id) DO UPDATE SET
-        direction   = EXCLUDED.direction,
-        entry_time  = EXCLUDED.entry_time,
-        exit_time   = EXCLUDED.exit_time,
-        entry_price = EXCLUDED.entry_price,
-        exit_price  = EXCLUDED.exit_price,
-        quantity    = EXCLUDED.quantity,
-        gross_pnl   = EXCLUDED.gross_pnl,
-        commission  = EXCLUDED.commission,
-        slippage    = EXCLUDED.slippage,
-        net_pnl     = EXCLUDED.net_pnl,
-        perc_pnl    = EXCLUDED.perc_pnl,
-        exit_reason = EXCLUDED.exit_reason,
-        balance     = EXCLUDED.balance;
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
     """
     try:
         with conn.cursor() as cursor:
             cursor.execute(insert_sql, (
-                trade["trade_id"],
                 trade["direction"],
                 trade["entry_time"],
                 trade["exit_time"],
@@ -681,7 +661,7 @@ def insert_simulation_ledger(conn, strategy_id: str, trade: dict):
                 trade["net_pnl"],
                 trade["perc_pnl"],
                 trade["exit_reason"],
-                trade["balance"],
+                trade.get("balance_after", trade.get("balance", 0.0)),
             ))
             conn.commit()
     except Exception as error:

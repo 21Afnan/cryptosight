@@ -62,8 +62,8 @@ def run_signals_pipeline(
     target_timeframe = market_cfg.get("target_timeframe")
     start_time = market_cfg.get("start_time")
     end_time = market_cfg.get("end_time")
-    max_retries = market_cfg.get("max_retries") 
-    retry_delay = market_cfg.get("retry_delay")
+    max_retries = market_cfg.get("max_retries") or 5
+    retry_delay = market_cfg.get("retry_delay") or 3
     logger.info(f"Fetching {symbol} from {exchange} ({base_timeframe} resampled to {target_timeframe})...")
     dl = Downloader(exchange=exchange, symbol=symbol, timeframe=base_timeframe)
     try:
@@ -133,7 +133,12 @@ def run_signals_pipeline(
             conn = get_connection()
             create_signals_schema_and_table(conn, exchange, symbol, target_timeframe)
             insert_signals(conn, exchange, symbol, target_timeframe, merged_df)
-            upsert_strategy_data(conn, exchange, symbol, target_timeframe, indicator_config, strategy_config)
+            strat_cfg_to_save = dict(strategy_config)
+            if start_time:
+                strat_cfg_to_save["start_time"] = start_time
+            if end_time:
+                strat_cfg_to_save["end_time"] = end_time
+            upsert_strategy_data(conn, exchange, symbol, target_timeframe, indicator_config, strat_cfg_to_save)
             conn.close()
         except Exception as e:
             logger.warning(f"Could not save signals/strategy metadata to DB (non-fatal): {e}")

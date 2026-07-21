@@ -161,11 +161,11 @@ strategy:
 # ==========================================
 market:
   # The exchange from which the data will be fetched (e.g., "binance", "bybit")
-  exchange: "binance"
+  exchange: "bybit"
   # The crypto asset symbol to evaluate signals on
   symbol: "BTC"
   # The base database timeframe (must always be 1m)
-  timeframe: "1m"
+  timeframe: "5m"
   # The target timeframe to resample the 1m data to (e.g., "1m", "5m", "15m", "1h", "4h")
   target_timeframe: "1h"
   # The starting date/time for the historical data range in UTC (YYYY-MM-DD HH:MM:SS)

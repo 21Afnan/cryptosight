@@ -513,13 +513,20 @@ def fetch_best_strategy_from_db(conn) -> tuple[str, dict]:
 # ── SIMULATOR CONFIG DATA ───────────────────────────────────────────────────
 
 def create_simulator_config(conn):
-    """Creates metadata.simulator_config table for execution settings."""
+    """Creates metadata.simulator_config table with tabular relational columns."""
     create_metadata_schema(conn)
     sql = """
     CREATE TABLE IF NOT EXISTS metadata.simulator_config (
-        key VARCHAR(64) PRIMARY KEY,
-        value JSONB NOT NULL,
-        last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        strategy_id         VARCHAR(128) PRIMARY KEY,
+        enabled             BOOLEAN NOT NULL DEFAULT TRUE,
+        initial_balance     NUMERIC(18,8) NOT NULL DEFAULT 10000.0,
+        position_size_type  VARCHAR(32) NOT NULL DEFAULT 'fixed_percentage',
+        position_size_value NUMERIC(18,8) NOT NULL DEFAULT 10.0,
+        commission          NUMERIC(10,6) NOT NULL DEFAULT 0.0005,
+        slippage            NUMERIC(10,6) NOT NULL DEFAULT 0.0002,
+        allow_long          BOOLEAN NOT NULL DEFAULT TRUE,
+        allow_short         BOOLEAN NOT NULL DEFAULT TRUE,
+        last_updated        TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
     """
     with conn.cursor() as cur:
@@ -527,45 +534,109 @@ def create_simulator_config(conn):
         conn.commit()
 
 
-def upsert_simulator_config(conn, config_dict: dict):
-    """Upserts the entire configuration dictionary as a single JSONB record in metadata.simulator_config."""
+def upsert_simulator_config(conn, strategy_id: str, config_dict: dict):
+    """Upserts tabular simulation configuration for a strategy into metadata.simulator_config."""
     create_simulator_config(conn)
+    
+    enabled = config_dict.get("enabled", True)
+    initial_balance = config_dict.get("initial_balance", 10000.0)
+    pos_size = config_dict.get("position_size") or {}
+    if isinstance(pos_size, dict):
+        position_size_type = pos_size.get("type", config_dict.get("position_size_type", "fixed_percentage"))
+        position_size_value = pos_size.get("value", config_dict.get("position_size_value", 10.0))
+    else:
+        position_size_type = config_dict.get("position_size_type", "fixed_percentage")
+        position_size_value = config_dict.get("position_size_value", 10.0)
+        
+    commission = config_dict.get("commission", config_dict.get("commission_rate", 0.0005))
+    slippage = config_dict.get("slippage", config_dict.get("slippage_rate", 0.0002))
+    allow_long = config_dict.get("allow_long", True)
+    allow_short = config_dict.get("allow_short", True)
+
     upsert_sql = """
-    INSERT INTO metadata.simulator_config (key, value, last_updated)
-    VALUES ('config', %s, CURRENT_TIMESTAMP)
-    ON CONFLICT (key) DO UPDATE SET
-        value = EXCLUDED.value,
-        last_updated = CURRENT_TIMESTAMP;
+    INSERT INTO metadata.simulator_config (
+        strategy_id, enabled, initial_balance, position_size_type, position_size_value,
+        commission, slippage, allow_long, allow_short, last_updated
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+    ON CONFLICT (strategy_id) DO UPDATE SET
+        enabled             = EXCLUDED.enabled,
+        initial_balance     = EXCLUDED.initial_balance,
+        position_size_type  = EXCLUDED.position_size_type,
+        position_size_value = EXCLUDED.position_size_value,
+        commission          = EXCLUDED.commission,
+        slippage            = EXCLUDED.slippage,
+        allow_long          = EXCLUDED.allow_long,
+        allow_short         = EXCLUDED.allow_short,
+        last_updated        = CURRENT_TIMESTAMP;
     """
     with conn.cursor() as cur:
-        cur.execute(upsert_sql, (json.dumps(config_dict),))
+        cur.execute(upsert_sql, (
+            strategy_id, enabled, initial_balance, position_size_type, position_size_value,
+            commission, slippage, allow_long, allow_short
+        ))
         conn.commit()
-    logger.info("Entire simulator execution configuration upserted into metadata.simulator_config.")
+    logger.info(f"Tabular simulator configuration upserted for strategy '{strategy_id}'.")
 
 
-def fetch_simulator_config(conn) -> dict:
-    """Fetches full configuration dictionary from metadata.simulator_config DB table."""
+def fetch_simulator_config(conn, strategy_id: str = None) -> dict:
+    """Fetches tabular configuration dictionary from metadata.simulator_config DB table for a strategy."""
     create_simulator_config(conn)
-    query = "SELECT value FROM metadata.simulator_config WHERE key = 'config';"
     try:
         with conn.cursor() as cur:
-            cur.execute(query)
-            row = cur.fetchone()
-            if row:
-                val = row[0]
-                return val if isinstance(val, dict) else json.loads(val)
-        # Fallback for key-value row format
-        cur.execute("SELECT key, value FROM metadata.simulator_config WHERE key != 'config';")
-        rows = cur.fetchall()
-        if rows:
-            cfg = {}
-            for k, v in rows:
-                cfg[k] = v if not isinstance(v, str) else json.loads(v)
-            return cfg
-        return {}
+            if strategy_id:
+                cur.execute("""
+                    SELECT strategy_id, enabled, initial_balance, position_size_type, position_size_value,
+                           commission, slippage, allow_long, allow_short
+                    FROM metadata.simulator_config WHERE strategy_id = %s;
+                """, (strategy_id,))
+                row = cur.fetchone()
+                if row:
+                    return {
+                        "strategy_id": row[0],
+                        "enabled": row[1],
+                        "initial_balance": float(row[2]),
+                        "position_size": {"type": row[3], "value": float(row[4])},
+                        "commission": float(row[5]),
+                        "slippage": float(row[6]),
+                        "allow_long": row[7],
+                        "allow_short": row[8]
+                    }
+                # Default fallback config if strategy not found yet in simulator_config
+                return {
+                    "strategy_id": strategy_id,
+                    "enabled": True,
+                    "initial_balance": 10000.0,
+                    "position_size": {"type": "fixed_percentage", "value": 10.0},
+                    "commission": 0.0005,
+                    "slippage": 0.0002,
+                    "allow_long": True,
+                    "allow_short": True
+                }
+            else:
+                cur.execute("""
+                    SELECT strategy_id, enabled, initial_balance, position_size_type, position_size_value,
+                           commission, slippage, allow_long, allow_short
+                    FROM metadata.simulator_config;
+                """)
+                rows = cur.fetchall()
+                result = {}
+                for r in rows:
+                    result[r[0]] = {
+                        "strategy_id": r[0],
+                        "enabled": r[1],
+                        "initial_balance": float(r[2]),
+                        "position_size": {"type": r[3], "value": float(r[4])},
+                        "commission": float(r[5]),
+                        "slippage": float(r[6]),
+                        "allow_long": r[7],
+                        "allow_short": r[8]
+                    }
+                return result
     except Exception as e:
         logger.error(f"Error fetching simulator config from DB: {e}")
         return {}
+
 
 
 

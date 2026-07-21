@@ -1,0 +1,13 @@
+# Simulator Default Configuration Template
+# Matching tabular DB schema metadata.simulator_config
+
+enabled: true
+initial_balance: 10000.0
+position_size:
+  type: "fixed_percentage" # "fixed_percentage" or "fixed_amount"
+  value: 10.0 # 10% of equity
+
+commission: 0.0005 # 0.05% fee per trade execution
+slippage: 0.0002   # 0.02% price execution penalty
+allow_long: true
+allow_short: true
