@@ -482,6 +482,92 @@ def list_all_strategies(conn) -> list:
         return []
 
 
+def fetch_best_strategy_from_db(conn) -> tuple[str, dict]:
+    """Queries simulations.stats for strategy with highest total_pnl and returns its metadata."""
+    query = """
+    SELECT strategy_id, total_pnl 
+    FROM simulations.stats 
+    ORDER BY total_pnl DESC 
+    LIMIT 1;
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(query)
+            row = cur.fetchone()
+
+        if not row:
+            raise RuntimeError("No simulation stats found in simulations.stats! Run simulation first.")
+
+        best_id = row[0]
+        strat_info = fetch_strategy_from_db(conn, best_id)
+        if not strat_info:
+            raise RuntimeError(f"Best strategy '{best_id}' metadata not found in metadata.strategy_data!")
+
+        logger.info(f"Top Strategy selected from DB: [{best_id}] | PnL: ${float(row[1]):+,.2f}")
+        return best_id, strat_info
+    except Exception as error:
+        logger.error(f"Error fetching best strategy from DB: {error}")
+        raise
+
+
+# ── SIMULATOR CONFIG DATA ───────────────────────────────────────────────────
+
+def create_simulator_config(conn):
+    """Creates metadata.simulator_config table for execution settings."""
+    create_metadata_schema(conn)
+    sql = """
+    CREATE TABLE IF NOT EXISTS metadata.simulator_config (
+        key VARCHAR(64) PRIMARY KEY,
+        value JSONB NOT NULL,
+        last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql)
+        conn.commit()
+
+
+def upsert_simulator_config(conn, config_dict: dict):
+    """Upserts the entire configuration dictionary as a single JSONB record in metadata.simulator_config."""
+    create_simulator_config(conn)
+    upsert_sql = """
+    INSERT INTO metadata.simulator_config (key, value, last_updated)
+    VALUES ('config', %s, CURRENT_TIMESTAMP)
+    ON CONFLICT (key) DO UPDATE SET
+        value = EXCLUDED.value,
+        last_updated = CURRENT_TIMESTAMP;
+    """
+    with conn.cursor() as cur:
+        cur.execute(upsert_sql, (json.dumps(config_dict),))
+        conn.commit()
+    logger.info("Entire simulator execution configuration upserted into metadata.simulator_config.")
+
+
+def fetch_simulator_config(conn) -> dict:
+    """Fetches full configuration dictionary from metadata.simulator_config DB table."""
+    create_simulator_config(conn)
+    query = "SELECT value FROM metadata.simulator_config WHERE key = 'config';"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(query)
+            row = cur.fetchone()
+            if row:
+                val = row[0]
+                return val if isinstance(val, dict) else json.loads(val)
+        # Fallback for key-value row format
+        cur.execute("SELECT key, value FROM metadata.simulator_config WHERE key != 'config';")
+        rows = cur.fetchall()
+        if rows:
+            cfg = {}
+            for k, v in rows:
+                cfg[k] = v if not isinstance(v, str) else json.loads(v)
+            return cfg
+        return {}
+    except Exception as e:
+        logger.error(f"Error fetching simulator config from DB: {e}")
+        return {}
+
+
 
 if __name__ == "__main__":
     logger.info("--- Testing All Metadata Schema & Tables ---")

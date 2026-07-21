@@ -729,3 +729,233 @@ def upsert_simulation_stats(conn, strategy_id: str, stats_summary: dict, metrics
         conn.rollback()
         logger.error(f"Error saving simulation stats for strategy '{strategy_id}': {error}")
 
+
+# ── EXECUTION SCHEMA & TABLES ────────────────────────────────────────────────
+
+def create_execution_schema_and_tables(conn, strategy_id: str):
+    """Creates the 'execution' schema, positions table, strategy ledger table, and stats table."""
+    strat_table_name = strategy_id.lower().replace('.', '_')
+    sql = f"""
+    CREATE SCHEMA IF NOT EXISTS execution;
+
+    CREATE TABLE IF NOT EXISTS execution.positions (
+        strategy_id VARCHAR(128) PRIMARY KEY,
+        trade_id VARCHAR(64) NOT NULL,
+        symbol VARCHAR(32) NOT NULL,
+        direction VARCHAR(16) NOT NULL,
+        entry_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        entry_price NUMERIC NOT NULL,
+        quantity NUMERIC NOT NULL,
+        take_profit NUMERIC NOT NULL,
+        stop_loss NUMERIC NOT NULL,
+        current_price NUMERIC NOT NULL,
+        unrealized_pnl NUMERIC NOT NULL,
+        status VARCHAR(16) DEFAULT 'Open',
+        exit_price NUMERIC,
+        exit_time TIMESTAMP WITH TIME ZONE,
+        exit_reason VARCHAR(32),
+        last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS execution.{strat_table_name} (
+        trade_id VARCHAR(64) PRIMARY KEY,
+        entry_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        exit_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        direction VARCHAR(16) NOT NULL,
+        entry_price NUMERIC NOT NULL,
+        exit_price NUMERIC NOT NULL,
+        quantity NUMERIC NOT NULL,
+        gross_pnl NUMERIC NOT NULL,
+        commission NUMERIC NOT NULL,
+        slippage NUMERIC NOT NULL,
+        net_pnl NUMERIC NOT NULL,
+        perc_pnl NUMERIC NOT NULL,
+        exit_reason VARCHAR(32) NOT NULL,
+        balance NUMERIC NOT NULL,
+        recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS execution.stats (
+        strategy_id VARCHAR(128) PRIMARY KEY,
+        initial_balance NUMERIC NOT NULL,
+        final_balance NUMERIC NOT NULL,
+        total_pnl NUMERIC NOT NULL,
+        win_rate NUMERIC NOT NULL,
+        total_trades INT NOT NULL,
+        winning_trades INT NOT NULL,
+        losing_trades INT NOT NULL,
+        max_drawdown NUMERIC NOT NULL,
+        metrics JSONB NOT NULL,
+        last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            conn.commit()
+            logger.info(f"Execution schema & tables verified/created for '{strategy_id}'.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating execution tables for strategy '{strategy_id}': {error}")
+        raise
+
+
+def save_execution_position(conn, strategy_id: str, symbol: str, position: dict):
+    """Saves or updates active open position in execution.positions."""
+    upsert_sql = """
+    INSERT INTO execution.positions (
+        strategy_id, trade_id, symbol, direction, entry_time, entry_price, quantity,
+        take_profit, stop_loss, current_price, unrealized_pnl, status, last_updated
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+    ON CONFLICT (strategy_id) DO UPDATE SET
+        trade_id       = EXCLUDED.trade_id,
+        symbol         = EXCLUDED.symbol,
+        direction      = EXCLUDED.direction,
+        entry_time     = EXCLUDED.entry_time,
+        entry_price    = EXCLUDED.entry_price,
+        quantity       = EXCLUDED.quantity,
+        take_profit    = EXCLUDED.take_profit,
+        stop_loss      = EXCLUDED.stop_loss,
+        current_price  = EXCLUDED.current_price,
+        unrealized_pnl = EXCLUDED.unrealized_pnl,
+        status         = EXCLUDED.status,
+        exit_price     = NULL,
+        exit_time      = NULL,
+        exit_reason    = NULL,
+        last_updated   = CURRENT_TIMESTAMP;
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(upsert_sql, (
+                strategy_id,
+                position["trade_id"],
+                symbol,
+                position["direction"],
+                position["entry_time"],
+                position["entry_price"],
+                position["quantity"],
+                position["take_profit"],
+                position["stop_loss"],
+                position["current_price"],
+                position["unrealized_pnl"],
+                position.get("status", "Open"),
+            ))
+            conn.commit()
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error saving execution position for '{strategy_id}': {error}")
+
+
+def close_execution_position(conn, strategy_id: str, exit_data: dict):
+    """Updates position status to 'Closed' in execution.positions."""
+    update_sql = """
+    UPDATE execution.positions SET
+        status         = 'Closed',
+        current_price  = %s,
+        unrealized_pnl = 0.0,
+        exit_price     = %s,
+        exit_time      = %s,
+        exit_reason    = %s,
+        last_updated   = CURRENT_TIMESTAMP
+    WHERE strategy_id = %s;
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(update_sql, (
+                exit_data.get("exit_price"),
+                exit_data.get("exit_price"),
+                exit_data.get("exit_time"),
+                exit_data.get("exit_reason"),
+                strategy_id,
+            ))
+            conn.commit()
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error closing execution position for '{strategy_id}': {error}")
+
+
+def insert_execution_ledger(conn, strategy_id: str, completed_trade: dict):
+    """Inserts completed trade into execution.<strategy_id> table."""
+    strat_table_name = strategy_id.lower().replace('.', '_')
+    insert_sql = f"""
+    INSERT INTO execution.{strat_table_name} (
+        trade_id, entry_time, exit_time, direction, entry_price, exit_price,
+        quantity, gross_pnl, commission, slippage, net_pnl, perc_pnl, exit_reason, balance
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(insert_sql, (
+                completed_trade["trade_id"],
+                completed_trade["entry_time"],
+                completed_trade["exit_time"],
+                completed_trade["direction"],
+                completed_trade["entry_price"],
+                completed_trade["exit_price"],
+                completed_trade["quantity"],
+                completed_trade["gross_pnl"],
+                completed_trade["commission"],
+                completed_trade["slippage"],
+                completed_trade["net_pnl"],
+                completed_trade["perc_pnl"],
+                completed_trade["exit_reason"],
+                completed_trade["balance"],
+            ))
+            conn.commit()
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error inserting execution ledger for '{strategy_id}': {error}")
+
+
+def upsert_execution_stats(conn, strategy_id: str, initial_balance: float, final_balance: float, completed_trades: list, metrics_dict: dict):
+    """Calculates & upserts execution stats into execution.stats."""
+    if not completed_trades:
+        return
+
+    df_trades = pd.DataFrame(completed_trades)
+    total_trades = len(completed_trades)
+    winning_trades = len(df_trades[df_trades["net_pnl"] > 0])
+    losing_trades = len(df_trades[df_trades["net_pnl"] < 0])
+    win_rate = winning_trades / total_trades if total_trades > 0 else 0.0
+    total_pnl = float(df_trades["net_pnl"].sum())
+    max_dd = float(metrics_dict.get("max_drawdown", 0.0) or 0.0)
+
+    upsert_sql = """
+    INSERT INTO execution.stats (
+        strategy_id, initial_balance, final_balance, total_pnl, win_rate,
+        total_trades, winning_trades, losing_trades, max_drawdown, metrics, last_updated
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+    ON CONFLICT (strategy_id) DO UPDATE SET
+        initial_balance = EXCLUDED.initial_balance,
+        final_balance   = EXCLUDED.final_balance,
+        total_pnl       = EXCLUDED.total_pnl,
+        win_rate        = EXCLUDED.win_rate,
+        total_trades    = EXCLUDED.total_trades,
+        winning_trades  = EXCLUDED.winning_trades,
+        losing_trades   = EXCLUDED.losing_trades,
+        max_drawdown    = EXCLUDED.max_drawdown,
+        metrics         = EXCLUDED.metrics,
+        last_updated    = CURRENT_TIMESTAMP;
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(upsert_sql, (
+                strategy_id,
+                initial_balance,
+                final_balance,
+                total_pnl,
+                win_rate,
+                total_trades,
+                winning_trades,
+                losing_trades,
+                max_dd,
+                json.dumps(metrics_dict),
+            ))
+            conn.commit()
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error upserting execution stats for '{strategy_id}': {error}")
+
