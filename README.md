@@ -51,48 +51,48 @@
 
 ```mermaid
 graph TD
-    subgraph Data Ingestion Layer
-        API["Exchange APIs (Binance & Bybit)"] -->|"Fetch Historical & Live Price Data"| Fetcher["Exchange Downloaders"]
+    subgraph Data_Ingestion["Data Ingestion Layer"]
+        API["Exchange APIs - Binance & Bybit"] -->|"Fetch Historical & Live Price Data"| Fetcher["Exchange Downloaders"]
         Fetcher -->|"Clean & Organize OHLCV"| Facade["Master Data Downloader"]
-        Reddit["Reddit API (PRAW Client)"] -->|"Scrape Posts & Comments"| RedditScraper["Reddit Scraper & Saver"]
+        Reddit["Reddit API - PRAW Client"] -->|"Scrape Posts & Comments"| RedditScraper["Reddit Scraper & Saver"]
     end
 
-    subgraph Database & Storage Layer (PostgreSQL)
-        Facade -->|"Check Last Saved Candle Date"| SQL_Check[("PostgreSQL Database")]
+    subgraph Database_Layer["PostgreSQL Database & Storage Layer"]
+        Facade -->|"Check Last Saved Candle Date"| SQL_Check["PostgreSQL Database"]
         SQL_Check -->|"Download Only Missing Gap"| Facade
         Facade -->|"Fast Bulk Save & Deduplicate"| SQL_Check
         
         RedditScraper -->|"Save Raw Posts & Comments"| SQL_Check
-        SQL_Check -->|"Fetch Unprocessed Raw Posts"| AI_Sentiment["AI Sentiment Pipeline (FinBERT)"]
+        SQL_Check -->|"Fetch Unprocessed Raw Posts"| AI_Sentiment["AI Sentiment Pipeline FinBERT"]
         AI_Sentiment -->|"Save Bullish/Bearish Scores"| SQL_Check
     end
 
-    subgraph Indicators & Charting Layer
-        SQL_Check -->|"Load Price Candles"| Engine["158 Technical Indicators Engine (TA-Lib Wrapper)"]
-        Engine -->|"Render Interactive Visuals"| Dashboard["Dark Mode Web Charts (Plotly)"]
+    subgraph Indicators_Layer["Indicators & Charting Layer"]
+        SQL_Check -->|"Load Price Candles"| Engine["158 Technical Indicators Engine TA-Lib Wrapper"]
+        Engine -->|"Render Interactive Visuals"| Dashboard["Dark Mode Web Charts Plotly"]
     end
 
-    subgraph Trading Signals Layer
-        Engine -->|"Apply Crossover Rules (.shift(1))"| Signals["Trading Signal Generator (YAML / DB Rules)"]
+    subgraph Signals_Layer["Trading Signals Layer"]
+        Engine -->|"Apply Crossover Rules"| Signals["Trading Signal Generator YAML / DB Rules"]
     end
 
-    subgraph Backtesting & Simulation Layer
+    subgraph Simulation_Layer["Backtesting & Simulation Layer"]
         SQL_Check -->|"Load 1m Price Candles"| Backtester["Vectorized 10-Step Backtesting Engine"]
-        Signals -->|"Send Execution Signals (+1, 0, -1)"| Backtester
+        Signals -->|"Send Execution Signals"| Backtester
         
-        SQL_Check -->|"Load 1m Candles via DB COPY"| Simulator["Sequential Event-Driven Simulator (cryptosight.simulator)"]
+        SQL_Check -->|"Load 1m Candles via DB COPY"| Simulator["Sequential Event-Driven Simulator"]
         Signals -->|"Send Aligned Signals"| Simulator
-        Simulator -->|"Check TP/SL & Reversals"| SimLedger["Simulator Ledger SQL (simulations.strat_id)"]
-        Simulator -->|"Track Open Trades"| SimPos["Active Position Table (simulations.positions)"]
+        Simulator -->|"Check TP/SL & Reversals"| SimLedger["Simulator Ledger SQL Table"]
+        Simulator -->|"Track Open Trades"| SimPos["Active Position Table"]
     end
 
-    subgraph Live Bybit Execution Engine
-        SQL_Check -->|"Fetch Top N Strategies & Execution Settings"| ExecEngine["Live Execution Engine (cryptosight.execution)"]
-        ExecEngine -->|"Fetch Live API Keys"| AccCreds[("account.api_creds")]
+    subgraph Live_Execution_Layer["Live Bybit Execution Engine"]
+        SQL_Check -->|"Fetch Top N Strategies & Execution Settings"| ExecEngine["Live Execution Engine"]
+        ExecEngine -->|"Fetch Live API Keys"| AccCreds["account.api_creds Table"]
         ExecEngine -->|"Evaluate Live Signal & TP/SL"| BybitAPI["Bybit Unified V5 Trading API"]
-        BybitAPI -->|"Place Market/Limit Orders"| BybitExchange["Bybit Exchange (Demo / Live)"]
-        ExecEngine -->|"Log Executed Trade Ledger"| ExecLedger[("execution.strat_id & account.history")]
-        ExecEngine -->|"Log Performance Stats"| ExecStats[("execution.stats & account.stats")]
+        BybitAPI -->|"Place Market/Limit Orders"| BybitExchange["Bybit Exchange Demo / Live"]
+        ExecEngine -->|"Log Executed Trade Ledger"| ExecLedger["execution.strat_id & account.history"]
+        ExecEngine -->|"Log Performance Stats"| ExecStats["execution.stats & account.stats"]
     end
 ```
 
