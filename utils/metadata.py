@@ -694,89 +694,108 @@ def fetch_simulator_config(conn, strategy_id: str = None) -> dict:
         return {}
 
 
-def create_exchange_credentials(conn):
-    """Creates the 'metadata.exchange_credentials' table for storing API keys in database."""
-    create_metadata_schema(conn)
+def create_account_schema_and_tables(conn):
+    """Creates the 'account' schema and account.api_creds, account.history, and account.stats tables."""
     sql = """
-    CREATE TABLE IF NOT EXISTS metadata.exchange_credentials (
+    CREATE SCHEMA IF NOT EXISTS account;
+
+    CREATE TABLE IF NOT EXISTS account.api_creds (
         exchange        VARCHAR(64) PRIMARY KEY,
         api_key         TEXT NOT NULL,
         api_secret      TEXT NOT NULL,
-        testnet         BOOLEAN NOT NULL DEFAULT FALSE,
         demo            BOOLEAN NOT NULL DEFAULT FALSE,
+        last_updated    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS account.history (
+        id              SERIAL PRIMARY KEY,
+        trade_id        VARCHAR(64) NOT NULL,
+        strategy_id     VARCHAR(128) NOT NULL,
+        symbol          VARCHAR(32) NOT NULL,
+        direction       VARCHAR(16) NOT NULL,
+        entry_price     NUMERIC NOT NULL,
+        exit_price      NUMERIC NOT NULL,
+        quantity        NUMERIC NOT NULL,
+        gross_pnl       NUMERIC NOT NULL,
+        commission      NUMERIC NOT NULL,
+        slippage        NUMERIC NOT NULL,
+        net_pnl         NUMERIC NOT NULL,
+        perc_pnl        NUMERIC NOT NULL,
+        exit_reason     VARCHAR(32) NOT NULL,
+        balance         NUMERIC NOT NULL,
+        entry_time      TIMESTAMP WITH TIME ZONE NOT NULL,
+        exit_time       TIMESTAMP WITH TIME ZONE NOT NULL,
+        recorded_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS account.stats (
+        id              SERIAL PRIMARY KEY,
+        coin_symbol     VARCHAR(32) NOT NULL UNIQUE,
+        initial_balance NUMERIC NOT NULL,
+        current_balance NUMERIC NOT NULL,
+        no_of_trades    INT NOT NULL DEFAULT 0,
+        winning_trades  INT NOT NULL DEFAULT 0,
+        losing_trades   INT NOT NULL DEFAULT 0,
+        total_pnl       NUMERIC NOT NULL DEFAULT 0.0,
+        win_rate        NUMERIC NOT NULL DEFAULT 0.0,
+        max_drawdown    NUMERIC DEFAULT 0.0,
         last_updated    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
     """
     try:
         with conn.cursor() as cur:
             cur.execute(sql)
-            cur.execute("ALTER TABLE metadata.exchange_credentials ADD COLUMN IF NOT EXISTS demo BOOLEAN NOT NULL DEFAULT FALSE;")
             conn.commit()
-            logger.info("Table 'metadata.exchange_credentials' verified/created successfully.")
+            logger.info("Schema 'account' and tables (api_creds, history, stats) verified/created successfully.")
     except Exception as e:
         conn.rollback()
-        logger.error(f"Error creating table 'metadata.exchange_credentials': {e}")
+        logger.error(f"Error creating account schema & tables: {e}")
         raise
 
 
-def upsert_exchange_credentials(conn, exchange: str, api_key: str, api_secret: str, testnet: bool = False, demo: bool = False):
-    """Upserts API key credentials for an exchange into metadata.exchange_credentials."""
-    create_exchange_credentials(conn)
+def upsert_account_api_creds(conn, exchange: str, api_key: str, api_secret: str, demo: bool = False):
+    """Upserts API key credentials for an exchange into account.api_creds."""
+    create_account_schema_and_tables(conn)
     sql = """
-    INSERT INTO metadata.exchange_credentials (exchange, api_key, api_secret, testnet, demo, last_updated)
-    VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+    INSERT INTO account.api_creds (exchange, api_key, api_secret, demo, last_updated)
+    VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
     ON CONFLICT (exchange) DO UPDATE SET
         api_key = EXCLUDED.api_key,
         api_secret = EXCLUDED.api_secret,
-        testnet = EXCLUDED.testnet,
         demo = EXCLUDED.demo,
         last_updated = CURRENT_TIMESTAMP;
     """
     try:
         with conn.cursor() as cur:
-            cur.execute(sql, (exchange.lower().strip(), api_key.strip(), api_secret.strip(), testnet, demo))
+            cur.execute(sql, (exchange.lower().strip(), api_key.strip(), api_secret.strip(), demo))
             conn.commit()
-            logger.info(f"API credentials upserted for exchange '{exchange}'.")
+            logger.info(f"API credentials upserted into account.api_creds for exchange '{exchange}'.")
     except Exception as e:
         conn.rollback()
-        logger.error(f"Error upserting credentials for exchange '{exchange}': {e}")
+        logger.error(f"Error upserting account.api_creds for '{exchange}': {e}")
         raise
 
 
-def get_exchange_credentials(conn, exchange: str = "bybit") -> dict:
+def get_exchange_credentials(conn, exchange: str) -> dict:
     """
-    Retrieves API key credentials for an exchange from metadata.exchange_credentials.
-    Falls back to environment variables if not found in database.
+    Retrieves API key credentials for an exchange strictly from account.api_creds table.
     """
-    create_exchange_credentials(conn)
-    sql = "SELECT api_key, api_secret, testnet, demo FROM metadata.exchange_credentials WHERE LOWER(exchange) = %s;"
+    create_account_schema_and_tables(conn)
+    sql_account = "SELECT api_key, api_secret, demo FROM account.api_creds WHERE LOWER(exchange) = %s;"
     try:
         with conn.cursor() as cur:
-            cur.execute(sql, (exchange.lower().strip(),))
+            cur.execute(sql_account, (exchange.lower().strip(),))
             row = cur.fetchone()
             if row and row[0] and row[1]:
                 return {
                     "api_key": row[0].strip(),
                     "api_secret": row[1].strip(),
-                    "testnet": bool(row[2]),
-                    "demo": bool(row[3]) if len(row) > 3 and row[3] is not None else False
+                    "demo": bool(row[2]) if len(row) > 2 and row[2] is not None else False
                 }
     except Exception as e:
-        logger.warning(f"Could not query metadata.exchange_credentials for '{exchange}': {e}")
+        logger.warning(f"Could not query account.api_creds for '{exchange}': {e}")
 
-    # Fallback to environment variables if not in DB
-    import os
-    env_key = os.getenv(f"{exchange.upper()}_API_KEY", "") or os.getenv("BYBIT_API_KEY", "")
-    env_secret = os.getenv(f"{exchange.upper()}_API_SECRET", "") or os.getenv("BYBIT_API_SECRET", "")
-    env_testnet = os.getenv("BYBIT_TESTNET", "false").lower() in ("true", "1")
-    env_demo = os.getenv("BYBIT_DEMO", "false").lower() in ("true", "1")
-
-    return {
-        "api_key": env_key.strip(),
-        "api_secret": env_secret.strip(),
-        "testnet": env_testnet,
-        "demo": env_demo
-    }
+    return {}
 
 
 

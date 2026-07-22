@@ -937,3 +937,87 @@ def upsert_execution_stats(conn, strategy_id: str, initial_balance: float, final
         conn.rollback()
         logger.error(f"Error upserting execution stats for '{strategy_id}': {error}")
 
+
+def insert_account_history(conn, strategy_id: str, symbol: str, completed_trade: dict):
+    """Inserts completed live trade into account.history table."""
+    insert_sql = """
+    INSERT INTO account.history (
+        trade_id, strategy_id, symbol, direction, entry_price, exit_price,
+        quantity, gross_pnl, commission, slippage, net_pnl, perc_pnl, exit_reason, balance, entry_time, exit_time
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(insert_sql, (
+                completed_trade["trade_id"],
+                strategy_id,
+                symbol,
+                completed_trade["direction"],
+                completed_trade["entry_price"],
+                completed_trade["exit_price"],
+                completed_trade["quantity"],
+                completed_trade["gross_pnl"],
+                completed_trade["commission"],
+                completed_trade["slippage"],
+                completed_trade["net_pnl"],
+                completed_trade["perc_pnl"],
+                completed_trade["exit_reason"],
+                completed_trade["balance"],
+                completed_trade["entry_time"],
+                completed_trade["exit_time"],
+            ))
+            conn.commit()
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error inserting into account.history for symbol '{symbol}': {error}")
+
+
+def upsert_account_stats(conn, coin_symbol: str, initial_balance: float, current_balance: float, completed_trades: list, metrics_dict: dict):
+    """Upserts live account performance stats for a coin into account.stats table."""
+    total_trades = len(completed_trades)
+    if total_trades == 0:
+        return
+
+    df_trades = pd.DataFrame(completed_trades)
+    winning_trades = len(df_trades[df_trades["net_pnl"] > 0])
+    losing_trades = len(df_trades[df_trades["net_pnl"] < 0])
+    win_rate = winning_trades / total_trades if total_trades > 0 else 0.0
+    total_pnl = float(df_trades["net_pnl"].sum())
+    max_dd = float(metrics_dict.get("max_drawdown", 0.0) or 0.0)
+
+    upsert_sql = """
+    INSERT INTO account.stats (
+        coin_symbol, initial_balance, current_balance, no_of_trades,
+        winning_trades, losing_trades, total_pnl, win_rate, max_drawdown, last_updated
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+    ON CONFLICT (coin_symbol) DO UPDATE SET
+        initial_balance = EXCLUDED.initial_balance,
+        current_balance = EXCLUDED.current_balance,
+        no_of_trades    = EXCLUDED.no_of_trades,
+        winning_trades  = EXCLUDED.winning_trades,
+        losing_trades   = EXCLUDED.losing_trades,
+        total_pnl       = EXCLUDED.total_pnl,
+        win_rate        = EXCLUDED.win_rate,
+        max_drawdown    = EXCLUDED.max_drawdown,
+        last_updated    = CURRENT_TIMESTAMP;
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(upsert_sql, (
+                coin_symbol.upper(),
+                initial_balance,
+                current_balance,
+                total_trades,
+                winning_trades,
+                losing_trades,
+                total_pnl,
+                win_rate,
+                max_dd,
+            ))
+            conn.commit()
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error upserting account.stats for symbol '{coin_symbol}': {error}")
+
