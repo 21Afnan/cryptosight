@@ -241,38 +241,56 @@ def generate_strategy_id(exchange: str, symbol: str, target_timeframe: str, indi
 def create_strategy_data(conn):
     """
     Creates the 'metadata.strategy_data' table to track signal pipeline strategy configurations.
-    Uses `strategy_id` (derived from exchange, symbol, target_timeframe, and indicators+periods) as PRIMARY KEY.
+    Col 1: strategy_id (BIGSERIAL PRIMARY KEY, 1, 2, 3...)
+    Col 2: strategy_name (VARCHAR(128) UNIQUE NOT NULL)
     """
     create_metadata_schema(conn)
 
-    create_table_sql = """
-    CREATE TABLE IF NOT EXISTS metadata.strategy_data (
-        strategy_id       VARCHAR(128) PRIMARY KEY,
-        exchange          VARCHAR(32)  NOT NULL,
-        symbol            VARCHAR(32)  NOT NULL,
-        target_timeframe  VARCHAR(16)  NOT NULL,
-
-        indicators_config JSONB,
-        strategy_config   JSONB,
-
-        total_rows        BIGINT DEFAULT 0,
-        long_signals      BIGINT DEFAULT 0,
-        short_signals     BIGINT DEFAULT 0,
-        last_signal_time  TIMESTAMP WITH TIME ZONE,
-
-        last_updated      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-    );
-    """
-    create_index_sql = """
-    CREATE INDEX IF NOT EXISTS idx_strategy_data_lookup
-    ON metadata.strategy_data (exchange, symbol, target_timeframe);
-    """
     try:
         with conn.cursor() as cursor:
+            # Migration check: if strategy_id is VARCHAR, drop old tables to recreate with BIGSERIAL (1, 2, 3...)
+            cursor.execute("""
+                SELECT data_type 
+                FROM information_schema.columns 
+                WHERE table_schema = 'metadata' 
+                  AND table_name = 'strategy_data' 
+                  AND column_name = 'strategy_id';
+            """)
+            col_type = cursor.fetchone()
+            if col_type and col_type[0].lower() in ('character varying', 'text', 'varchar'):
+                logger.info("Migrating metadata schema: dropping old VARCHAR strategy_id tables to create BIGSERIAL sequence (1, 2, 3...).")
+                cursor.execute("DROP TABLE IF EXISTS metadata.simulator_config CASCADE;")
+                cursor.execute("DROP TABLE IF EXISTS metadata.backtest_data CASCADE;")
+                cursor.execute("DROP TABLE IF EXISTS metadata.strategy_data CASCADE;")
+                conn.commit()
+
+            create_table_sql = """
+            CREATE TABLE IF NOT EXISTS metadata.strategy_data (
+                strategy_id       BIGSERIAL PRIMARY KEY,
+                strategy_name     VARCHAR(128) UNIQUE NOT NULL,
+                exchange          VARCHAR(32)  NOT NULL,
+                symbol            VARCHAR(32)  NOT NULL,
+                target_timeframe  VARCHAR(16)  NOT NULL,
+
+                indicators_config JSONB,
+                strategy_config   JSONB,
+
+                total_rows        BIGINT DEFAULT 0,
+                long_signals      BIGINT DEFAULT 0,
+                short_signals     BIGINT DEFAULT 0,
+                last_signal_time  TIMESTAMP WITH TIME ZONE,
+
+                last_updated      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+            create_index_sql = """
+            CREATE INDEX IF NOT EXISTS idx_strategy_data_lookup
+            ON metadata.strategy_data (exchange, symbol, target_timeframe);
+            """
             cursor.execute(create_table_sql)
             cursor.execute(create_index_sql)
             conn.commit()
-            logger.info("Table 'metadata.strategy_data' verified/created successfully.")
+            logger.info("Table 'metadata.strategy_data' verified/created with serial strategy_id and strategy_name.")
     except Exception as error:
         conn.rollback()
         logger.error(f"Error creating table 'metadata.strategy_data': {error}")
@@ -286,15 +304,18 @@ def upsert_strategy_data(
     target_timeframe: str,
     indicators_config: dict,
     strategy_config: dict,
+    strategy_name: str = None,
 ):
     """
-    Updates or inserts the metadata record for a strategy inside `metadata.strategy_data`.
-    Auto-fetches total_rows, long_signals, short_signals, and last_signal_time live
-    from the signals table. Uses `strategy_id` as the primary key.
+    Updates or inserts strategy definition into `metadata.strategy_data`.
+    Uses `strategy_name` as UNIQUE key to preserve serial integer `strategy_id` (1, 2, 3...).
+    Returns the integer `strategy_id`.
     """
     create_strategy_data(conn)
 
-    strategy_id = generate_strategy_id(exchange, symbol, target_timeframe, indicators_config, strategy_config)
+    if not strategy_name:
+        strategy_name = generate_strategy_name(exchange, symbol, target_timeframe, indicators_config, strategy_config)
+
     schema_name, table_name = get_signals_table_names(exchange, symbol, target_timeframe)
     full_signals_table = f"{schema_name}.{table_name}"
 
@@ -309,7 +330,7 @@ def upsert_strategy_data(
                 logger.warning(
                     f"Cannot update strategy metadata: Signals table '{full_signals_table}' does not exist yet."
                 )
-                return
+                return None
 
             # Auto-fetch live stats from the signals table
             cursor.execute(f"""
@@ -324,13 +345,13 @@ def upsert_strategy_data(
 
             upsert_sql = """
             INSERT INTO metadata.strategy_data (
-                strategy_id, exchange, symbol, target_timeframe,
+                strategy_name, exchange, symbol, target_timeframe,
                 indicators_config, strategy_config,
                 total_rows, long_signals, short_signals,
                 last_signal_time, last_updated
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-            ON CONFLICT (strategy_id) DO UPDATE SET
+            ON CONFLICT (strategy_name) DO UPDATE SET
                 exchange          = EXCLUDED.exchange,
                 symbol            = EXCLUDED.symbol,
                 target_timeframe  = EXCLUDED.target_timeframe,
@@ -340,24 +361,42 @@ def upsert_strategy_data(
                 long_signals      = EXCLUDED.long_signals,
                 short_signals     = EXCLUDED.short_signals,
                 last_signal_time  = EXCLUDED.last_signal_time,
-                last_updated      = CURRENT_TIMESTAMP;
+                last_updated      = CURRENT_TIMESTAMP
+            RETURNING strategy_id;
             """
             cursor.execute(upsert_sql, (
-                strategy_id, exchange.lower(), symbol.lower(), target_timeframe.lower(),
+                strategy_name, exchange.lower(), symbol.lower(), target_timeframe.lower(),
                 json.dumps(indicators_config) if indicators_config else None,
                 json.dumps(strategy_config)   if strategy_config   else None,
                 total_rows, long_signals, short_signals,
                 last_signal_time,
             ))
+            strategy_id = cursor.fetchone()[0]
             conn.commit()
+
             logger.info(
-                f"Strategy metadata refreshed for '{strategy_id}': {total_rows} rows, "
+                f"Strategy metadata saved for ID #{strategy_id} ('{strategy_name}'): {total_rows} rows, "
                 f"{long_signals} Long / {short_signals} Short signals."
             )
+
+            # Auto-initialize simulator_config with default settings for strategy_id
+            create_simulator_config(conn)
+            sim_upsert_sql = """
+            INSERT INTO metadata.simulator_config (
+                strategy_id, enabled, initial_balance, position_size_type, position_size_value,
+                commission, slippage, allow_long, allow_short
+            ) VALUES (%s, True, 10000.00, 'fixed_percentage', 10.00, 0.0005, 0.0002, True, True)
+            ON CONFLICT (strategy_id) DO NOTHING;
+            """
+            cursor.execute(sim_upsert_sql, (strategy_id,))
+            conn.commit()
+            return strategy_id
+
     except Exception as error:
         conn.rollback()
         logger.error(f"Error updating strategy metadata for '{full_signals_table}': {error}")
         raise
+
 
 def create_backtest_data(conn):
     """
@@ -513,25 +552,42 @@ def fetch_best_strategy_from_db(conn) -> tuple[str, dict]:
 # ── SIMULATOR CONFIG DATA ───────────────────────────────────────────────────
 
 def create_simulator_config(conn):
-    """Creates metadata.simulator_config table with tabular relational columns."""
+    """Creates metadata.simulator_config table with tabular relational columns referencing serial strategy_id."""
     create_metadata_schema(conn)
-    sql = """
-    CREATE TABLE IF NOT EXISTS metadata.simulator_config (
-        strategy_id         VARCHAR(128) PRIMARY KEY,
-        enabled             BOOLEAN NOT NULL DEFAULT TRUE,
-        initial_balance     NUMERIC(18,8) NOT NULL DEFAULT 10000.0,
-        position_size_type  VARCHAR(32) NOT NULL DEFAULT 'fixed_percentage',
-        position_size_value NUMERIC(18,8) NOT NULL DEFAULT 10.0,
-        commission          NUMERIC(10,6) NOT NULL DEFAULT 0.0005,
-        slippage            NUMERIC(10,6) NOT NULL DEFAULT 0.0002,
-        allow_long          BOOLEAN NOT NULL DEFAULT TRUE,
-        allow_short         BOOLEAN NOT NULL DEFAULT TRUE,
-        last_updated        TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-    );
-    """
-    with conn.cursor() as cur:
-        cur.execute(sql)
-        conn.commit()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT data_type 
+                FROM information_schema.columns 
+                WHERE table_schema = 'metadata' 
+                  AND table_name = 'simulator_config' 
+                  AND column_name = 'strategy_id';
+            """)
+            col_type = cur.fetchone()
+            if col_type and col_type[0].lower() in ('character varying', 'text', 'varchar'):
+                logger.info("Migrating simulator_config schema: dropping old VARCHAR strategy_id table.")
+                cur.execute("DROP TABLE IF EXISTS metadata.simulator_config CASCADE;")
+                conn.commit()
+
+            sql = """
+            CREATE TABLE IF NOT EXISTS metadata.simulator_config (
+                strategy_id         BIGINT PRIMARY KEY,
+                enabled             BOOLEAN NOT NULL DEFAULT TRUE,
+                initial_balance     NUMERIC(18,8) NOT NULL DEFAULT 10000.0,
+                position_size_type  VARCHAR(32) NOT NULL DEFAULT 'fixed_percentage',
+                position_size_value NUMERIC(18,8) NOT NULL DEFAULT 10.0,
+                commission          NUMERIC(10,6) NOT NULL DEFAULT 0.0005,
+                slippage            NUMERIC(10,6) NOT NULL DEFAULT 0.0002,
+                allow_long          BOOLEAN NOT NULL DEFAULT TRUE,
+                allow_short         BOOLEAN NOT NULL DEFAULT TRUE,
+                last_updated        TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+            cur.execute(sql)
+            conn.commit()
+    except Exception as err:
+        conn.rollback()
+        logger.error(f"Error creating metadata.simulator_config table: {err}")
 
 
 def upsert_simulator_config(conn, strategy_id: str, config_dict: dict):
@@ -636,6 +692,91 @@ def fetch_simulator_config(conn, strategy_id: str = None) -> dict:
     except Exception as e:
         logger.error(f"Error fetching simulator config from DB: {e}")
         return {}
+
+
+def create_exchange_credentials(conn):
+    """Creates the 'metadata.exchange_credentials' table for storing API keys in database."""
+    create_metadata_schema(conn)
+    sql = """
+    CREATE TABLE IF NOT EXISTS metadata.exchange_credentials (
+        exchange        VARCHAR(64) PRIMARY KEY,
+        api_key         TEXT NOT NULL,
+        api_secret      TEXT NOT NULL,
+        testnet         BOOLEAN NOT NULL DEFAULT FALSE,
+        demo            BOOLEAN NOT NULL DEFAULT FALSE,
+        last_updated    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            cur.execute("ALTER TABLE metadata.exchange_credentials ADD COLUMN IF NOT EXISTS demo BOOLEAN NOT NULL DEFAULT FALSE;")
+            conn.commit()
+            logger.info("Table 'metadata.exchange_credentials' verified/created successfully.")
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error creating table 'metadata.exchange_credentials': {e}")
+        raise
+
+
+def upsert_exchange_credentials(conn, exchange: str, api_key: str, api_secret: str, testnet: bool = False, demo: bool = False):
+    """Upserts API key credentials for an exchange into metadata.exchange_credentials."""
+    create_exchange_credentials(conn)
+    sql = """
+    INSERT INTO metadata.exchange_credentials (exchange, api_key, api_secret, testnet, demo, last_updated)
+    VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+    ON CONFLICT (exchange) DO UPDATE SET
+        api_key = EXCLUDED.api_key,
+        api_secret = EXCLUDED.api_secret,
+        testnet = EXCLUDED.testnet,
+        demo = EXCLUDED.demo,
+        last_updated = CURRENT_TIMESTAMP;
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, (exchange.lower().strip(), api_key.strip(), api_secret.strip(), testnet, demo))
+            conn.commit()
+            logger.info(f"API credentials upserted for exchange '{exchange}'.")
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error upserting credentials for exchange '{exchange}': {e}")
+        raise
+
+
+def get_exchange_credentials(conn, exchange: str = "bybit") -> dict:
+    """
+    Retrieves API key credentials for an exchange from metadata.exchange_credentials.
+    Falls back to environment variables if not found in database.
+    """
+    create_exchange_credentials(conn)
+    sql = "SELECT api_key, api_secret, testnet, demo FROM metadata.exchange_credentials WHERE LOWER(exchange) = %s;"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, (exchange.lower().strip(),))
+            row = cur.fetchone()
+            if row and row[0] and row[1]:
+                return {
+                    "api_key": row[0].strip(),
+                    "api_secret": row[1].strip(),
+                    "testnet": bool(row[2]),
+                    "demo": bool(row[3]) if len(row) > 3 and row[3] is not None else False
+                }
+    except Exception as e:
+        logger.warning(f"Could not query metadata.exchange_credentials for '{exchange}': {e}")
+
+    # Fallback to environment variables if not in DB
+    import os
+    env_key = os.getenv(f"{exchange.upper()}_API_KEY", "") or os.getenv("BYBIT_API_KEY", "")
+    env_secret = os.getenv(f"{exchange.upper()}_API_SECRET", "") or os.getenv("BYBIT_API_SECRET", "")
+    env_testnet = os.getenv("BYBIT_TESTNET", "false").lower() in ("true", "1")
+    env_demo = os.getenv("BYBIT_DEMO", "false").lower() in ("true", "1")
+
+    return {
+        "api_key": env_key.strip(),
+        "api_secret": env_secret.strip(),
+        "testnet": env_testnet,
+        "demo": env_demo
+    }
 
 
 

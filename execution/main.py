@@ -1,18 +1,32 @@
+import os
+import sys
 import json
-from cryptosight.execution.engine import ExecutionEngine
+from pathlib import Path
 from cryptosight.utils.logger import get_logger
+from cryptosight.utils.db import get_connection
+from cryptosight.execution.executor import ExecutionEngine
 
 logger = get_logger("ExecutionMain")
 
 
-def run_execution(strategy_id: str = None) -> dict:
-    """Entry point caller function for the Bybit Live Execution Engine."""
-    logger.info("=== Executing Bybit Live Execution Engine Pipeline ===")
-    engine = ExecutionEngine()
-    results = engine.run_pipeline(strategy_id=strategy_id)
-    logger.info("Execution Pipeline Summary:\n" + json.dumps(results, indent=2, default=str))
-    return results
+def run_executor(strategy_id: str = None, exchange: str = "bybit", order_type: str = "Market") -> dict:
+    """
+    Master entry point for running the Live Execution Engine pipeline 
+    on top high-return Bybit strategies using a single shared DB connection.
+    """
+    conn = get_connection()
+    try:
+        engine = ExecutionEngine(conn=conn)
+        return engine.run_pipeline(strategy_id=strategy_id, exchange=exchange, order_type=order_type)
+    finally:
+        try:
+            conn.close()
+            logger.info("Shared DB connection closed cleanly.")
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
-    run_execution()
+    logger.info("=== Executing Bybit High-Return Strategy Live Execution Pipeline ===")
+    results = run_executor(exchange="bybit", order_type="Market")
+    print(f"\nExecution Engine Summary:\n{json.dumps(results, indent=2, default=str)}\n")

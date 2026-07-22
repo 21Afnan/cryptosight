@@ -36,18 +36,6 @@ class SimulatorEngine:
         self.conn = conn or get_connection()
         create_strategy_data(self.conn)
         create_simulator_config(self.conn)
-        try:
-            with self.conn.cursor() as cur:
-                cur.execute("UPDATE metadata.simulator_config SET enabled = TRUE WHERE enabled IS NULL OR enabled = FALSE;")
-                # Persist start_time and end_time into strategy_config JSON in metadata.strategy_data
-                cur.execute("""
-                    UPDATE metadata.strategy_data
-                    SET strategy_config = strategy_config || '{"start_time": "2026-07-19 00:00:00", "end_time": "now"}'::jsonb
-                    WHERE NOT (strategy_config ? 'start_time');
-                """)
-                self.conn.commit()
-        except Exception as e:
-            logger.warning(f"Could not bulk-update strategy_data metadata in DB: {e}")
 
     def fetch_strategies(self) -> list:
         """Discovers all strategies and their simulator configs in a single SQL JOIN query."""
@@ -56,7 +44,7 @@ class SimulatorEngine:
             with self.conn.cursor() as cur:
                 cur.execute("""
                     SELECT 
-                        s.strategy_id, s.exchange, s.symbol, s.target_timeframe, s.strategy_config, s.indicators_config,
+                        s.strategy_id, s.strategy_name, s.exchange, s.symbol, s.target_timeframe, s.strategy_config, s.indicators_config,
                         c.enabled, c.initial_balance, c.position_size_type, c.position_size_value,
                         c.commission, c.slippage, c.allow_long, c.allow_short
                     FROM metadata.strategy_data s
@@ -64,7 +52,7 @@ class SimulatorEngine:
                 """)
                 rows = cur.fetchall()
                 for r in rows:
-                    (s_id, ex, sym, tf, strat_cfg, ind_cfg,
+                    (s_id, s_name, ex, sym, tf, strat_cfg, ind_cfg,
                      enabled, init_bal, pos_type, pos_val, comm, slip, allow_l, allow_s) = r
 
                     if isinstance(strat_cfg, str):
@@ -72,28 +60,23 @@ class SimulatorEngine:
                     if isinstance(ind_cfg, str):
                         ind_cfg = json.loads(ind_cfg)
 
-                    is_enabled = enabled if enabled is not None else True
-                    
                     sim_config = {
                         "strategy_id": s_id,
-                        "enabled": is_enabled,
-                        "initial_balance": float(init_bal) if init_bal is not None else 10000.0,
+                        "enabled": enabled,
+                        "initial_balance": float(init_bal) if init_bal is not None else None,
                         "position_size": {
-                            "type": pos_type if pos_type else "fixed_percentage",
-                            "value": float(pos_val) if pos_val is not None else 10.0
+                            "type": pos_type,
+                            "value": float(pos_val) if pos_val is not None else None
                         },
-                        "commission": float(comm) if comm is not None else 0.0005,
-                        "slippage": float(slip) if slip is not None else 0.0002,
-                        "allow_long": allow_l if allow_l is not None else True,
-                        "allow_short": allow_s if allow_s is not None else True
+                        "commission": float(comm) if comm is not None else None,
+                        "slippage": float(slip) if slip is not None else None,
+                        "allow_long": allow_l,
+                        "allow_short": allow_s
                     }
 
-                    # Automatically persist enabled = True in metadata.simulator_config if not previously recorded
-                    if enabled is None:
-                        upsert_simulator_config(self.conn, s_id, sim_config)
-
                     strategies.append({
-                        "strategy_id": s_id,
+                        "strategy_id": s_id,       # Serial Integer ID (1, 2, 3...)
+                        "strategy_name": s_name,   # Unique Display Name for frontend
                         "exchange": ex,
                         "symbol": sym,
                         "target_timeframe": tf,
@@ -348,9 +331,11 @@ class SimulatorEngine:
                     if position is not None:
                         save_simulation_position(self.conn, strategy_id, position)
 
-        # Sync final position state (remains OPEN if dataset finishes while position active)
+        # Sync final position state: save if OPEN, delete from positions table if CLOSED
         if position is not None:
             save_simulation_position(self.conn, strategy_id, position)
+        else:
+            close_simulation_position(self.conn, strategy_id)
 
         ledger_df = pd.DataFrame(trade_ledger)
         return ledger_df, balance, position
@@ -406,20 +391,16 @@ class SimulatorEngine:
         merged_df = self.merge_candles_and_signals(base_1m, signals_df)
 
         # Run sequential simulation
-        create_simulations_schema_and_tables(self.conn, s_id)
+        s_name = strat.get("strategy_name") or s_id
+        create_simulations_schema_and_tables(self.conn, s_name)
         ledger_df, final_balance, active_pos = self.run_candle_simulation(
             merged_df, sim_config, strat_cfg, s_id
         )
 
         # Save closed trade ledger
-        strat_table_name = s_id.lower().replace('.', '_')
-        with self.conn.cursor() as cur:
-            cur.execute(f"TRUNCATE TABLE simulations.{strat_table_name};")
-            self.conn.commit()
-
         if not ledger_df.empty:
             for trade_dict in ledger_df.to_dict("records"):
-                insert_simulation_ledger(self.conn, s_id, trade_dict)
+                insert_simulation_ledger(self.conn, s_name, trade_dict)
 
         # QuantStats performance calculation & stats DB persistence
         clean_metrics = {}

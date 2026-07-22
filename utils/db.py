@@ -1,4 +1,5 @@
 import os
+import re
 import csv
 import json
 from io import StringIO
@@ -466,6 +467,21 @@ def fetch_signals_from_db(conn, exchange: str, symbol: str, target_timeframe: st
         return pd.DataFrame()
 
 
+def get_sim_table_name(strategy_identifier) -> str:
+    """
+    Helper to convert strategy_name or strategy_id to a clean PostgreSQL table name under 'simulations' schema.
+    Example: 'BTC 1h RSI Mean Reversion' -> 'btc_1h_rsi_mean_reversion'
+             1 / '1' -> 'strategy_1'
+    """
+    s_str = str(strategy_identifier).strip().lower()
+    clean_name = re.sub(r'[^a-z0-9_]', '_', s_str)
+    clean_name = re.sub(r'_+', '_', clean_name).strip('_')
+    
+    if clean_name.isdigit():
+        return f"strategy_{clean_name}"
+    return clean_name
+
+
 def create_simulations_schema_and_tables(conn, strategy_id: str):
     """
     Creates the 'simulations' schema, shared positions & stats tables, and strategy-specific ledger table.
@@ -506,7 +522,7 @@ def create_simulations_schema_and_tables(conn, strategy_id: str):
     );
     """
 
-    strat_table_name = strategy_id.lower().replace('.', '_')
+    strat_table_name = get_sim_table_name(strategy_id)
     create_ledger_sql = f"""
     CREATE TABLE IF NOT EXISTS simulations.{strat_table_name} (
         id             SERIAL PRIMARY KEY,
@@ -543,11 +559,11 @@ def clear_simulation_data(conn, strategy_id: str):
     """
     Clears old ledger records and open positions for this strategy so that rerunning the simulator doesn't create duplicate trades.
     """
-    strat_table_name = strategy_id.lower().replace('.', '_')
+    strat_table_name = get_sim_table_name(strategy_id)
     try:
         with conn.cursor() as cursor:
             cursor.execute(f"TRUNCATE TABLE simulations.{strat_table_name};")
-            cursor.execute("DELETE FROM simulations.positions WHERE strategy_id = %s;", (strategy_id,))
+            cursor.execute("DELETE FROM simulations.positions WHERE strategy_id = %s;", (str(strategy_id),))
             conn.commit()
             logger.info(f"Cleared old simulation data for '{strategy_id}'.")
     except Exception as error:
@@ -583,7 +599,7 @@ def save_simulation_position(conn, strategy_id: str, position: dict):
     try:
         with conn.cursor() as cursor:
             cursor.execute(upsert_sql, (
-                strategy_id,
+                str(strategy_id),
                 position["direction"],
                 position["entry_time"],
                 position["entry_price"],
@@ -601,43 +617,25 @@ def save_simulation_position(conn, strategy_id: str, position: dict):
 
 def close_simulation_position(conn, strategy_id: str, exit_data: dict = None):
     """
-    Updates position status to 'Closed' in simulations.positions with exit details.
+    Deletes position row from simulations.positions when closed, since completed trades
+    are permanently saved in strategy ledger tables. Keeps simulations.positions clean with only ACTIVE open positions.
     """
-    if exit_data is None:
-        exit_data = {}
-
-    update_sql = """
-    UPDATE simulations.positions SET
-        status         = 'Closed',
-        current_price  = COALESCE(%s, current_price),
-        unrealized_pnl = 0.0,
-        exit_price     = %s,
-        exit_time      = %s,
-        exit_reason    = %s,
-        last_updated   = CURRENT_TIMESTAMP
-    WHERE strategy_id = %s;
-    """
+    delete_sql = "DELETE FROM simulations.positions WHERE strategy_id = %s;"
     try:
         with conn.cursor() as cursor:
-            cursor.execute(update_sql, (
-                exit_data.get("exit_price"),
-                exit_data.get("exit_price"),
-                exit_data.get("exit_time"),
-                exit_data.get("exit_reason"),
-                strategy_id,
-            ))
+            cursor.execute(delete_sql, (str(strategy_id),))
             conn.commit()
-            logger.info(f"Position for strategy '{strategy_id}' marked as Closed in simulations.positions.")
+            logger.info(f"Position for strategy '{strategy_id}' closed and removed from simulations.positions (saved in ledger).")
     except Exception as error:
         conn.rollback()
-        logger.error(f"Error marking position closed for strategy '{strategy_id}': {error}")
+        logger.error(f"Error removing closed position for strategy '{strategy_id}': {error}")
 
 
 def insert_simulation_ledger(conn, strategy_id: str, trade: dict):
     """
     Appends a completed trade to strategy-specific table: simulations.<strategy_id>.
     """
-    safe_strat_id = strategy_id.lower().replace('.', '_')
+    safe_strat_id = get_sim_table_name(strategy_id)
     strat_table_name = f"simulations.{safe_strat_id}"
     insert_sql = f"""
     INSERT INTO {strat_table_name} (
@@ -714,7 +712,7 @@ def upsert_simulation_stats(conn, strategy_id: str, stats_summary: dict, metrics
 
 def create_execution_schema_and_tables(conn, strategy_id: str):
     """Creates the 'execution' schema, positions table, strategy ledger table, and stats table."""
-    strat_table_name = strategy_id.lower().replace('.', '_')
+    strat_table_name = f"strat_{str(strategy_id).lower().replace('.', '_')}"
     sql = f"""
     CREATE SCHEMA IF NOT EXISTS execution;
 
@@ -857,7 +855,7 @@ def close_execution_position(conn, strategy_id: str, exit_data: dict):
 
 def insert_execution_ledger(conn, strategy_id: str, completed_trade: dict):
     """Inserts completed trade into execution.<strategy_id> table."""
-    strat_table_name = strategy_id.lower().replace('.', '_')
+    strat_table_name = f"strat_{str(strategy_id).lower().replace('.', '_')}"
     insert_sql = f"""
     INSERT INTO execution.{strat_table_name} (
         trade_id, entry_time, exit_time, direction, entry_price, exit_price,

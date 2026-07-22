@@ -53,8 +53,13 @@ def run_signals_pipeline(
         market_cfg.update({k: v for k, v in market_overrides.items() if v is not None})
 
     indicator_config = strat_file.get("indicators", strat_file.get("indicators_config", {}))
+    pattern_config = strat_file.get("patterns", strat_file.get("patterns_config", {}))
     strategy_config = strat_file.get("strategy", strat_file.get("strategy_config", {}))
 
+    full_indicator_cfg = {
+        "indicators": indicator_config,
+        "patterns": pattern_config
+    }
 
     exchange = market_cfg.get("exchange")
     symbol = market_cfg.get("symbol")
@@ -82,12 +87,12 @@ def run_signals_pipeline(
         logger.error("No valid DataFrame available. Pipeline aborted.")
         return pd.DataFrame()
 
-    # 3. Calculate indicators (already shifted by 1 inside apply_indicators_from_config)
-    logger.info("Calculating indicators...")
+    # 3. Calculate indicators & patterns (already shifted by 1 inside apply_indicators_from_config)
+    logger.info("Calculating indicators & patterns...")
     try:
-        merged_df = apply_indicators_from_config(df.copy(), indicator_config)
+        merged_df = apply_indicators_from_config(df.copy(), full_indicator_cfg)
     except Exception as e:
-        logger.error(f"Error calculating indicators: {e}")
+        logger.error(f"Error calculating indicators/patterns: {e}")
         return pd.DataFrame()
 
     if merged_df.empty:
@@ -138,13 +143,44 @@ def run_signals_pipeline(
                 strat_cfg_to_save["start_time"] = start_time
             if end_time:
                 strat_cfg_to_save["end_time"] = end_time
-            upsert_strategy_data(conn, exchange, symbol, target_timeframe, indicator_config, strat_cfg_to_save)
+            strategy_name = strat_file.get("strategy_name")
+            upsert_strategy_data(conn, exchange, symbol, target_timeframe, indicator_config, strat_cfg_to_save, strategy_name)
             conn.close()
         except Exception as e:
             logger.warning(f"Could not save signals/strategy metadata to DB (non-fatal): {e}")
 
-
     return merged_df
+
+
+def run_all_strategies_pipeline(config_path: str = None) -> dict:
+    """
+    Reads strategy_config.yaml. If it contains a 'strategies' list, runs the signals pipeline
+    for each strategy definition, saving signals and registering metadata to DB.
+    """
+    if config_path is None:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(current_dir, "strategy_config.yaml")
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        cfg_data = yaml.safe_load(f) or {}
+
+    strat_list = cfg_data.get("strategies")
+    results = {}
+
+    if strat_list and isinstance(strat_list, list):
+        logger.info(f"Discovered {len(strat_list)} strategy definition(s) in {config_path}.")
+        for idx, s in enumerate(strat_list, start=1):
+            s_name = s.get("strategy_name", f"Strategy_{idx}")
+            logger.info(f"Processing Strategy #{idx}/{len(strat_list)}: '{s_name}'...")
+            df = run_signals_pipeline(strat_dict=s)
+            results[s_name] = len(df)
+    else:
+        logger.info(f"Processing single strategy from {config_path}...")
+        df = run_signals_pipeline(config_path=config_path)
+        s_name = cfg_data.get("strategy_name", "Default Strategy")
+        results[s_name] = len(df)
+
+    return results
 
 
 def run_pipeline_from_config(config_path: str = None, market_overrides: dict = None) -> pd.DataFrame:
@@ -154,30 +190,11 @@ def run_pipeline_from_config(config_path: str = None, market_overrides: dict = N
 
 if __name__ == "__main__":
     print("=" * 55)
-    print("           RUNNING SIGNALS PIPELINE TEST")
+    print("      RUNNING MULTI-STRATEGY SIGNALS PIPELINE")
     print("=" * 55)
 
-    # Execute the pipeline with the default configuration
-    final_df = run_signals_pipeline()
-
-    if final_df.empty:
-        print("\n[FAILED] Pipeline execution returned an empty DataFrame.")
-    else:
-        print(f"\n[SUCCESS] Pipeline successfully generated {len(final_df)} rows.")
-        
-        # Identify columns to display in print
-        display_cols = [
-            col for col in ["close", "ind_sma_20", "long_cond_1", "short_cond_1", "signal"] 
-            if col in final_df.columns
-        ]
-        print("\n--- Last 15 rows of results ---")
-        print(final_df[display_cols].tail(15))
-
-        # Save to CSV
-        output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "signals_pipeline_output.csv")
-        try:
-            final_df.to_csv(output_path)
-            print(f"\n[CSV SAVED] Output saved successfully to: {output_path}")
-        except Exception as e:
-            print(f"\n[WARNING] Could not save output to {output_path}: {e}")
-        print("=" * 55)
+    summary = run_all_strategies_pipeline()
+    print("\n[SUCCESS] Signals Pipeline Execution Summary:")
+    for strat_name, rows_count in summary.items():
+        print(f"  • {strat_name}: {rows_count} signal bars generated & saved to DB.")
+    print("=" * 55)
