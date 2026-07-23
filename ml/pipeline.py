@@ -190,6 +190,7 @@ class QuantMLPipeline:
         for m_name, sig_df in signals.items():
             try:
                 print(f"  [{m_name}] Running Backtest...")
+                engine.strategy_id = f"{self.exchange}_{clean_sym.lower()}_{self.clean_tf.lower()}_{m_name.lower()}"
                 ledger_df = engine.run_pipeline(external_signals_df=sig_df)
 
                 ledger_path = (

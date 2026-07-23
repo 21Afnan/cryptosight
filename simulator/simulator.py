@@ -360,8 +360,11 @@ class SimulatorEngine:
 
         logger.info(f"Processing Simulation for strategy: [{s_id}] ({exchange.upper()} {symbol.upper()} {target_tf})...")
 
+        s_name = strat.get("strategy_name") or s_id
+
         # Dynamic signal calculation
         signal_input_dict = {
+            "strategy_name": s_name,
             "market": {
                 "exchange": exchange,
                 "symbol": symbol,

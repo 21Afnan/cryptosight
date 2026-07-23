@@ -290,6 +290,18 @@ def create_strategy_data(conn):
             cursor.execute(create_table_sql)
             cursor.execute(create_index_sql)
             conn.commit()
+
+            # Clean up legacy exchange prefixes from strategy_name in metadata.strategy_data
+            try:
+                cursor.execute("""
+                    UPDATE metadata.strategy_data 
+                    SET strategy_name = REGEXP_REPLACE(strategy_name, '^(bybit_|binance_)', '', 'i')
+                    WHERE strategy_name ~* '^(bybit_|binance_)';
+                """)
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
             logger.info("Table 'metadata.strategy_data' verified/created with serial strategy_id and strategy_name.")
     except Exception as error:
         conn.rollback()
@@ -407,7 +419,7 @@ def create_backtest_data(conn):
 
     create_table_sql = """
     CREATE TABLE IF NOT EXISTS metadata.backtest_data (
-        strategy_id       VARCHAR(128) PRIMARY KEY REFERENCES metadata.strategy_data(strategy_id) ON DELETE CASCADE,
+        strategy_id       BIGINT PRIMARY KEY REFERENCES metadata.strategy_data(strategy_id) ON DELETE CASCADE,
         backtest_config   JSONB NOT NULL,
         total_trades      INT DEFAULT 0,
         win_rate          NUMERIC(5,2) DEFAULT 0.00,

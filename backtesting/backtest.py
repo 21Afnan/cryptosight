@@ -86,6 +86,7 @@ class BacktestingEngine:
             target_tf = strat_cfg.get("market", {}).get("target_timeframe", "1m")
             indicators_cfg = strat_cfg.get("indicators", {})
             strategy_cfg   = strat_cfg.get("strategy", {})
+            strategy_name  = strat_cfg.get("strategy_name")
             self.strategy_id = generate_strategy_id(
                 self.config["exchange"],
                 self.config["symbol"],
@@ -96,6 +97,7 @@ class BacktestingEngine:
             self.logger.warning(f"Could not compute strategy_id from config (using fallback): {e}")
             self.strategy_id = f"{self.config['exchange'].lower()}_{self.config['symbol'].lower()}_{self.config['timeframe'].lower()}"
 
+        self.strategy_db_id = None
         if not full_df.empty:
             try:
                 conn = get_connection()
@@ -119,7 +121,27 @@ class BacktestingEngine:
                     target_timeframe=target_tf,
                     indicators_config=indicators_cfg,
                     strategy_config=strategy_cfg,
+                    strategy_name=strategy_name,
                 )
+                try:
+                    target_name = strategy_name or generate_strategy_id(
+                        self.config["exchange"],
+                        self.config["symbol"],
+                        target_tf,
+                        indicators_cfg,
+                        strategy_cfg,
+                    )
+                    with conn.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT strategy_id FROM metadata.strategy_data WHERE strategy_name = %s;",
+                            (target_name,)
+                        )
+                        row = cursor.fetchone()
+                        self.strategy_db_id = row[0] if row else None
+                except Exception as db_err:
+                    self.logger.warning(f"Could not fetch strategy_db_id: {db_err}")
+                    self.strategy_db_id = None
+
                 conn.close()
                 self.logger.info(f"Signals + strategy metadata saved to DB for [{self.strategy_id}].")
             except Exception as e:
@@ -468,13 +490,17 @@ class BacktestingEngine:
             
             # Save high-level backtest config & summary results to metadata.backtest_data
             try:
-                from cryptosight.utils.metadata import upsert_backtest_data
-                upsert_backtest_data(
-                    conn=conn,
-                    strategy_id=strat_id,
-                    backtest_config=self.config,
-                    ledger_df=ledger_df,
-                )
+                db_id = getattr(self, "strategy_db_id", None)
+                if db_id is not None:
+                    from cryptosight.utils.metadata import upsert_backtest_data
+                    upsert_backtest_data(
+                        conn=conn,
+                        strategy_id=db_id,
+                        backtest_config=self.config,
+                        ledger_df=ledger_df,
+                    )
+                else:
+                    self.logger.warning("Skipping metadata.backtest_data upsert — strategy_db_id is None.")
             except Exception as meta_err:
                 self.logger.warning(f"Could not save backtest metadata (non-fatal): {meta_err}")
 
