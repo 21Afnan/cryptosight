@@ -884,4 +884,94 @@ def upsert_simulation_stats(
         raise
 
 
+def create_account_api_table(conn):
+    """
+    Creates the 'account' schema and 'account.api' table if they do not exist.
+    Uses `exchange` as PRIMARY KEY for simple single-account lookup per exchange.
+    """
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS account;"
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS account.api (
+        exchange    VARCHAR(32) PRIMARY KEY,
+        api_key     TEXT NOT NULL,
+        api_secret  TEXT NOT NULL,
+        demo        BOOLEAN DEFAULT TRUE,
+        updated_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_table_sql)
+            conn.commit()
+            logger.info("Table 'account.api' verified/created successfully.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating table 'account.api': {error}")
+        raise
 
+
+def upsert_account_api(
+    conn,
+    exchange: str,
+    api_key: str,
+    api_secret: str,
+    demo: bool = True,
+):
+    """
+    Inserts or updates exchange API credentials in `account.api`.
+    """
+    create_account_api_table(conn)
+
+    upsert_sql = """
+    INSERT INTO account.api (
+        exchange, api_key, api_secret, demo, updated_at
+    )
+    VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
+    ON CONFLICT (exchange) DO UPDATE SET
+        api_key    = EXCLUDED.api_key,
+        api_secret = EXCLUDED.api_secret,
+        demo       = EXCLUDED.demo,
+        updated_at = CURRENT_TIMESTAMP;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(upsert_sql, (
+                exchange.lower().strip(),
+                api_key.strip(),
+                api_secret.strip(),
+                demo,
+            ))
+            conn.commit()
+            logger.info(f"API credentials saved to 'account.api' for exchange '{exchange}' (demo={demo}).")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error upserting API credentials for exchange '{exchange}': {error}")
+        raise
+
+
+def get_account_api(conn, exchange: str) -> dict:
+    """
+    Fetches API credentials for an exchange from `account.api`.
+    """
+    create_account_api_table(conn)
+    query = """
+    SELECT exchange, api_key, api_secret, demo
+    FROM account.api
+    WHERE exchange = %s;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(query, (exchange.lower().strip(),))
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "exchange": row[0],
+                    "api_key": row[1],
+                    "api_secret": row[2],
+                    "demo": bool(row[3]),
+                }
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error fetching API credentials for exchange '{exchange}': {error}")
+    return None
