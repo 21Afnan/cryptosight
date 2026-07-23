@@ -70,6 +70,8 @@ class BacktestingEngine:
             "end_time": self.config.get("end_time"),
             "symbol": self.config.get("symbol"),
             "exchange": self.config.get("exchange"),
+            "timeframe": self.config.get("timeframe"),
+            "target_timeframe": self.config.get("target_timeframe"),
         }
         full_df = run_signals_pipeline(config_path=strategy_config_path, market_overrides=overrides)
 

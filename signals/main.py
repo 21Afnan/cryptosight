@@ -36,7 +36,20 @@ def run_signals_pipeline(
             logger.error(f"Failed to load config from {config_path}: {e}")
             return pd.DataFrame()
 
-    market_cfg = strat_file.get("market") or {}
+    # 1. Handle multi-strategy YAML format vs single strategy dictionary
+    if "strategies" in strat_file and isinstance(strat_file["strategies"], list) and strat_file["strategies"]:
+        target_strat = strat_file["strategies"][0]
+        if market_overrides:
+            ov_sym = (market_overrides.get("symbol") or "").lower()
+            ov_ex = (market_overrides.get("exchange") or "").lower()
+            for s in strat_file["strategies"]:
+                m = s.get("market") or {}
+                if (not ov_sym or m.get("symbol", "").lower() == ov_sym) and (not ov_ex or m.get("exchange", "").lower() == ov_ex):
+                    target_strat = s
+                    break
+        strat_file = target_strat
+
+    market_cfg = dict(strat_file.get("market") or {})
     if not market_cfg and "exchange" in strat_file:
         strat_rules_temp = strat_file.get("strategy_config") or {}
         market_cfg = {
@@ -67,8 +80,8 @@ def run_signals_pipeline(
     target_timeframe = market_cfg.get("target_timeframe")
     start_time = market_cfg.get("start_time")
     end_time = market_cfg.get("end_time")
-    max_retries = market_cfg.get("max_retries") or 5
-    retry_delay = market_cfg.get("retry_delay") or 3
+    max_retries = market_cfg.get("max_retries") 
+    retry_delay = market_cfg.get("retry_delay") 
     logger.info(f"Fetching {symbol} from {exchange} ({base_timeframe} resampled to {target_timeframe})...")
     dl = Downloader(exchange=exchange, symbol=symbol, timeframe=base_timeframe)
     try:
