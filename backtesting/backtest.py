@@ -57,99 +57,215 @@ class BacktestingEngine:
         finally:
             conn.close()
 
+    def run_single_strategy(self, strat_dict: dict) -> pd.DataFrame:
+        """
+        Runs the backtest pipeline for a single strategy definition dictionary.
+        Preserves strategy_name, market parameters, indicators, and TP/SL.
+        """
+        import re
+        market_cfg = strat_dict.get("market") or {}
+        exchange = market_cfg.get("exchange")
+        symbol = market_cfg.get("symbol")
+        base_tf = market_cfg.get("timeframe")
+        target_tf = market_cfg.get("target_timeframe")
+        start_time = market_cfg.get("start_time")
+        end_time = market_cfg.get("end_time")
+
+        strategy_name = strat_dict.get("strategy_name")
+        strategy_cfg = strat_dict.get("strategy") or {}
+        indicator_cfg = strat_dict.get("indicators") or {}
+
+        self.logger.info(f"=== Backtesting Strategy: '{strategy_name}' [{str(exchange).upper()} {str(symbol).upper()} {target_tf}] ===")
+
+        # 1. Fetch OHLCV price candles
+        conn = get_connection()
+        try:
+            ohlcv_df = fetch_ohlcv(conn, exchange, symbol, base_tf, start_time, end_time)
+        finally:
+            conn.close()
+
+        if ohlcv_df.empty:
+            self.logger.warning(f"No OHLCV candles found for strategy '{strategy_name}'. Skipping.")
+            return pd.DataFrame()
+
+        # 2. Run signals pipeline for this strategy dictionary
+        full_df = run_signals_pipeline(strat_dict=strat_dict)
+        if full_df.empty or "signal" not in full_df.columns:
+            self.logger.warning(f"No signals generated for strategy '{strategy_name}'. Skipping.")
+            return pd.DataFrame()
+
+        # ALWAYS Register Strategy Metadata into metadata.strategy_data
+        strat_id_num = None
+        try:
+            conn = get_connection()
+            try:
+                create_signals_schema_and_table(conn, exchange, symbol, target_tf)
+                insert_signals(conn, exchange, symbol, target_tf, full_df)
+            except Exception as sig_err:
+                self.logger.warning(f"Could not insert raw signals into DB for '{strategy_name}': {sig_err}")
+
+            strat_id_num = upsert_strategy_data(
+                conn=conn,
+                exchange=exchange,
+                symbol=symbol,
+                target_timeframe=target_tf,
+                indicators_config=indicator_cfg,
+                strategy_config=strategy_cfg,
+                strategy_name=strategy_name,
+            )
+            conn.close()
+        except Exception as e:
+            self.logger.warning(f"Could not save strategy metadata to DB for '{strategy_name}': {e}")
+
+        signals_df = full_df[["signal"]]
+
+        # 3. Merge candles with signals
+        merged_df = self.merge_data(ohlcv_df, signals_df)
+
+        # 4. Locate trade entries and execution prices
+        entries_df = self.determine_entries(merged_df)
+        if entries_df.empty:
+            self.logger.info(f"No trade entry triggers for strategy '{strategy_name}'.")
+            if strat_id_num:
+                try:
+                    conn = get_connection()
+                    from cryptosight.utils.metadata import upsert_backtest_data
+                    upsert_backtest_data(
+                        conn=conn,
+                        strategy_id=strat_id_num,
+                        backtest_config=self.config,
+                        ledger_df=pd.DataFrame(),
+                    )
+                    conn.close()
+                except Exception as meta_err:
+                    self.logger.warning(f"Could not save empty backtest metadata for '{strategy_name}': {meta_err}")
+            return pd.DataFrame()
+
+        # 5. Position sizing
+        entries_df = self.calculate_position_size(entries_df)
+
+        # 6. Calculate TP/SL target levels directly from strategy configuration with safe fallbacks
+        tp_val = strategy_cfg.get("take_profit") if isinstance(strategy_cfg, dict) else None
+        sl_val = strategy_cfg.get("stop_loss") if isinstance(strategy_cfg, dict) else None
+
+        if tp_val is None:
+            tp_cfg = self.config.get("take_profit")
+            tp_val = tp_cfg.get("value", 1.0) if isinstance(tp_cfg, dict) else 1.0
+        if sl_val is None:
+            sl_cfg = self.config.get("stop_loss")
+            sl_val = sl_cfg.get("value", 0.5) if isinstance(sl_cfg, dict) else 0.5
+
+        tp_pct = float(tp_val) / 100.0 if float(tp_val) > 0.05 else float(tp_val)
+        sl_pct = float(sl_val) / 100.0 if float(sl_val) > 0.05 else float(sl_val)
+
+        is_long = entries_df["signal"] == 1
+        entries_df["take_profit"] = np.where(
+            is_long,
+            entries_df["entry_price"] * (1 + tp_pct),
+            entries_df["entry_price"] * (1 - tp_pct),
+        )
+        entries_df["stop_loss"] = np.where(
+            is_long,
+            entries_df["entry_price"] * (1 - sl_pct),
+            entries_df["entry_price"] * (1 + sl_pct),
+        )
+
+        # 7. Locate trade exits
+        entries_df = self.determine_exits(merged_df, entries_df)
+
+        # 8. Apply fee frictions & calculate net PnL
+        entries_df = self.calculate_fees_and_pnl(entries_df)
+
+        # 9. Account balance updates
+        ledger_df = self.update_balance(entries_df)
+
+        # 10. Columns formatting
+        cols_to_drop = ["commission", "slippage", "gross_pnl"]
+        ledger_df.drop(columns=[c for c in cols_to_drop if c in ledger_df.columns], inplace=True)
+        desired_order = ["direction", "signal", "entry_price", "quantity", "take_profit", "stop_loss", "exit_price", "exit_time", "exit_reason", "status", "net_pnl", "perc_pnl", "cumulative_pnl", "balance"]
+        ordered_cols = [c for c in desired_order if c in ledger_df.columns] + [c for c in ledger_df.columns if c not in desired_order]
+        ledger_df = ledger_df[ordered_cols]
+
+        # 11. Save backtest ledger & backtest metadata
+        try:
+            conn = get_connection()
+            clean_table = re.sub(r'[^a-zA-Z0-9_]', '_', str(strategy_name)).lower()
+            clean_table = re.sub(r'_+', '_', clean_table).strip('_')
+
+            create_backtest_schema_and_table(
+                conn,
+                exchange=exchange,
+                symbol=symbol,
+                timeframe=base_tf,
+                strategy_id=clean_table,
+            )
+            insert_backtest_ledger(
+                conn,
+                exchange=exchange,
+                symbol=symbol,
+                timeframe=base_tf,
+                ledger_df=ledger_df,
+                strategy_id=clean_table,
+            )
+
+            if strat_id_num:
+                from cryptosight.utils.metadata import upsert_backtest_data
+                upsert_backtest_data(
+                    conn=conn,
+                    strategy_id=strat_id_num,
+                    backtest_config=self.config,
+                    ledger_df=ledger_df,
+                )
+
+            conn.close()
+            self.logger.info(f"Backtest completed & saved to DB for strategy '{strategy_name}' (ID #{strat_id_num}).")
+        except Exception as e:
+            self.logger.warning(f"Could not save backtest ledger to DB for '{strategy_name}': {e}")
+
+        return ledger_df
+
+    def run_all_strategies(self, strategy_config_path: str = None) -> dict:
+        """
+        Loops through ALL strategies in strategy_config.yaml, executing a vectorized backtest for each.
+        Returns a dictionary mapping strategy_name -> ledger_df.
+        """
+        import os
+        if strategy_config_path is None:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            strategy_config_path = os.path.join(current_dir, "..", "signals", "strategy_config.yaml")
+
+        if not os.path.exists(strategy_config_path):
+            self.logger.error(f"Strategy configuration file not found at: {strategy_config_path}")
+            return {}
+
+        with open(strategy_config_path, "r", encoding="utf-8") as f:
+            strat_file = yaml.safe_load(f) or {}
+
+        strat_list = strat_file.get("strategies", [])
+        if not strat_list or not isinstance(strat_list, list):
+            self.logger.info("No 'strategies' list found in config. Running single strategy pipeline...")
+            ledger = self.run_pipeline()
+            s_name = strat_file.get("strategy_name", "Default Strategy")
+            return {s_name: ledger}
+
+        self.logger.info(f"Discovered {len(strat_list)} strategy definition(s). Starting multi-strategy backtest...")
+        all_results = {}
+        for idx, s in enumerate(strat_list, start=1):
+            s_name = s.get("strategy_name", f"Strategy_{idx}")
+            self.logger.info(f"[{idx}/{len(strat_list)}] Backtesting Strategy: '{s_name}'...")
+            try:
+                ledger = self.run_single_strategy(s)
+                all_results[s_name] = ledger
+            except Exception as e:
+                self.logger.error(f"Failed backtest for strategy '{s_name}': {e}")
+
+        return all_results
+
     def run_signals(self, strategy_config_path: str = None) -> pd.DataFrame:
         """
-        Executes the AI Quant signals pipeline.
-        Dynamically overrides strategy market parameters (start_time, end_time, symbol, exchange)
-        with values from backt_config.yaml so both pipelines are 100% synchronized.
-        Returns a DataFrame containing only the signal column with the timestamp index.
+        Executes the AI Quant signals pipeline for standalone backward compatibility.
         """
-        self.logger.info("Executing vectorized signals pipeline with config overrides from backtest...")
-        overrides = {
-            "start_time": self.config.get("start_time"),
-            "end_time": self.config.get("end_time"),
-            "symbol": self.config.get("symbol"),
-            "exchange": self.config.get("exchange"),
-            "timeframe": self.config.get("timeframe"),
-            "target_timeframe": self.config.get("target_timeframe"),
-        }
-        full_df = run_signals_pipeline(config_path=strategy_config_path, market_overrides=overrides)
-
-        # Compute strategy_id and save full signals DataFrame to DB
-        try:
-            from cryptosight.utils.config import load_config
-            from cryptosight.utils.metadata import generate_strategy_id
-            import os
-            cfg_path = strategy_config_path or os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "..", "signals", "strategy_config.yaml"
-            )
-            strat_cfg = load_config(cfg_path)
-            target_tf = strat_cfg.get("market", {}).get("target_timeframe")
-            indicators_cfg = strat_cfg.get("indicators", {})
-            strategy_cfg   = strat_cfg.get("strategy", {})
-            strategy_name  = strat_cfg.get("strategy_name")
-            self.strategy_id = generate_strategy_id(
-                self.config["exchange"],
-                self.config["symbol"],
-                target_tf,
-                indicators_cfg
-            )
-        except Exception as e:
-            self.logger.warning(f"Could not compute strategy_id from config (using fallback): {e}")
-            self.strategy_id = f"{self.config['exchange'].lower()}_{self.config['symbol'].lower()}_{self.config['timeframe'].lower()}"
-
-        self.strategy_db_id = None
-        if not full_df.empty:
-            try:
-                conn = get_connection()
-                create_signals_schema_and_table(
-                    conn,
-                    exchange=self.config["exchange"],
-                    symbol=self.config["symbol"],
-                    target_timeframe=target_tf,
-                )
-                insert_signals(
-                    conn,
-                    exchange=self.config["exchange"],
-                    symbol=self.config["symbol"],
-                    target_timeframe=target_tf,
-                    df=full_df,
-                )
-                upsert_strategy_data(
-                    conn,
-                    exchange=self.config["exchange"],
-                    symbol=self.config["symbol"],
-                    target_timeframe=target_tf,
-                    indicators_config=indicators_cfg,
-                    strategy_config=strategy_cfg,
-                    strategy_name=strategy_name,
-                )
-                try:
-                    target_name = strategy_name or generate_strategy_id(
-                        self.config["exchange"],
-                        self.config["symbol"],
-                        target_tf,
-                        indicators_cfg,
-                        strategy_cfg,
-                    )
-                    with conn.cursor() as cursor:
-                        cursor.execute(
-                            "SELECT strategy_id FROM metadata.strategy_data WHERE strategy_name = %s;",
-                            (target_name,)
-                        )
-                        row = cursor.fetchone()
-                        self.strategy_db_id = row[0] if row else None
-                except Exception as db_err:
-                    self.logger.warning(f"Could not fetch strategy_db_id: {db_err}")
-                    self.strategy_db_id = None
-
-                conn.close()
-                self.logger.info(f"Signals + strategy metadata saved to DB for [{self.strategy_id}].")
-            except Exception as e:
-                self.logger.warning(f"Could not save signals to DB (non-fatal): {e}")
-
-        # Keeps timestamp as the index and returns only the 'signal' column
+        full_df = run_signals_pipeline(config_path=strategy_config_path)
         if full_df.empty or "signal" not in full_df.columns:
             return pd.DataFrame(columns=["signal"])
         return full_df[["signal"]]
@@ -519,31 +635,35 @@ class BacktestingEngine:
 
 
 if __name__ == "__main__":
-    print("=" * 55)
-    print("           RUNNING BACKTEST ENGINE PIPELINE")
-    print("=" * 55)
+    print("=" * 65)
+    print("        RUNNING MULTI-STRATEGY BACKTEST ENGINE PIPELINE")
+    print("=" * 65)
 
-    # Initialize the engine
     engine = BacktestingEngine()
+    results = engine.run_all_strategies()
 
-    # Run the step-by-step pipeline
-    ledger = engine.run_pipeline()
+    print("\n" + "=" * 65)
+    print("                 MULTI-STRATEGY BACKTEST SUMMARY")
+    print("=" * 65)
+    print(f"Total Strategies Tested: {len(results)}")
+    print(f"Initial Account Balance: ${engine.config.get('initial_balance', 10000.0):,.2f}\n")
 
-    print("\n" + "=" * 45)
-    print("          BACKTEST RESULTS SHOWCASE")
-    print("=" * 45)
-    print(f"Total entries processed:  {len(ledger)}")
-    print(f"Initial balance:          ${engine.config['initial_balance']:.2f}")
-    if not ledger.empty:
-        final_balance = ledger["balance"].iloc[-1]
-        net_profit = final_balance - engine.config['initial_balance']
-        print(f"Final balance:            ${final_balance:.2f}")
-        print(f"Net profit:               ${net_profit:.2f}")
-        print("\n--- Last 5 rows of backtest ledger ---")
-        pd.set_option('display.max_columns', None)
-        pd.set_option('display.width', 1000)
-        print(ledger[["direction", "signal", "entry_price", "take_profit", "stop_loss", "exit_price", "exit_reason", "perc_pnl", "balance"]].tail(5))
-    print("=" * 55)
+    for s_name, ledger in results.items():
+        if ledger is not None and not ledger.empty:
+            final_bal = ledger["balance"].iloc[-1]
+            net_pnl = final_bal - engine.config.get("initial_balance", 10000.0)
+            win_count = (ledger["net_pnl"] > 0).sum()
+            win_rate = (win_count / len(ledger) * 100.0) if len(ledger) > 0 else 0.0
+            print(f" • Strategy: '{s_name}'")
+            print(f"   - Trades Executed: {len(ledger)}")
+            print(f"   - Win Rate:        {win_rate:.2f}%")
+            print(f"   - Net PnL:         ${net_pnl:+,.2f}")
+            print(f"   - Final Balance:   ${final_bal:,.2f}")
+            print("-" * 55)
+        else:
+            print(f" • Strategy: '{s_name}' -> 0 trades executed or insufficient market data.")
+            print("-" * 55)
+    print("=" * 65)
 
     
 
