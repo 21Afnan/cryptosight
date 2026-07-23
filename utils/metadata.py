@@ -234,7 +234,7 @@ def generate_strategy_id(exchange: str, symbol: str, target_timeframe: str, indi
             
     strat_str = f"_{'_'.join(strat_parts)}" if strat_parts else ""
     
-    return f"{exchange.lower()}_{symbol.lower()}_{target_timeframe.lower()}{ind_str}{strat_str}"
+    return f"{symbol.lower()}_{target_timeframe.lower()}{ind_str}{strat_str}"
 
 
 

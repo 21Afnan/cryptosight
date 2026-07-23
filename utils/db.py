@@ -469,14 +469,19 @@ def fetch_signals_from_db(conn, exchange: str, symbol: str, target_timeframe: st
 
 def get_sim_table_name(strategy_identifier) -> str:
     """
-    Helper to convert strategy_name or strategy_id to a clean PostgreSQL table name under 'simulations' schema.
-    Example: 'BTC 1h RSI Mean Reversion' -> 'btc_1h_rsi_mean_reversion'
-             1 / '1' -> 'strategy_1'
+    Helper to convert strategy_name or strategy_id to a clean PostgreSQL table name.
+    Strips exchange prefixes ('bybit_', 'binance_') for clean, standardized table names.
+    Example: 'BYBIT ADA 15m RSI Momentum' -> 'ada_15m_rsi_momentum'
+             'bybit_btc_1h_rsi_14_tp1_0_sl0_5' -> 'btc_1h_rsi_14_tp1_0_sl0_5'
     """
     s_str = str(strategy_identifier).strip().lower()
+    for prefix in ("bybit_", "binance_"):
+        if s_str.startswith(prefix):
+            s_str = s_str[len(prefix):]
+
     clean_name = re.sub(r'[^a-z0-9_]', '_', s_str)
     clean_name = re.sub(r'_+', '_', clean_name).strip('_')
-    
+
     if clean_name.isdigit():
         return f"strategy_{clean_name}"
     return clean_name
