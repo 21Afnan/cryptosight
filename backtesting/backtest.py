@@ -85,7 +85,7 @@ class BacktestingEngine:
                 "..", "signals", "strategy_config.yaml"
             )
             strat_cfg = load_config(cfg_path)
-            target_tf = strat_cfg.get("market", {}).get("target_timeframe", "1m")
+            target_tf = strat_cfg.get("market", {}).get("target_timeframe")
             indicators_cfg = strat_cfg.get("indicators", {})
             strategy_cfg   = strat_cfg.get("strategy", {})
             strategy_name  = strat_cfg.get("strategy_name")
