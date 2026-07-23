@@ -133,7 +133,8 @@ PostgreSQL Database ('postgres')
 - **Category Coverage**: Overlap Studies, Momentum Indicators, Volume Indicators, Volatility Indicators, Price Transform, Cycle Indicators, and Pattern Recognition.
 
 ### 3️⃣ **Trading Signals Engine (`cryptosight.signals`)**
-- **YAML Rule Engine**: Configures multi-indicator condition sets and crossover rules in `strategy_config.yaml`.
+- **Multi-Strategy YAML Engine**: Configures single or multi-strategy definitions (up to 20 calibrated strategies) in `strategy_config.yaml`.
+- **Dynamic Market Overrides**: Seamlessly matches and extracts target market parameters (`exchange`, `symbol`, `timeframe`, `target_timeframe`) when invoked by external backtesting runners.
 - **Look-Ahead Bias Prevention**: Enforces `.shift(1)` across indicator matrices before evaluating signal conditions.
 - **Persistence Windows**: Supports multi-bar persistence windows to confirm breakouts across timeframes.
 
