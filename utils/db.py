@@ -178,12 +178,20 @@ def fetch_ohlcv(conn, exchange: str, symbol: str, timeframe: str, start_time: st
 
     try:
         with conn.cursor() as cursor:
-            subquery = cursor.mogrify(
-                f"SELECT timestamp, open, high, low, close, volume FROM {full_table} "
-                f"WHERE timestamp >= %s AND timestamp <= %s ORDER BY timestamp ASC",
-                (start_time, end_time)
-            ).decode("utf-8")
-            
+            # Build WHERE clause only for non-None time bounds
+            conditions = []
+            params = []
+            if start_time is not None:
+                conditions.append("timestamp >= %s")
+                params.append(start_time)
+            if end_time is not None:
+                conditions.append("timestamp <= %s")
+                params.append(end_time)
+
+            where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+            raw_sql = f"SELECT timestamp, open, high, low, close, volume FROM {full_table} {where_clause} ORDER BY timestamp ASC"
+
+            subquery = cursor.mogrify(raw_sql, params).decode("utf-8")
             copy_query = f"COPY ({subquery}) TO STDOUT WITH (FORMAT CSV, HEADER TRUE)"
             buffer = StringIO()
             cursor.copy_expert(copy_query, buffer)
@@ -203,9 +211,11 @@ def fetch_ohlcv(conn, exchange: str, symbol: str, timeframe: str, start_time: st
             return df
 
     except UndefinedTable:
+        conn.rollback()
         logger.warning(f"Table '{full_table}' does not exist.")
         return pd.DataFrame()
     except Exception as error:
+        conn.rollback()
         logger.error(f"Error fetching data via COPY from '{full_table}': {error}")
         return pd.DataFrame()
 
@@ -493,6 +503,385 @@ def fetch_signals_from_db(conn, exchange: str, symbol: str, target_timeframe: st
     except Exception as error:
         logger.warning(f"Could not fetch signals from '{full_table}': {error}")
         return pd.DataFrame()
+
+
+def create_active_positions_table(conn):
+    """
+    Creates the 'simulations' schema and 'simulations.active_positions' table.
+    Uses `strategy_id` as PRIMARY KEY to guarantee zero duplicacy (max 1 active position per strategy).
+    Stores market context (exchange, symbol, timeframe, strategy_name) with every open trade.
+    """
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS simulations;"
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS simulations.active_positions (
+        strategy_id     BIGINT PRIMARY KEY REFERENCES metadata.strategy_data(strategy_id) ON DELETE CASCADE,
+        strategy_name   VARCHAR(150) NOT NULL,
+        exchange        VARCHAR(20)  NOT NULL,
+        symbol          VARCHAR(20)  NOT NULL,
+        timeframe       VARCHAR(10)  NOT NULL,
+        trade_id        VARCHAR(50)  NOT NULL,
+        direction       VARCHAR(8)   NOT NULL,
+        entry_time      TIMESTAMP WITH TIME ZONE NOT NULL,
+        entry_price     NUMERIC(18,8) NOT NULL,
+        quantity        NUMERIC(18,8) NOT NULL,
+        take_profit     NUMERIC(18,8) NOT NULL,
+        stop_loss       NUMERIC(18,8) NOT NULL,
+        current_price   NUMERIC(18,8) NOT NULL,
+        unrealized_pnl  NUMERIC(18,8) NOT NULL,
+        status          VARCHAR(20)  NOT NULL,
+        updated_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_table_sql)
+            conn.commit()
+            logger.info("Table 'simulations.active_positions' verified/created successfully.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating 'simulations.active_positions': {error}")
+        raise
+
+
+def upsert_active_position(
+    conn,
+    strategy_id: int,
+    strategy_name: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str,
+    trade_id: str,
+    direction: str,
+    entry_time,
+    entry_price: float,
+    quantity: float,
+    take_profit: float,
+    stop_loss: float,
+    current_price: float,
+    unrealized_pnl: float,
+    status: str,
+):
+    """
+    Inserts or updates the single open trade for a strategy in simulations.active_positions.
+    """
+    upsert_sql = """
+    INSERT INTO simulations.active_positions (
+        strategy_id, strategy_name, exchange, symbol, timeframe,
+        trade_id, direction, entry_time, entry_price, quantity,
+        take_profit, stop_loss, current_price, unrealized_pnl, status, updated_at
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+    ON CONFLICT (strategy_id) DO UPDATE SET
+        trade_id       = EXCLUDED.trade_id,
+        direction      = EXCLUDED.direction,
+        entry_time     = EXCLUDED.entry_time,
+        entry_price    = EXCLUDED.entry_price,
+        quantity       = EXCLUDED.quantity,
+        take_profit    = EXCLUDED.take_profit,
+        stop_loss      = EXCLUDED.stop_loss,
+        current_price  = EXCLUDED.current_price,
+        unrealized_pnl = EXCLUDED.unrealized_pnl,
+        status         = EXCLUDED.status,
+        updated_at     = CURRENT_TIMESTAMP;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(upsert_sql, (
+                strategy_id, strategy_name, exchange, symbol, timeframe,
+                trade_id, direction, entry_time, entry_price, quantity,
+                take_profit, stop_loss, current_price, unrealized_pnl, status
+            ))
+            conn.commit()
+            logger.debug(f"Active position updated for strategy '{strategy_name}' (ID #{strategy_id}).")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error upserting active position for strategy #{strategy_id}: {error}")
+        raise
+
+
+def delete_active_position(conn, strategy_id: int):
+    """Deletes the active position row from simulations.active_positions when a trade closes."""
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM simulations.active_positions WHERE strategy_id = %s;", (strategy_id,))
+            conn.commit()
+            logger.info(f"Active position removed for strategy ID #{strategy_id}.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error deleting active position for strategy #{strategy_id}: {error}")
+        raise
+
+
+def fetch_active_position(conn, strategy_id: int) -> dict:
+    """Fetches any existing open position for strategy_id from simulations.active_positions."""
+    query = """
+    SELECT trade_id, direction, entry_time, entry_price, quantity, take_profit, stop_loss, current_price, unrealized_pnl, status
+    FROM simulations.active_positions
+    WHERE strategy_id = %s;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(query, (strategy_id,))
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "trade_id": str(row[0]),
+                    "direction": str(row[1]),
+                    "entry_time": row[2],
+                    "entry_price": float(row[3]),
+                    "quantity": float(row[4]),
+                    "take_profit": float(row[5]),
+                    "stop_loss": float(row[6]),
+                    "current_price": float(row[7]),
+                    "unrealized_pnl": float(row[8]),
+                    "status": str(row[9]),
+                }
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error fetching active position for strategy #{strategy_id}: {error}")
+    return None
+
+
+def get_simulation_ledger_table_names(exchange: str, symbol: str, timeframe: str, strategy_name: str = None):
+    """Returns standardized schema and table names for simulation_ledgers schema using strategy_name."""
+    import re
+    schema_name = "simulation_ledgers"
+    if strategy_name:
+        clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', str(strategy_name)).lower()
+        table_name = re.sub(r'_+', '_', clean_name).strip('_')
+    else:
+        table_name = f"{exchange.lower()}_{symbol.lower()}_{timeframe.lower()}"
+    return schema_name, table_name
+
+
+def create_simulation_ledger_table(conn, exchange: str, symbol: str, timeframe: str, strategy_name: str = None):
+    """Creates the 'simulation_ledgers' schema and strategy-specific ledger table if they don't exist."""
+    schema_name, table_name = get_simulation_ledger_table_names(exchange, symbol, timeframe, strategy_name=strategy_name)
+
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS simulation_ledgers;"
+    create_table_sql  = f"""
+    CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (
+        trade_id       VARCHAR(50)   PRIMARY KEY,
+        direction      VARCHAR(8)    NOT NULL,
+        entry_time     TIMESTAMP WITH TIME ZONE NOT NULL,
+        exit_time      TIMESTAMP WITH TIME ZONE NOT NULL,
+        entry_price    NUMERIC(18,8) NOT NULL,
+        exit_price     NUMERIC(18,8) NOT NULL,
+        quantity       NUMERIC(18,8) NOT NULL,
+        gross_pnl      NUMERIC(18,8) NOT NULL,
+        commission     NUMERIC(18,8) NOT NULL,
+        slippage       NUMERIC(18,8) NOT NULL,
+        net_pnl        NUMERIC(18,8) NOT NULL,
+        perc_pnl       NUMERIC(10,6) NOT NULL,
+        exit_reason    VARCHAR(50)   NOT NULL,
+        final_balance  NUMERIC(18,8) NOT NULL
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_table_sql)
+            conn.commit()
+            logger.info(f"Table '{schema_name}.{table_name}' verified/created.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating simulation ledger table '{schema_name}.{table_name}': {error}")
+        raise
+
+
+def insert_simulation_ledger(conn, exchange: str, symbol: str, timeframe: str, ledger_df: pd.DataFrame, strategy_name: str = None):
+    """
+    Inserts completed simulation trades into simulation_ledgers.{strategy_name}.
+    Uses COPY + temp table for high performance.
+    """
+    if ledger_df is None or ledger_df.empty:
+        return
+
+    schema_name, table_name = get_simulation_ledger_table_names(exchange, symbol, timeframe, strategy_name=strategy_name)
+    create_simulation_ledger_table(conn, exchange, symbol, timeframe, strategy_name=strategy_name)
+
+    full_table = f"{schema_name}.{table_name}"
+    temp_table = f"temp_sim_{table_name}"
+
+    ledger_cols = (
+        "trade_id", "direction", "entry_time", "exit_time", "entry_price",
+        "exit_price", "quantity", "gross_pnl", "commission", "slippage",
+        "net_pnl", "perc_pnl", "exit_reason", "final_balance"
+    )
+
+    buffer = StringIO()
+    writer = csv.writer(buffer, delimiter="\t")
+    for idx, row in ledger_df.iterrows():
+        writer.writerow([
+            row["trade_id"],
+            row["direction"],
+            row["entry_time"],
+            row["exit_time"],
+            row["entry_price"],
+            row["exit_price"],
+            row["quantity"],
+            row["gross_pnl"],
+            row["commission"],
+            row["slippage"],
+            row["net_pnl"],
+            row["perc_pnl"],
+            row["exit_reason"],
+            row["final_balance"],
+        ])
+    buffer.seek(0)
+
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(f"DROP TABLE IF EXISTS {temp_table};")
+            cursor.execute(f"CREATE TEMP TABLE {temp_table} (LIKE {full_table} INCLUDING DEFAULTS) ON COMMIT DROP;")
+            cursor.copy_from(buffer, temp_table, sep="\t", columns=ledger_cols)
+            cursor.execute(f"""
+                INSERT INTO {full_table} ({', '.join(ledger_cols)})
+                SELECT DISTINCT ON (trade_id) {', '.join(ledger_cols)} FROM {temp_table}
+                ORDER BY trade_id ASC
+                ON CONFLICT (trade_id) DO UPDATE SET
+                    direction      = EXCLUDED.direction,
+                    entry_time     = EXCLUDED.entry_time,
+                    exit_time      = EXCLUDED.exit_time,
+                    entry_price    = EXCLUDED.entry_price,
+                    exit_price     = EXCLUDED.exit_price,
+                    quantity       = EXCLUDED.quantity,
+                    gross_pnl      = EXCLUDED.gross_pnl,
+                    commission     = EXCLUDED.commission,
+                    slippage       = EXCLUDED.slippage,
+                    net_pnl        = EXCLUDED.net_pnl,
+                    perc_pnl       = EXCLUDED.perc_pnl,
+                    exit_reason    = EXCLUDED.exit_reason,
+                    final_balance  = EXCLUDED.final_balance;
+            """)
+        conn.commit()
+        logger.info(f"Saved {len(ledger_df)} trade rows to simulation ledger '{full_table}'.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error inserting simulation ledger into '{full_table}': {error}")
+        raise
+
+
+def create_simulation_stats_table(conn):
+    """
+    Creates the 'simulations' schema and 'simulations.stats' table if they do not exist.
+    Uses `strategy_id` as PRIMARY KEY to guarantee zero duplicacy per strategy.
+    """
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS simulations;"
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS simulations.stats (
+        strategy_id     BIGINT PRIMARY KEY REFERENCES metadata.strategy_data(strategy_id) ON DELETE CASCADE,
+        strategy_name   VARCHAR(150) NOT NULL,
+        exchange        VARCHAR(20)  NOT NULL,
+        symbol          VARCHAR(20)  NOT NULL,
+        timeframe       VARCHAR(10)  NOT NULL,
+        total_trades    INT,
+        winning_trades  INT,
+        losing_trades   INT,
+        win_rate        NUMERIC(18,8),
+        net_pnl         NUMERIC(18,8),
+        final_balance   NUMERIC(18,8),
+        updated_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_table_sql)
+            conn.commit()
+            logger.info("Table 'simulations.stats' verified/created successfully.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating 'simulations.stats': {error}")
+        raise
+
+
+def upsert_simulation_stats(
+    conn,
+    strategy_id: int,
+    strategy_name: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str,
+    initial_balance: float,
+    ledger_df: pd.DataFrame = None,
+):
+    """
+    Inserts or updates per-strategy simulation performance statistics and dynamic tabular metrics in `simulations.stats`.
+    Dynamically creates PostgreSQL columns for all QuantStats performance metrics.
+    """
+    import re
+    create_simulation_stats_table(conn)
+
+    has_trades = ledger_df is not None and not ledger_df.empty
+    total_trades = len(ledger_df) if has_trades else 0
+    winning_trades = int((ledger_df["net_pnl"] > 0).sum()) if has_trades else 0
+    losing_trades = int((ledger_df["net_pnl"] < 0).sum()) if has_trades else 0
+    win_rate = float(winning_trades / total_trades * 100.0) if has_trades and total_trades > 0 else 0.0
+    net_pnl = float(ledger_df["net_pnl"].sum()) if has_trades else 0.0
+    final_balance = float(ledger_df["final_balance"].iloc[-1]) if has_trades and "final_balance" in ledger_df.columns else initial_balance
+
+    data_map = {
+        "strategy_id": strategy_id,
+        "strategy_name": strategy_name,
+        "exchange": exchange.lower(),
+        "symbol": symbol.lower(),
+        "timeframe": timeframe.lower(),
+        "total_trades": total_trades,
+        "winning_trades": winning_trades,
+        "losing_trades": losing_trades,
+        "win_rate": win_rate,
+        "net_pnl": net_pnl,
+        "final_balance": final_balance,
+    }
+
+    if has_trades:
+        # Dynamically compute all QuantStats metrics
+        try:
+            from cryptosight.stats.metrices import compute_all_metrics, to_json_safe
+            if "perc_pnl" in ledger_df.columns and not ledger_df["perc_pnl"].empty:
+                raw_metrics = compute_all_metrics(ledger_df["perc_pnl"], is_percentage=False)
+                clean_metrics = to_json_safe(raw_metrics)
+                for metric_name, val in clean_metrics.items():
+                    if isinstance(val, (dict, list)):
+                        continue
+                    col_key = re.sub(r'[^a-zA-Z0-9_]', '_', metric_name.lower())
+                    data_map[col_key] = val
+        except Exception as e:
+            logger.warning(f"Could not compute tabular stats metrics for strategy '{strategy_name}': {e}")
+
+    try:
+        with conn.cursor() as cursor:
+            # Dynamically alter table to add any missing metric columns
+            for col, val in data_map.items():
+                if col in ("strategy_id", "strategy_name", "exchange", "symbol", "timeframe"):
+                    continue
+                col_type = "NUMERIC(18,8)" if isinstance(val, (int, float)) or val is None else "VARCHAR(255)"
+                cursor.execute(f"ALTER TABLE simulations.stats ADD COLUMN IF NOT EXISTS {col} {col_type};")
+
+            columns = list(data_map.keys())
+            values = [data_map[col] for col in columns]
+
+            col_names_str = ", ".join(columns)
+            placeholders_str = ", ".join(["%s"] * len(columns))
+            update_assignments = [f"{col} = EXCLUDED.{col}" for col in columns if col != "strategy_id"]
+            update_str = ", ".join(update_assignments)
+
+            upsert_sql = f"""
+            INSERT INTO simulations.stats ({col_names_str}, updated_at)
+            VALUES ({placeholders_str}, CURRENT_TIMESTAMP)
+            ON CONFLICT (strategy_id) DO UPDATE SET
+                {update_str},
+                updated_at = CURRENT_TIMESTAMP;
+            """
+            cursor.execute(upsert_sql, tuple(values))
+            conn.commit()
+            logger.info(f"Simulation stats saved in 'simulations.stats' for strategy '{strategy_name}' (ID #{strategy_id}).")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error updating 'simulations.stats' for strategy #{strategy_id}: {error}")
+        raise
 
 
 

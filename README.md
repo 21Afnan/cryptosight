@@ -29,10 +29,11 @@
 | 🟢 **LIVE** | **1. Ingestion** | `cryptosight.data` | **Binance & Bybit Ingestion** with smart SQL gap-fill, COPY binary streams, and live candle stripping (`latest_ts` synchronization). |
 | ⚡ **FAST** | **2. TA Engine** | `cryptosight.tal_Indicators` | **Dynamic 158 TA-Lib Wrapper** utilizing Python `__getattr__` interception with parameter hierarchy & Plotly visual rendering. |
 | 🎯 **RULES** | **3. Signals** | `cryptosight.signals` | **YAML-Driven Signal Pipeline** with multi-crossover conditions and automatic `.shift(1)` look-ahead bias prevention. |
-| 🧪 **QUANT** | **4. Backtester** | `cryptosight.backtesting` | **Vectorized 10-Step Backtesting Engine** simulating realistic commissions (`0.05%`), slippage (`0.02%`), dynamic TP/SL, and SQL ledger exports. |
-| 🧠 **NLP** | **5. Sentiment** | `cryptosight.sentiment` | **Reddit NLP Pipeline** with PRAW scraping, text cleaning, and **Hugging Face FinBERT** chunk-averaged classification. |
-| 🛡️ **CLEAN** | **6. ML Ecosystem** | `cryptosight.ml` | **Quant ML Engine** with lag-free feature extraction (`.shift(1)`), stationarity scaling, XGBoost/LightGBM/LSTM models, and out-of-sample forward inference. |
-| 📊 **ANALYTICS**| **7. Evaluation & Stats** | `cryptosight.preprocessing` & `cryptosight.stats` | **QuantStats Analytics & Plotly Engine** computing 59+ financial performance ratios (`CAGR, Sharpe, Sortino, Calmar`) and exporting interactive JSON charts. |
+| 🔄 **EVENT** | **4. Simulator Engine**| `cryptosight.simulator` | **Event-Driven Simulation Engine** maintaining live active positions (`simulations.active_positions`), trade ledgers (`simulation_ledgers`), and dynamic performance metrics (`simulations.stats`). |
+| 🧪 **QUANT** | **5. Backtester** | `cryptosight.backtesting` | **Vectorized 10-Step Backtesting Engine** simulating realistic commissions (`0.05%`), slippage (`0.02%`), dynamic TP/SL, and SQL ledger exports. |
+| 🧠 **NLP** | **6. Sentiment** | `cryptosight.sentiment` | **Reddit NLP Pipeline** with PRAW scraping, text cleaning, and **Hugging Face FinBERT** chunk-averaged classification. |
+| 🛡️ **CLEAN** | **7. ML Ecosystem** | `cryptosight.ml` | **Quant ML Engine** with lag-free feature extraction (`.shift(1)`), stationarity scaling, XGBoost/LightGBM/LSTM models, and out-of-sample forward inference. |
+| 📊 **STATS** | **8. Analytics** | `cryptosight.stats` | **Institutional QuantStats Suite** computing 59+ financial performance ratios (`CAGR, Sharpe, Sortino, Calmar`) embedded as dynamic PostgreSQL tabular columns. |
 
 
 > [!IMPORTANT]
@@ -74,12 +75,19 @@ graph TD
         Signals -->|"Store Pre-Computed Signals"| SQL_Signals["signals Schema"]
     end
 
-    subgraph Backtesting_Layer["Vectorized Backtesting & ML Layer"]
-        SQL_Check -->|"Load Price Candles"| Backtester["Vectorized 10-Step Backtesting Engine"]
-        Signals -->|"Send Aligned Signals"| Backtester
+    subgraph Simulation_Layer["Event-Driven Simulator & Backtesting Engine"]
+        SQL_Check -->|"Load 1m Base Candles"| Simulator["Event-Driven Simulator Engine"]
+        Signals -->|"Feed Target Signals"| Simulator
+        Simulator -->|"Track Live Trades"| ActivePos["simulations.active_positions"]
+        Simulator -->|"Stream Trade Logs"| Ledgers["simulation_ledgers Schema"]
+        Simulator -->|"Dynamic QuantStats Metrics"| StatsTable["simulations.stats Table"]
+        
+        SQL_Check -->|"Load Price Candles"| Backtester["Vectorized 10-Step Backtester"]
         Backtester -->|"Export Trade Ledgers"| SQL_Backtests["backtests Schema"]
         Backtester -->|"Update Summary Stats"| SQL_BacktestData["metadata.backtest_data Table"]
+    end
 
+    subgraph Machine_Learning_Layer["ML Ecosystem"]
         SQL_Check -->|"Load Clean Features"| ML_Engine["Quant ML Ecosystem XGBoost/LightGBM/LSTM"]
         ML_Engine -->|"Run Forward Inference"| ML_Predictions["csv_files Exports & Predictions"]
     end
@@ -101,9 +109,16 @@ PostgreSQL Database ('postgres')
 │   ├── market_data                    # Index of downloaded OHLCV candle ranges
 │   ├── sentiment_data                 # Index of Reddit sentiment datasets & post counts
 │   ├── strategy_data                  # Strategy configurations, indicators, & signal stats
+│   ├── simulator_config               # Global simulation parameters (initial balance, fee rates)
+│   ├── simulation_data                # Strategy-specific simulation configuration settings
 │   └── backtest_data                  # Backtest performance metrics & run configurations
 ├── signals/                           # Pre-Computed Signal Tables
 │   └── <exchange>_<symbol>_<timeframe># Standardized signal data tables per market
+├── simulations/                       # Real-Time Simulation State & Analytics
+│   ├── active_positions               # Active open trade positions with entry price, TP, SL & unrealized PnL
+│   └── stats                          # Dynamic tabular performance metrics table (59+ QuantStats ratios)
+├── simulation_ledgers/                # Real-Time Trade Ledgers
+│   └── <strategy_name>                # Completed trade logs per strategy (gross PnL, net PnL, fees)
 └── backtests/                         # Historical Backtest Ledgers
     └── <strategy_name>                # Strategy-specific backtest trade ledger tables
 ```
@@ -138,22 +153,28 @@ PostgreSQL Database ('postgres')
 - **Look-Ahead Bias Prevention**: Enforces `.shift(1)` across indicator matrices before evaluating signal conditions.
 - **Persistence Windows**: Supports multi-bar persistence windows to confirm breakouts across timeframes.
 
-### 4️⃣ **Vectorized Backtesting Engine (`cryptosight.backtesting`)**
+### 4️⃣ **Real-Time Simulation Engine (`cryptosight.simulator`)**
+- **Sequential Candle-by-Candle Simulation**: Event-driven execution processing historical market data candle-by-candle (1-to-1 time basis) with zero look-ahead bias.
+- **Active Position State Management**: Maintains real-time open trade state in `simulations.active_positions` (using `strategy_id PRIMARY KEY` for single-position enforcement and run resumption).
+- **Trade Ledger Streaming**: Streams closed trade logs into `simulation_ledgers.<strategy_name>` tables.
+- **Dynamic QuantStats Tabular Analytics**: Automatically computes 59+ institutional performance ratios (Sharpe, Sortino, Calmar, Max Drawdown, CAGR, Win Rate) saved into PostgreSQL as **dynamic tabular columns** in `simulations.stats`.
+
+### 5️⃣ **Vectorized Backtesting Engine (`cryptosight.backtesting`)**
 - **10-Step Execution Simulation**: Models entry fill, commissions (`0.05%`), slippage (`0.02%`), take-profit percentage, stop-loss percentage, and trailing stops.
 - **Ledger Generation**: Exports trade logs into CSV and database tables with exact PnL and return percentages.
 
-### 5️⃣ **NLP Sentiment Engine (`cryptosight.sentiment`)**
+### 6️⃣ **NLP Sentiment Engine (`cryptosight.sentiment`)**
 - **Reddit PRAW Scraper**: Automated scraper pulling posts and top comments from target cryptocurrency subreddits.
 - **Text Cleaning Engine**: Strips HTML tags, contracts, URLs, and bot-generated boilerplate text.
 - **FinBERT Classification**: Uses Hugging Face **FinBERT** (`yiyanghkust/finbert-tone`) with chunk-averaging to calculate Bullish, Bearish, and Neutral probabilities.
 
-### 6️⃣ **Machine Learning Ecosystem (`cryptosight.ml`)**
+### 7️⃣ **Machine Learning Ecosystem (`cryptosight.ml`)**
 - **Feature Builder**: Generates stationarity-transformed features, log returns (`np.log`), and 3-class target matrices (`Long`, `Short`, `Hold`).
 - **Chronological Splitter**: Enforces chronological train/validation/test splits to avoid temporal leakage.
 - **Multi-Model Suite**: Trains XGBoost, LightGBM, Random Forest, and PyTorch LSTM models.
 - **Out-of-Sample Inference**: Standalone forward-inference engine (`inference_pipeline.py`) running real-time signal predictions.
 
-### 7️⃣ **Preprocessing & Quant Analytics (`cryptosight.preprocessing` & `cryptosight.stats`)**
+### 8️⃣ **Preprocessing & Quant Analytics (`cryptosight.preprocessing` & `cryptosight.stats`)**
 - **Stationarity Testing**: Automated Augmented Dickey-Fuller (ADF) and KPSS stationarity tests.
 - **6-Scaler Benchmark**: Benchmarks signals across `RobustScaler`, `MinMaxScaler`, `Fractional Differentiation (FracDiff)`, `Winsorization`, `Log Transformation`, and `Gaussian Normalization`.
 - **QuantStats Integration**: Calculates 59+ institutional performance ratios (Sharpe, Sortino, Calmar, Max Drawdown, CAGR, Win Rate).
@@ -191,10 +212,13 @@ python -m cryptosight.data.binance.main
 python -m cryptosight.data.bybit.main
 ```
 
-### 3️⃣ **Running Signal Generation & Backtesting**
+### 3️⃣ **Running Signal Generation & Simulation Engine**
 ```bash
 # Run Signals Pipeline
 python -m cryptosight.signals.main
+
+# Run Real-Time Sequential Simulation Engine
+python -m cryptosight.simulator.main
 
 # Run Vectorized Backtest Engine
 python -m cryptosight.backtesting.backtest
@@ -222,6 +246,10 @@ cryptosight/
 │   └── bybit/                     # Bybit API fetcher, config.yaml, main.py & run_bybit.bat
 ├── tal_Indicators/                # Dynamic __getattr__ wrapper for all 158 TA-Lib technical indicators
 ├── signals/                       # YAML/DB-driven quant signal generator & multi-crossover rule engine
+├── simulator/                     # Real-time event-driven simulation engine with active position tracking
+│   ├── main.py                    # Entry point for sequential multi-strategy simulations
+│   ├── simulation.py              # SimulatorEngine maintaining active positions & ledger streaming
+│   └── config.yaml                # Global execution config (initial balance, position sizing, fees)
 ├── backtesting/                   # Vectorized 10-step backtester modeling commissions, slippage & SQL ledger
 ├── sentiment/                     # PRAW Reddit scraper, text cleaning engine & Hugging Face FinBERT classifier
 ├── ml/                            # Comprehensive end-to-end Machine Learning ecosystem

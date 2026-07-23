@@ -16,6 +16,7 @@ def run_signals_pipeline(
     config_path: str = None,
     market_overrides: dict = None,
     strat_dict: dict = None,
+    save_to_db: bool = True,
 ) -> pd.DataFrame:
     """
     Master signals pipeline: loads market configuration from YAML or strategy dictionary,
@@ -80,8 +81,14 @@ def run_signals_pipeline(
     target_timeframe = market_cfg.get("target_timeframe")
     start_time = market_cfg.get("start_time")
     end_time = market_cfg.get("end_time")
-    max_retries = market_cfg.get("max_retries") 
-    retry_delay = market_cfg.get("retry_delay") 
+    max_retries = market_cfg.get("max_retries")
+    retry_delay = market_cfg.get("retry_delay")
+    if not isinstance(max_retries, int):
+        logger.warning("max_retries missing from market config — using 5.")
+        max_retries = 5
+    if not isinstance(retry_delay, int):
+        logger.warning("retry_delay missing from market config — using 3.")
+        retry_delay = 3
     logger.info(f"Fetching {symbol} from {exchange} ({base_timeframe} resampled to {target_timeframe})...")
     dl = Downloader(exchange=exchange, symbol=symbol, timeframe=base_timeframe)
     try:
@@ -145,19 +152,23 @@ def run_signals_pipeline(
     active_signals = (merged_df["signal"] != 0).sum()
     logger.info(f"Pipeline complete — {len(merged_df)} rows, {active_signals} active signals.")
 
-    # 8. Save to DB (only when running standalone — skip when called from backtester)
-    if not market_overrides:
+    # 8. Save to DB (only when running standalone — skip when called from backtester or simulator)
+    if not market_overrides and save_to_db:
         try:
             conn = get_connection()
             create_signals_schema_and_table(conn, exchange, symbol, target_timeframe)
             insert_signals(conn, exchange, symbol, target_timeframe, merged_df)
             strat_cfg_to_save = dict(strategy_config)
-            if start_time:
-                strat_cfg_to_save["start_time"] = start_time
-            if end_time:
-                strat_cfg_to_save["end_time"] = end_time
             strategy_name = strat_file.get("strategy_name")
-            upsert_strategy_data(conn, exchange, symbol, target_timeframe, indicator_config, strat_cfg_to_save, strategy_name)
+            upsert_strategy_data(
+                conn, exchange, symbol, target_timeframe,
+                indicator_config, strat_cfg_to_save, strategy_name,
+                timeframe=base_timeframe,
+                start_time=start_time if start_time else None,
+                end_time=end_time if end_time else None,
+                max_retries=max_retries if isinstance(max_retries, int) else None,
+                retry_delay=retry_delay if isinstance(retry_delay, int) else None,
+            )
             conn.close()
         except Exception as e:
             logger.warning(f"Could not save signals/strategy metadata to DB (non-fatal): {e}")

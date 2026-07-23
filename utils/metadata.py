@@ -1,4 +1,5 @@
 import json
+import re
 from cryptosight.utils.logger import get_logger
 from cryptosight.utils.db import get_connection, get_table_names, get_signals_table_names
 
@@ -263,6 +264,11 @@ def create_strategy_data(conn):
                 exchange          VARCHAR(32)  NOT NULL,
                 symbol            VARCHAR(32)  NOT NULL,
                 target_timeframe  VARCHAR(16)  NOT NULL,
+                timeframe         VARCHAR(16),
+                start_time        TIMESTAMP WITH TIME ZONE,
+                end_time          TIMESTAMP WITH TIME ZONE,
+                max_retries       INT,
+                retry_delay       INT,
 
                 indicators_config JSONB,
                 strategy_config   JSONB,
@@ -275,12 +281,21 @@ def create_strategy_data(conn):
                 last_updated      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
             """
+            alter_sqls = [
+                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS timeframe    VARCHAR(16);",
+                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS start_time   TIMESTAMP WITH TIME ZONE;",
+                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS end_time     TIMESTAMP WITH TIME ZONE;",
+                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS max_retries  INT;",
+                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS retry_delay  INT;",
+            ]
             create_index_sql = """
             CREATE INDEX IF NOT EXISTS idx_strategy_data_lookup
             ON metadata.strategy_data (exchange, symbol, target_timeframe);
             """
             cursor.execute(create_table_sql)
             cursor.execute(create_index_sql)
+            for alter_sql in alter_sqls:
+                cursor.execute(alter_sql)
             conn.commit()
 
             # Clean up legacy exchange prefixes from strategy_name in metadata.strategy_data
@@ -310,6 +325,11 @@ def upsert_strategy_data(
     indicators_config: dict,
     strategy_config: dict,
     strategy_name: str = None,
+    timeframe: str = None,
+    start_time: str = None,
+    end_time: str = None,
+    max_retries: int = None,
+    retry_delay: int = None,
 ):
     """
     Updates or inserts strategy definition into `metadata.strategy_data`.
@@ -350,16 +370,21 @@ def upsert_strategy_data(
 
             upsert_sql = """
             INSERT INTO metadata.strategy_data (
-                strategy_name, exchange, symbol, target_timeframe,
+                strategy_name, exchange, symbol, target_timeframe, timeframe, start_time, end_time, max_retries, retry_delay,
                 indicators_config, strategy_config,
                 total_rows, long_signals, short_signals,
                 last_signal_time, last_updated
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
             ON CONFLICT (strategy_name) DO UPDATE SET
                 exchange          = EXCLUDED.exchange,
                 symbol            = EXCLUDED.symbol,
                 target_timeframe  = EXCLUDED.target_timeframe,
+                timeframe         = COALESCE(EXCLUDED.timeframe,    metadata.strategy_data.timeframe),
+                start_time        = COALESCE(EXCLUDED.start_time,   metadata.strategy_data.start_time),
+                end_time          = COALESCE(EXCLUDED.end_time,     metadata.strategy_data.end_time),
+                max_retries       = COALESCE(EXCLUDED.max_retries,  metadata.strategy_data.max_retries),
+                retry_delay       = COALESCE(EXCLUDED.retry_delay,  metadata.strategy_data.retry_delay),
                 indicators_config = EXCLUDED.indicators_config,
                 strategy_config   = EXCLUDED.strategy_config,
                 total_rows        = EXCLUDED.total_rows,
@@ -371,6 +396,9 @@ def upsert_strategy_data(
             """
             cursor.execute(upsert_sql, (
                 strategy_name, exchange.lower(), symbol.lower(), target_timeframe.lower(),
+                timeframe.lower() if timeframe else None,
+                start_time, end_time,
+                max_retries, retry_delay,
                 json.dumps(indicators_config) if indicators_config else None,
                 json.dumps(strategy_config)   if strategy_config   else None,
                 total_rows, long_signals, short_signals,
@@ -467,5 +495,169 @@ def upsert_backtest_data(conn, strategy_id: int, backtest_config: dict, ledger_d
         conn.rollback()
         logger.error(f"Error updating backtest metadata for '{strategy_id}': {error}")
         raise
+
+
+def create_simulator_config(conn):
+    """
+    Creates the `metadata.simulator_config` table if it does not exist.
+    Stores a single global simulator configuration row in tabular column format.
+    """
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS metadata;"
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS metadata.simulator_config (
+        config_id            INT PRIMARY KEY DEFAULT 1 CHECK (config_id = 1),
+        initial_balance      NUMERIC(18,2) NOT NULL,
+        position_size_type   VARCHAR(50) NOT NULL,
+        position_size_value  NUMERIC(10,4) NOT NULL,
+        commission           NUMERIC(10,6) NOT NULL,
+        slippage             NUMERIC(10,6) NOT NULL,
+        created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_table_sql)
+            conn.commit()
+            logger.info("Table 'metadata.simulator_config' verified/created successfully.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating table 'metadata.simulator_config': {error}")
+        raise
+
+
+def upsert_simulator_config(
+    conn,
+    initial_balance: float,
+    position_size_type: str,
+    position_size_value: float,
+    commission: float,
+    slippage: float,
+) -> int:
+    """
+    Inserts or updates the single global simulator configuration in `metadata.simulator_config`.
+    Returns the integer config_id (1).
+    """
+    create_simulator_config(conn)
+
+    upsert_sql = """
+    INSERT INTO metadata.simulator_config (
+        config_id, initial_balance, position_size_type,
+        position_size_value, commission, slippage, updated_at
+    )
+    VALUES (1, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+    ON CONFLICT (config_id) DO UPDATE SET
+        initial_balance     = EXCLUDED.initial_balance,
+        position_size_type  = EXCLUDED.position_size_type,
+        position_size_value = EXCLUDED.position_size_value,
+        commission          = EXCLUDED.commission,
+        slippage            = EXCLUDED.slippage,
+        updated_at          = CURRENT_TIMESTAMP
+    RETURNING config_id;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(upsert_sql, (
+                initial_balance,
+                position_size_type,
+                position_size_value,
+                commission,
+                slippage,
+            ))
+            config_id = cursor.fetchone()[0]
+            conn.commit()
+            logger.info(f"Simulator config saved to 'metadata.simulator_config' (ID #{config_id}).")
+            return config_id
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error upserting simulator config: {error}")
+        raise
+
+
+def create_simulation_data(conn):
+    """
+    Creates the `metadata.simulation_data` table if it does not exist.
+    Stores simulation configuration parameters per strategy in tabular format.
+    """
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS metadata;"
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS metadata.simulation_data (
+        strategy_id          BIGINT PRIMARY KEY REFERENCES metadata.strategy_data(strategy_id) ON DELETE CASCADE,
+        strategy_name        VARCHAR(150) NOT NULL,
+        exchange             VARCHAR(20)  NOT NULL,
+        symbol               VARCHAR(20)  NOT NULL,
+        timeframe            VARCHAR(10)  NOT NULL,
+        initial_balance      NUMERIC(18,2) NOT NULL,
+        position_size_type   VARCHAR(50)  NOT NULL,
+        position_size_value  NUMERIC(10,4) NOT NULL,
+        commission           NUMERIC(10,6) NOT NULL,
+        slippage             NUMERIC(10,6) NOT NULL,
+        last_updated         TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_table_sql)
+            conn.commit()
+            logger.info("Table 'metadata.simulation_data' verified/created successfully.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating table 'metadata.simulation_data': {error}")
+        raise
+
+
+def upsert_simulation_data(
+    conn,
+    strategy_id: int,
+    strategy_name: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str,
+    initial_balance: float,
+    position_size_type: str,
+    position_size_value: float,
+    commission: float,
+    slippage: float,
+):
+    """
+    Inserts or updates simulation configuration settings per strategy in `metadata.simulation_data`.
+    """
+    create_simulation_data(conn)
+
+    upsert_sql = """
+    INSERT INTO metadata.simulation_data (
+        strategy_id, strategy_name, exchange, symbol, timeframe,
+        initial_balance, position_size_type, position_size_value,
+        commission, slippage, last_updated
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+    ON CONFLICT (strategy_id) DO UPDATE SET
+        strategy_name       = EXCLUDED.strategy_name,
+        exchange            = EXCLUDED.exchange,
+        symbol              = EXCLUDED.symbol,
+        timeframe           = EXCLUDED.timeframe,
+        initial_balance     = EXCLUDED.initial_balance,
+        position_size_type  = EXCLUDED.position_size_type,
+        position_size_value = EXCLUDED.position_size_value,
+        commission          = EXCLUDED.commission,
+        slippage            = EXCLUDED.slippage,
+        last_updated        = CURRENT_TIMESTAMP;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(upsert_sql, (
+                strategy_id, strategy_name, exchange, symbol, timeframe,
+                initial_balance, position_size_type, position_size_value,
+                commission, slippage
+            ))
+            conn.commit()
+            logger.info(f"Simulation metadata config updated for strategy '{strategy_name}' (ID #{strategy_id}).")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error updating simulation metadata for strategy #{strategy_id}: {error}")
+        raise
+
 
 
