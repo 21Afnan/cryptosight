@@ -223,9 +223,124 @@ class ExecutionEngine:
         logger.info(f"Opened {signal} position for {symbol} @ ${close_price:.2f} (Bybit OrderID: {order_res.get('order_id')}).")
         return active_position
 
+    def sync_bybit_trade_history(self, symbol: str, strategy_id: str = "bybit_live"):
+        """Fetches actual closed PnL records from Bybit V5 API and updates account.history in DB."""
+        if not self.conn:
+            return
+
+        logger.info(f"Syncing historical trades from Bybit API for symbol {symbol}...")
+        
+        # Fetch closed PnL records (category linear corresponds to futures)
+        closed_pnl_list = self.client.get_closed_pnl(exchange="bybit", symbol=symbol, limit=50)
+        if not closed_pnl_list:
+            logger.info(f"No closed PnL records returned from Bybit for {symbol}.")
+            return
+
+        logger.info(f"Fetched {len(closed_pnl_list)} closed trade records from Bybit. Syncing into DB...")
+
+        from datetime import timezone, timedelta
+        
+        insert_sql = """
+        INSERT INTO account.history (
+            trade_id, strategy_id, symbol, direction, entry_price, exit_price,
+            quantity, gross_pnl, commission, slippage, net_pnl, perc_pnl, exit_reason, balance, entry_time, exit_time
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (strategy_id, entry_time) DO UPDATE SET
+            trade_id     = EXCLUDED.trade_id,
+            symbol       = EXCLUDED.symbol,
+            direction    = EXCLUDED.direction,
+            entry_price  = EXCLUDED.entry_price,
+            exit_price   = EXCLUDED.exit_price,
+            quantity     = EXCLUDED.quantity,
+            gross_pnl    = EXCLUDED.gross_pnl,
+            commission   = EXCLUDED.commission,
+            slippage     = EXCLUDED.slippage,
+            net_pnl      = EXCLUDED.net_pnl,
+            perc_pnl     = EXCLUDED.perc_pnl,
+            exit_reason  = EXCLUDED.exit_reason,
+            balance      = EXCLUDED.balance,
+            exit_time    = EXCLUDED.exit_time,
+            recorded_at  = CURRENT_TIMESTAMP;
+        """
+
+        success_count = 0
+        try:
+            with self.conn.cursor() as cur:
+                for record in closed_pnl_list:
+                    created_time_ms = int(record.get("createdTime") or 0)
+                    if not created_time_ms:
+                        continue
+                    
+                    exit_time = datetime.fromtimestamp(created_time_ms / 1000, tz=timezone.utc)
+                    entry_time = exit_time - timedelta(minutes=1)
+
+                    order_id = record.get("orderId") or f"bybit_{created_time_ms}"
+                    
+                    # Bybit closed PnL side is the exit order side (e.g. Sell means position was BUY/Long)
+                    exit_side = record.get("side", "").upper()
+                    direction = "BUY" if exit_side == "SELL" else "SELL"
+
+                    qty = float(record.get("qty") or 0.0)
+                    entry_price = float(record.get("avgEntryPrice") or 0.0)
+                    exit_price = float(record.get("avgExitPrice") or 0.0)
+                    
+                    net_pnl = float(record.get("closedPnl") or 0.0)
+                    open_fee = float(record.get("openFee") or 0.0)
+                    close_fee = float(record.get("closeFee") or 0.0)
+                    
+                    commission = open_fee + close_fee
+                    gross_pnl = net_pnl + commission
+                    
+                    pos_value = entry_price * qty
+                    perc_pnl = (net_pnl / pos_value * 100.0) if pos_value > 0 else 0.0
+                    balance = 0.0
+
+                    cur.execute(insert_sql, (
+                        order_id,
+                        strategy_id,
+                        symbol.upper(),
+                        direction,
+                        entry_price,
+                        exit_price,
+                        qty,
+                        gross_pnl,
+                        commission,
+                        0.0,
+                        net_pnl,
+                        perc_pnl,
+                        "BYBIT_API",
+                        balance,
+                        entry_time,
+                        exit_time
+                    ))
+                    success_count += 1
+                
+                self.conn.commit()
+                logger.info(f"Successfully synchronized {success_count} closed trades from Bybit to account.history DB.")
+        except Exception as err:
+            self.conn.rollback()
+            logger.error(f"Error executing DB sync for Bybit closed PnL: {err}")
+
     def finalize_execution_stats(self, ledger_entries: list, strategy_id: str, symbol: str, initial_balance: float, current_balance: float):
         """Computes performance metrics and updates DB execution.stats & account.stats tables."""
-        if ledger_entries and self.conn:
+        if not self.conn:
+            return
+
+        # 1. Synchronize real historical trades from Bybit API into account.history
+        try:
+            self.sync_bybit_trade_history(symbol)
+        except Exception as sync_err:
+            logger.warning(f"Failed to sync Bybit trade history for {symbol}: {sync_err}")
+
+        # 2. Always update account.stats using the full database history (even if this run had no trades)
+        try:
+            upsert_account_stats(self.conn, symbol, initial_balance, current_balance, [], {})
+        except Exception as db_err:
+            logger.warning(f"DB account stats update warning for '{symbol}': {db_err}")
+
+        # 3. Update execution.stats if there were trades in this run
+        if ledger_entries:
             df_ledger = pd.DataFrame(ledger_entries)
             returns_series = pd.Series(
                 df_ledger["perc_pnl"].values / 100.0,
@@ -234,7 +349,6 @@ class ExecutionEngine:
             metrics_dict = compute_all_metrics(returns_series, is_percentage=False)
             try:
                 upsert_execution_stats(self.conn, strategy_id, initial_balance, current_balance, ledger_entries, metrics_dict)
-                upsert_account_stats(self.conn, symbol, initial_balance, current_balance, ledger_entries, metrics_dict)
             except Exception as db_err:
                 logger.warning(f"DB execution stats update warning for '{strategy_id}': {db_err}")
 

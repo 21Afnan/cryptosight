@@ -1067,51 +1067,194 @@ def insert_account_history(conn, strategy_id: str, symbol: str, completed_trade:
         logger.error(f"Error inserting into account.history for symbol '{symbol}': {error}")
 
 
+def clean_metric_val(val, default_val=0.0):
+    import math
+    if val is None:
+        return None
+    if isinstance(val, dict):
+        return None
+    try:
+        if isinstance(val, bool):
+            return bool(val)
+        if isinstance(val, int):
+            return int(val)
+        fval = float(val)
+        if math.isnan(fval) or math.isinf(fval):
+            return None
+        return fval
+    except (ValueError, TypeError):
+        return None
+
+
+def ensure_account_stats_columns(conn, metrics_dict: dict):
+    """Dynamically adds missing columns to account.stats table based on metrics keys."""
+    if not metrics_dict:
+        return
+
+    # 1. Fetch existing columns from DB
+    existing_columns = set()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'account' AND table_name = 'stats';
+            """)
+            existing_columns = {row[0].lower() for row in cur.fetchall()}
+    except Exception as err:
+        logger.error(f"Error checking existing columns of account.stats: {err}")
+        return
+
+    # 2. Iterate keys and check if they need to be added
+    for key, val in metrics_dict.items():
+        if isinstance(val, (dict, list)):
+            continue  # Skip complex structures for flat tabular columns
+
+        # Sanitize column name to allow only alphanumeric and underscores
+        col_name = re.sub(r'[^a-z0-9_]', '', key.lower())
+        if not col_name:
+            continue
+        if not col_name[0].isalpha():
+            col_name = f"metric_{col_name}"
+
+        # If column does not exist, alter the table
+        if col_name not in existing_columns:
+            # Determine appropriate database type
+            if isinstance(val, bool):
+                db_type = "BOOLEAN"
+            elif isinstance(val, int):
+                db_type = "INT"
+            else:
+                db_type = "NUMERIC"
+
+            alter_sql = f"ALTER TABLE account.stats ADD COLUMN IF NOT EXISTS {col_name} {db_type} DEFAULT NULL;"
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(alter_sql)
+                conn.commit()
+                logger.info(f"Dynamically added column '{col_name}' ({db_type}) to account.stats.")
+                existing_columns.add(col_name)
+            except Exception as err:
+                conn.rollback()
+                logger.error(f"Failed to add dynamic column '{col_name}' to account.stats: {err}")
+
+
 def upsert_account_stats(conn, coin_symbol: str, initial_balance: float, current_balance: float, completed_trades: list, metrics_dict: dict):
-    """Upserts live account performance stats for a coin into account.stats table."""
+    """Upserts live account performance stats for a coin into account.stats table dynamically."""
+    # 1. Query the complete account trade history for this coin symbol
+    all_trades = []
+    try:
+        query_history = """
+        SELECT net_pnl, perc_pnl, exit_time
+        FROM account.history 
+        WHERE UPPER(symbol) = %s 
+        ORDER BY exit_time ASC;
+        """
+        with conn.cursor() as cur:
+            cur.execute(query_history, (coin_symbol.upper(),))
+            colnames = [desc[0] for desc in cur.description]
+            for row in cur.fetchall():
+                all_trades.append(dict(zip(colnames, row)))
+    except Exception as err:
+        logger.warning(f"Failed to query account.history for {coin_symbol}: {err}")
+
+    # 2. Recompute statistics over the complete trade history if available
+    if all_trades:
+        completed_trades = all_trades
+        try:
+            df_history = pd.DataFrame(completed_trades)
+            # Convert Decimal columns from DB to standard float numeric values
+            df_history["perc_pnl"] = pd.to_numeric(df_history["perc_pnl"], errors="coerce")
+            df_history["net_pnl"] = pd.to_numeric(df_history["net_pnl"], errors="coerce")
+            
+            returns_series = pd.Series(
+                df_history["perc_pnl"].values / 100.0,
+                index=pd.to_datetime(df_history["exit_time"])
+            )
+            from cryptosight.stats.metrices import compute_all_metrics
+            metrics_dict = compute_all_metrics(returns_series, is_percentage=False)
+            logger.info(f"Recalculated {len(metrics_dict)} performance metrics over {len(completed_trades)} total historical trades for {coin_symbol}.")
+        except Exception as err:
+            logger.error(f"Error recalculating metrics over historical trades for {coin_symbol}: {err}")
+
     total_trades = len(completed_trades)
     if total_trades == 0:
         return
+
+    # Ensure all dynamic stats columns exist in the database table
+    ensure_account_stats_columns(conn, metrics_dict)
 
     df_trades = pd.DataFrame(completed_trades)
     winning_trades = len(df_trades[df_trades["net_pnl"] > 0])
     losing_trades = len(df_trades[df_trades["net_pnl"] < 0])
     win_rate = winning_trades / total_trades if total_trades > 0 else 0.0
     total_pnl = float(df_trades["net_pnl"].sum())
-    max_dd = float(metrics_dict.get("max_drawdown", 0.0) or 0.0)
+    max_dd = clean_metric_val(metrics_dict.get("max_drawdown"))
 
-    upsert_sql = """
+    # Core columns that are always present and calculated
+    columns = [
+        "coin_symbol", "initial_balance", "current_balance", "no_of_trades",
+        "winning_trades", "losing_trades", "total_pnl", "win_rate", "max_drawdown"
+    ]
+    placeholders = ["%s"] * len(columns)
+    values = [
+        coin_symbol.upper(), initial_balance, current_balance, total_trades,
+        winning_trades, losing_trades, total_pnl, win_rate, max_dd
+    ]
+    updates = [
+        "initial_balance = EXCLUDED.initial_balance",
+        "current_balance = EXCLUDED.current_balance",
+        "no_of_trades = EXCLUDED.no_of_trades",
+        "winning_trades = EXCLUDED.winning_trades",
+        "losing_trades = EXCLUDED.losing_trades",
+        "total_pnl = EXCLUDED.total_pnl",
+        "win_rate = EXCLUDED.win_rate",
+        "max_drawdown = EXCLUDED.max_drawdown"
+    ]
+
+    # Dynamically append columns from metrics_dict
+    for key, val in metrics_dict.items():
+        if isinstance(val, (dict, list)):
+            continue  # Skip complex structures
+
+        # Sanitize column name (must match name check in ensure_account_stats_columns)
+        col_name = re.sub(r'[^a-z0-9_]', '', key.lower())
+        if not col_name:
+            continue
+        if not col_name[0].isalpha():
+            col_name = f"metric_{col_name}"
+
+        # Avoid overriding core columns
+        if col_name in ("coin_symbol", "initial_balance", "current_balance", "no_of_trades",
+                        "winning_trades", "losing_trades", "total_pnl", "win_rate", "max_drawdown",
+                        "id", "last_updated"):
+            continue
+
+        cleaned_val = clean_metric_val(val)
+        columns.append(col_name)
+        placeholders.append("%s")
+        values.append(cleaned_val)
+        updates.append(f"{col_name} = EXCLUDED.{col_name}")
+
+    upsert_sql = f"""
     INSERT INTO account.stats (
-        coin_symbol, initial_balance, current_balance, no_of_trades,
-        winning_trades, losing_trades, total_pnl, win_rate, max_drawdown, last_updated
+        {", ".join(columns)}, last_updated
     )
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+    VALUES (
+        {", ".join(placeholders)}, CURRENT_TIMESTAMP
+    )
     ON CONFLICT (coin_symbol) DO UPDATE SET
-        initial_balance = EXCLUDED.initial_balance,
-        current_balance = EXCLUDED.current_balance,
-        no_of_trades    = EXCLUDED.no_of_trades,
-        winning_trades  = EXCLUDED.winning_trades,
-        losing_trades   = EXCLUDED.losing_trades,
-        total_pnl       = EXCLUDED.total_pnl,
-        win_rate        = EXCLUDED.win_rate,
-        max_drawdown    = EXCLUDED.max_drawdown,
-        last_updated    = CURRENT_TIMESTAMP;
+        {", ".join(updates)},
+        last_updated = CURRENT_TIMESTAMP;
     """
+
     try:
         with conn.cursor() as cur:
-            cur.execute(upsert_sql, (
-                coin_symbol.upper(),
-                initial_balance,
-                current_balance,
-                total_trades,
-                winning_trades,
-                losing_trades,
-                total_pnl,
-                win_rate,
-                max_dd,
-            ))
+            cur.execute(upsert_sql, tuple(values))
             conn.commit()
+            logger.info(f"Successfully upserted dynamic performance stats for symbol '{coin_symbol}'.")
     except Exception as error:
         conn.rollback()
         logger.error(f"Error upserting account.stats for symbol '{coin_symbol}': {error}")
+
 

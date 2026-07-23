@@ -187,3 +187,21 @@ class BybitExecutionClient:
             logger.error(f"Exception fetching order history: {err}")
             return []
 
+    def get_closed_pnl(self, exchange: str, category: str = "linear", symbol: str = None, limit: int = 50) -> list:
+        """Queries Bybit V5 API for closed PnL (completed trades) history from exchange."""
+        try:
+            session = self.get_session(exchange)
+            kwargs = {"category": category.lower(), "limit": limit}
+            if symbol:
+                sym = symbol.upper()
+                kwargs["symbol"] = sym if sym.endswith("USDT") else f"{sym}USDT"
+            res = session.get_closed_pnl(**kwargs)
+            if res.get("retCode") == 0:
+                return res.get("result", {}).get("list", [])
+            else:
+                logger.error(f"Failed to fetch closed PnL: {res.get('retMsg')}")
+                return []
+        except Exception as err:
+            logger.error(f"Exception fetching closed PnL: {err}")
+            return []
+
