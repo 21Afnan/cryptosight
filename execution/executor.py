@@ -115,7 +115,8 @@ class ExecutionEngine:
         commission: float,
         current_balance: float,
         strategy_id: str,
-        symbol: str
+        symbol: str,
+        strategy_name: str = None
     ) -> tuple[dict, float]:
         """Calculates trade PnL, logs completed trade into ledger, and updates DB positions/ledger tables."""
         pos_side = active_position["direction"]
@@ -148,7 +149,7 @@ class ExecutionEngine:
 
         if self.conn:
             try:
-                insert_execution_ledger(self.conn, strategy_id, completed_trade)
+                insert_execution_ledger(self.conn, strategy_id, completed_trade, strategy_name=strategy_name)
                 insert_account_history(self.conn, strategy_id, symbol, completed_trade)
                 close_execution_position(self.conn, strategy_id, {
                     "exit_price": exit_price_filled,
@@ -251,7 +252,7 @@ class ExecutionEngine:
         # Step 1: Create dedicated 'execution' schema tables
         if self.conn:
             try:
-                create_execution_schema_and_tables(self.conn, strategy_id)
+                create_execution_schema_and_tables(self.conn, strategy_id, strategy_name=strategy_name)
             except Exception as db_err:
                 logger.warning(f"Execution schema creation warning for '{strategy_id}': {db_err}")
 
@@ -259,13 +260,18 @@ class ExecutionEngine:
         sim_config, strat_rules, ind_config = self.parse_config(strategy)
         strat_cfg = strategy.get("strategy_config") or {}
 
-        initial_balance = float(strategy.get("initial_balance"))
-        commission = float(strategy.get("commission"))
-        slippage = float(strategy.get("slippage"))
-        allow_long = bool(strategy.get("allow_long"))
-        allow_short = bool(strategy.get("allow_short"))
-        pos_size_type = strategy.get("position_size_type")
-        pos_size_val = float(strategy.get("position_size_value"))
+        init_bal = strategy.get("initial_balance") or sim_config.get("initial_balance") or 10000.0
+        comm_val = strategy.get("commission") or sim_config.get("commission") or 0.0005
+        slip_val = strategy.get("slippage") or sim_config.get("slippage") or 0.0002
+        pos_val  = strategy.get("position_size_value") or sim_config.get("position_size_value") or 10.0
+
+        initial_balance = float(init_bal)
+        commission = float(comm_val)
+        slippage = float(slip_val)
+        allow_long = bool(strategy.get("allow_long") if strategy.get("allow_long") is not None else sim_config.get("allow_long", True))
+        allow_short = bool(strategy.get("allow_short") if strategy.get("allow_short") is not None else sim_config.get("allow_short", True))
+        pos_size_type = strategy.get("position_size_type") or sim_config.get("position_size_type") or "fixed_percentage"
+        pos_size_val = float(pos_val)
 
 
         tp_val = strat_rules.get("take_profit") or strategy.get("take_profit")
@@ -333,7 +339,8 @@ class ExecutionEngine:
                 if is_close:
                     completed_trade, current_balance = self.close_position_trade(
                         active_position, close_price, close_reason, candle_time,
-                        slippage, commission, current_balance, strategy_id, symbol
+                        slippage, commission, current_balance, strategy_id, symbol,
+                        strategy_name=strategy_name
                     )
                     ledger_entries.append(completed_trade)
                     active_position = None

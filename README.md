@@ -29,17 +29,17 @@
 | 🟢 **LIVE** | **1. Ingestion** | `cryptosight.data` | **Binance & Bybit Ingestion** with smart SQL gap-fill & live candle stripping (`latest_ts` synchronization). |
 | ⚡ **FAST** | **2. TA Engine** | `cryptosight.tal_Indicators` | **Dynamic 158 TA-Lib Wrapper** utilizing Python `__getattr__` interception with parameter hierarchy & dark-mode charts. |
 | 🎯 **RULES** | **3. Signals** | `cryptosight.signals` | **YAML-Driven Signal Pipeline** with look-back persistence windows and automatic `.shift(1)` look-ahead bias prevention. |
-| 🧪 **QUANT** | **4. Backtester** | `cryptosight.backtesting` | **Vectorized 10-Step Backtesting Engine** simulating realistic commissions (`0.06%`), slippage (`0.01%`), and dynamic TP/SL. |
+| 🧪 **QUANT** | **4. Backtester** | `cryptosight.backtesting` | **Vectorized 10-Step Backtesting Engine** simulating realistic commissions (`0.05%`), slippage (`0.02%`), and dynamic TP/SL. |
 | 🧠 **NLP** | **5. Sentiment** | `cryptosight.sentiment` | **Reddit NLP Pipeline** with HTML/contraction cleaning, bot filtering, and **Hugging Face FinBERT** chunk-averaging. |
 | 🛡️ **CLEAN** | **6. ML Data** | `cryptosight.ml` | **Quant ML Feature Builder** generating lag-free features (`.shift(1)`), Log Return (`np.log`), and 3-class target matrices. |
 | 📊 **BENCH** | **7. Evaluation** | `cryptosight.preprocessing` | **Institutional Preprocessing & Leaderboard** testing ADF/KPSS stationarity across `Robust, MinMax, FracDiff, Winsorize, Log, Gaussian`. |
 | 📉 **METRICS** | **8. Analytics** | `cryptosight.stats` | **QuantStats Analytics & Frontend Charts Engine** computing 59+ ratios (`CAGR, Sharpe, Calmar`) and exporting `all_charts.json`. |
-| ⚙️ **SIMUL** | **9. Simulation** | `cryptosight.simulator` | **Sequential Event-Driven Trading Simulator Engine** running minute-by-minute with TP/SL validation, dynamic reversal logic, and PostgreSQL `simulations` schema logging. |
-| 🚀 **EXEC** | **10. Live Execution** | `cryptosight.execution` | **Automated Bybit Live Execution Bot** with DB credential lookup (`account.api_creds`), dynamic `top_n` strategy selection, Pybit V5 API order routing, and Task Scheduler support. |
+| ⚙️ **SIMUL** | **9. Simulation** | `cryptosight.simulator` | **Sequential Event-Driven Trading Simulator Engine** running minute-by-minute with TP/SL validation, dynamic reversal logic, and dedicated `simulation_ledger.<strategy_name>` SQL tables. |
+| 🚀 **EXEC** | **10. Live Execution** | `cryptosight.execution` | **Automated Bybit Live Execution Bot** with DB credential lookup (`account.api_creds`), dynamic `top_n` strategy selection, Pybit V5 API order routing, `execution_ledger.<strategy_name>` trade history, and Task Scheduler support. |
 
 
 > [!IMPORTANT]
-> **Zero Data Leakage Guarantee (`.shift(1)`)**: Every single technical indicator, moving average, and pattern calculated inside CryptoSight is explicitly shifted forward by 1 period (`Bar T -> Bar T+1`) before generating target labels or execution signals. This mathematically prevents future look-ahead bias during historical backtests and ML cross-validation.
+> **Zero Data Leakage Guarantee (`.shift(1)`)**: Every single technical indicator, moving average, and pattern calculated inside CryptoSight is explicitly shifted forward by 1 period (`Bar T -> Bar T+1`) before generating target labels or execution signals. This mathematically prevents future look-ahead bias during historical backtests, event simulations, and ML cross-validation.
 
 <div align="right"><a href="#top">⬆️ Back to Top</a></div>
 
@@ -82,8 +82,9 @@ graph TD
         
         SQL_Check -->|"Load 1m Candles via DB COPY"| Simulator["Sequential Event-Driven Simulator"]
         Signals -->|"Send Aligned Signals"| Simulator
-        Simulator -->|"Check TP/SL & Reversals"| SimLedger["Simulator Ledger SQL Table"]
-        Simulator -->|"Track Open Trades"| SimPos["Active Position Table"]
+        Simulator -->|"Check TP/SL & Reversals"| SimLedger["simulation_ledger.<strategy_name> Table"]
+        Simulator -->|"Track Open Trades"| SimPos["simulations.positions Table"]
+        Simulator -->|"Save QuantStats Metrics"| SimStats["simulations.stats Table"]
     end
 
     subgraph Live_Execution_Layer["Live Bybit Execution Engine"]
@@ -91,7 +92,7 @@ graph TD
         ExecEngine -->|"Fetch Live API Keys"| AccCreds["account.api_creds Table"]
         ExecEngine -->|"Evaluate Live Signal & TP/SL"| BybitAPI["Bybit Unified V5 Trading API"]
         BybitAPI -->|"Place Market/Limit Orders"| BybitExchange["Bybit Exchange Demo / Live"]
-        ExecEngine -->|"Log Executed Trade Ledger"| ExecLedger["execution.strat_id & account.history"]
+        ExecEngine -->|"Log Executed Trade Ledger"| ExecLedger["execution_ledger.<strategy_name> & account.history"]
         ExecEngine -->|"Log Performance Stats"| ExecStats["execution.stats & account.stats"]
     end
 ```
@@ -104,14 +105,14 @@ graph TD
 
 ## 🗄️ Database Architecture & Schemas
 
-CryptoSight utilizes a highly structured, enterprise **PostgreSQL Database** organized into 4 distinct schemas:
+CryptoSight utilizes a highly structured, enterprise **PostgreSQL Database** organized into 6 distinct schemas with strict duplicate prevention and upsert logic:
 
 ```text
 PostgreSQL Database ('postgres')
 ├── account/                           # User Account & Global Live Execution History
 │   ├── api_creds                      # Exchange API keys, secrets & demo flags (Bybit/Binance)
-│   ├── history                        # Central account-wide completed trade ledger
-│   └── stats                          # Account-level performance metrics per coin symbol
+│   ├── history                        # Central account-wide completed trade ledger (UNIQUE on strategy_id, entry_time)
+│   └── stats                          # Account-level performance metrics per coin symbol (ON CONFLICT DO UPDATE)
 ├── metadata/                          # System Configuration & Strategy Registries
 │   ├── strategy_data                  # Registered strategies, symbols, timeframes, category & order_type
 │   ├── simulator_config               # Strategy risk rules (balance, commission, slippage, position sizing)
@@ -119,13 +120,24 @@ PostgreSQL Database ('postgres')
 │   └── market_data                    # Metadata index of downloaded OHLCV ranges
 ├── execution/                         # Live Exchange Execution Engine State
 │   ├── positions                      # Currently active open live positions & TP/SL triggers
-│   ├── strat_<id>                     # Strategy-specific live execution trade history ledger
 │   └── stats                          # Strategy-specific live performance metrics & QuantStats JSON
-└── simulations/                       # Backtest & Event Simulator Engine State
-    ├── positions                      # Simulated active open positions
-    ├── strat_<id>                     # Simulated strategy trade history ledger
-    └── stats                          # Simulated performance metrics & drawdown reports
+├── execution_ledger/                  # Live Exchange Execution Trade History Ledgers
+│   └── <strategy_name>                # Strategy-specific live execution trade history table (named after strategy)
+├── simulations/                       # Backtest & Event Simulator Engine State
+│   ├── positions                      # Simulated active open positions
+│   └── stats                          # Simulated performance metrics & drawdown reports
+└── simulation_ledger/                 # Backtest & Event Simulator Trade History Ledgers
+    └── <strategy_name>                # Simulated strategy trade history table (named after strategy)
 ```
+
+### Key Database Design Principles:
+1. **Separation of Operational & Ledger Data**:
+   - Operational tables (`positions`, `stats`) are isolated in `execution` and `simulations` schemas using numeric `strategy_id` keys for fast relational queries.
+   - Completed trade ledgers are organized into dedicated **`execution_ledger`** and **`simulation_ledger`** schemas with clean, human-readable table names derived from strategy names (e.g., `execution_ledger.ada_15m_rsi_momentum`, `simulation_ledger.btc_1h_rsi_mean_reversion`).
+2. **Duplicate Prevention & Conflict Resolution**:
+   - All trade history tables enforce `UNIQUE (entry_time)` constraints.
+   - Insertion queries utilize `ON CONFLICT (entry_time) DO UPDATE SET ...` to overwrite and update existing trade details without creating duplicates.
+   - Startup migration scripts automatically purge legacy ctid/ID duplicates for existing databases.
 
 <div align="right"><a href="#top">⬆️ Back to Top</a></div>
 
@@ -133,10 +145,10 @@ PostgreSQL Database ('postgres')
 
 <div id="quickstart"></div>
 
-## ⚡ Quick Start Guide & Running Live Execution
+## ⚡ Quick Start Guide & Running Pipelines
 
 ### 1️⃣ **Environment Setup**
-Clone the repository and set environment variables:
+Clone the repository and set up your Python environment:
 ```bash
 # Clone repository
 git clone https://github.com/21Afnan/cryptosight.git
@@ -159,14 +171,23 @@ python -m cryptosight.data.binance.main
 python -m cryptosight.data.bybit.main
 ```
 
-### 3️⃣ **Running Live Bybit Execution Engine**
-To execute top strategies automatically on Bybit:
+### 3️⃣ **Running Event Simulator (Backtesting)**
 ```bash
-# Run Execution Engine directly via Python
+# Run Simulator Engine directly
+python -m cryptosight.simulator.main
+
+# Or execute via Windows Batch script
+simulator\run_simulator.bat
+```
+
+### 4️⃣ **Running Live Bybit Execution Engine**
+To execute top-performing strategies automatically on Bybit:
+```bash
+# Run Execution Engine directly
 python -m cryptosight.execution.main
 
-# Or run via Windows Batch script (matching Task Scheduler pattern)
-run_execution.bat
+# Or run via Windows Batch script (Task Scheduler compatible)
+execution\run_execution.bat
 ```
 
 <div align="right"><a href="#top">⬆️ Back to Top</a></div>
@@ -184,28 +205,33 @@ cryptosight/
 │   ├── executor.py                # Class-based ExecutionEngine handling signals, TP/SL & DB updates
 │   ├── client.py                  # Authenticated BybitExecutionClient (Pybit V5 API & credential loader)
 │   └── run_execution.bat          # Task Scheduler Windows batch execution script
+├── simulator/                     # Sequential event-driven trading simulator engine
+│   ├── main.py                    # Master simulator entry point
+│   ├── simulator.py               # SimulatorEngine with 1m candle loop, TP/SL & ledger logging
+│   ├── config.yaml                # Simulator default parameter specifications
+│   └── run_simulator.bat          # Windows batch runner script
 ├── data/                          # Exchange downloaders with smart SQL gap fill & live bar protection
-│   ├── binance/                   # Binance API fetcher, config.yaml, main.py & Windows run_binance.bat
-│   └── bybit/                     # Bybit API fetcher, config.yaml, main.py & Windows run_bybit.bat
+│   ├── binance/                   # Binance API fetcher, config.yaml, main.py & run_binance.bat
+│   └── bybit/                     # Bybit API fetcher, config.yaml, main.py & run_bybit.bat
 ├── tal_Indicators/                # Dynamic __getattr__ wrapper for all 158 TA-Lib technical indicators
 ├── signals/                       # YAML/DB-driven quant signal generator & multi-crossover rule engine
 ├── backtesting/                   # Vectorized 10-step backtester modeling commissions, slippage & SQL ledger
 ├── sentiment/                     # PRAW Reddit scraper, text cleaning engine & Hugging Face FinBERT classifier
 ├── ml/                            # Comprehensive end-to-end Machine Learning ecosystem
-│   ├── main.py                    # Master orchestrator for feature generation, chron-splitting, training, and inference
-│   ├── ml_config.yaml             # Centralized YAML spec for features, models, splits, and signal thresholds
+│   ├── main.py                    # Master orchestrator for feature generation, chron-splitting & inference
+│   ├── ml_config.yaml             # Centralized YAML spec for features, models, splits & signal thresholds
 │   ├── preprocessing/             # Robust in-memory QuantPreprocessors and MLFeatureBuilders
 │   ├── models/                    # Modular training pipelines (XGBoost, LightGBM, Random Forest, PyTorch LSTM)
 │   ├── inference/                 # Standalone out-of-sample forward-inference engine (inference_pipeline.py)
 │   └── evaluation/                # Master JSON report builders linking hyperparameters to evaluation metrics
 ├── preprocessing/                 # Preprocessing benchmark suite & multi-model evaluation leaderboard
 ├── stats/                         # Institutional statistical analytics & frontend charts suite (QuantStats + Plotly)
-├── simulator/                     # Sequential event-driven trading simulator engine (cryptosight.simulator)
 ├── csv_files/                     # Automated export directory for predictions, reports & master tables
-├── logs/                          # Rotating execution logs (binance.log, bybit.log, db.log, nlp.log)
+├── logs/                          # Rotating execution logs with SafeRotatingFileHandler (binance.log, bybit.log, db.log)
 ├── utils/                         # Shared utilities (db.py connection pooling, metadata.py schema managers, logger.py)
 ├── run_execution.bat              # Root Windows batch script for Task Scheduler
 ├── .env                           # Database & exchange credentials (git-ignored)
+├── README.md                      # Comprehensive enterprise documentation
 └── requirements.txt               # Python package dependencies
 ```
 

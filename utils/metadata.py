@@ -314,7 +314,7 @@ def upsert_strategy_data(
     create_strategy_data(conn)
 
     if not strategy_name:
-        strategy_name = generate_strategy_name(exchange, symbol, target_timeframe, indicators_config, strategy_config)
+        strategy_name = generate_strategy_id(exchange, symbol, target_timeframe, indicators_config, strategy_config)
 
     schema_name, table_name = get_signals_table_names(exchange, symbol, target_timeframe)
     full_signals_table = f"{schema_name}.{table_name}"
@@ -585,6 +585,18 @@ def create_simulator_config(conn):
             """
             cur.execute(sql)
             conn.commit()
+
+            # Auto-populate missing simulator_config rows for all strategies in strategy_data
+            cur.execute("""
+                INSERT INTO metadata.simulator_config (
+                    strategy_id, enabled, initial_balance, position_size_type, position_size_value,
+                    commission, slippage, allow_long, allow_short
+                )
+                SELECT strategy_id, True, 10000.00, 'fixed_percentage', 10.00, 0.0005, 0.0002, True, True
+                FROM metadata.strategy_data
+                ON CONFLICT (strategy_id) DO NOTHING;
+            """)
+            conn.commit()
     except Exception as err:
         conn.rollback()
         logger.error(f"Error creating metadata.simulator_config table: {err}")
@@ -725,7 +737,8 @@ def create_account_schema_and_tables(conn):
         balance         NUMERIC NOT NULL,
         entry_time      TIMESTAMP WITH TIME ZONE NOT NULL,
         exit_time       TIMESTAMP WITH TIME ZONE NOT NULL,
-        recorded_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        recorded_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_account_history_strat_entry UNIQUE (strategy_id, entry_time)
     );
 
     CREATE TABLE IF NOT EXISTS account.stats (
@@ -747,6 +760,23 @@ def create_account_schema_and_tables(conn):
             cur.execute(sql)
             conn.commit()
             logger.info("Schema 'account' and tables (api_creds, history, stats) verified/created successfully.")
+            
+            # Deduplicate existing account.history table and apply constraint
+            try:
+                cur.execute("""
+                    DELETE FROM account.history a
+                    USING account.history b
+                    WHERE a.ctid > b.ctid 
+                      AND a.strategy_id = b.strategy_id 
+                      AND a.entry_time = b.entry_time;
+                """)
+                cur.execute("""
+                    ALTER TABLE account.history
+                    ADD CONSTRAINT uq_account_history_strat_entry UNIQUE (strategy_id, entry_time);
+                """)
+                conn.commit()
+            except Exception:
+                conn.rollback()
     except Exception as e:
         conn.rollback()
         logger.error(f"Error creating account schema & tables: {e}")

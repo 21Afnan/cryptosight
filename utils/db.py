@@ -484,7 +484,7 @@ def get_sim_table_name(strategy_identifier) -> str:
 
 def create_simulations_schema_and_tables(conn, strategy_id: str):
     """
-    Creates the 'simulations' schema, shared positions & stats tables, and strategy-specific ledger table.
+    Creates the 'simulations' schema, shared positions & stats tables, and strategy-specific ledger table under 'simulation_ledger' schema.
     """
     create_schema_sql = "CREATE SCHEMA IF NOT EXISTS simulations;"
 
@@ -524,10 +524,12 @@ def create_simulations_schema_and_tables(conn, strategy_id: str):
 
     strat_table_name = get_sim_table_name(strategy_id)
     create_ledger_sql = f"""
-    CREATE TABLE IF NOT EXISTS simulations.{strat_table_name} (
+    CREATE SCHEMA IF NOT EXISTS simulation_ledger;
+
+    CREATE TABLE IF NOT EXISTS simulation_ledger.{strat_table_name} (
         id             SERIAL PRIMARY KEY,
         direction      VARCHAR(8)  NOT NULL,
-        entry_time     TIMESTAMP WITH TIME ZONE NOT NULL,
+        entry_time     TIMESTAMP WITH TIME ZONE UNIQUE NOT NULL,
         exit_time      TIMESTAMP WITH TIME ZONE NOT NULL,
         entry_price    NUMERIC(18,8) NOT NULL,
         exit_price     NUMERIC(18,8) NOT NULL,
@@ -545,11 +547,35 @@ def create_simulations_schema_and_tables(conn, strategy_id: str):
     try:
         with conn.cursor() as cursor:
             cursor.execute(create_schema_sql)
+            cursor.execute("CREATE SCHEMA IF NOT EXISTS simulation_ledger;")
             cursor.execute(create_positions_sql)
             cursor.execute(create_stats_sql)
             cursor.execute(create_ledger_sql)
             conn.commit()
-            logger.info(f"Schema 'simulations' and table 'simulations.{strat_table_name}' verified/created.")
+            
+            # Clean up orphaned non-numeric strategy_id entries in simulations.positions
+            try:
+                cursor.execute("DELETE FROM simulations.positions WHERE strategy_id ~ '[^0-9]';")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+            # Deduplicate and add unique constraint to existing table if not present
+            try:
+                cursor.execute(f"""
+                    DELETE FROM simulation_ledger.{strat_table_name} a
+                    USING simulation_ledger.{strat_table_name} b
+                    WHERE a.id > b.id AND a.entry_time = b.entry_time;
+                """)
+                cursor.execute(f"""
+                    ALTER TABLE simulation_ledger.{strat_table_name}
+                    ADD CONSTRAINT {strat_table_name}_entry_time_uq UNIQUE (entry_time);
+                """)
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+            logger.info(f"Schema 'simulations' and table 'simulation_ledger.{strat_table_name}' verified/created.")
     except Exception as error:
         conn.rollback()
         logger.error(f"Error creating simulations tables for strategy '{strategy_id}': {error}")
@@ -562,7 +588,7 @@ def clear_simulation_data(conn, strategy_id: str):
     strat_table_name = get_sim_table_name(strategy_id)
     try:
         with conn.cursor() as cursor:
-            cursor.execute(f"TRUNCATE TABLE simulations.{strat_table_name};")
+            cursor.execute(f"TRUNCATE TABLE simulation_ledger.{strat_table_name};")
             cursor.execute("DELETE FROM simulations.positions WHERE strategy_id = %s;", (str(strategy_id),))
             conn.commit()
             logger.info(f"Cleared old simulation data for '{strategy_id}'.")
@@ -633,16 +659,29 @@ def close_simulation_position(conn, strategy_id: str, exit_data: dict = None):
 
 def insert_simulation_ledger(conn, strategy_id: str, trade: dict):
     """
-    Appends a completed trade to strategy-specific table: simulations.<strategy_id>.
+    Appends a completed trade to strategy-specific table: simulation_ledger.<strategy_id>.
     """
     safe_strat_id = get_sim_table_name(strategy_id)
-    strat_table_name = f"simulations.{safe_strat_id}"
+    strat_table_name = f"simulation_ledger.{safe_strat_id}"
     insert_sql = f"""
     INSERT INTO {strat_table_name} (
         direction, entry_time, exit_time, entry_price, exit_price,
         quantity, gross_pnl, commission, slippage, net_pnl, perc_pnl, exit_reason, balance_after
     )
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (entry_time) DO UPDATE SET
+        direction      = EXCLUDED.direction,
+        exit_time      = EXCLUDED.exit_time,
+        entry_price    = EXCLUDED.entry_price,
+        exit_price     = EXCLUDED.exit_price,
+        quantity       = EXCLUDED.quantity,
+        gross_pnl      = EXCLUDED.gross_pnl,
+        commission     = EXCLUDED.commission,
+        slippage       = EXCLUDED.slippage,
+        net_pnl        = EXCLUDED.net_pnl,
+        perc_pnl       = EXCLUDED.perc_pnl,
+        exit_reason    = EXCLUDED.exit_reason,
+        balance_after  = EXCLUDED.balance_after;
     """
     try:
         with conn.cursor() as cursor:
@@ -710,11 +749,13 @@ def upsert_simulation_stats(conn, strategy_id: str, stats_summary: dict, metrics
 
 # ── EXECUTION SCHEMA & TABLES ────────────────────────────────────────────────
 
-def create_execution_schema_and_tables(conn, strategy_id: str):
-    """Creates the 'execution' schema, positions table, strategy ledger table, and stats table."""
-    strat_table_name = f"strat_{str(strategy_id).lower().replace('.', '_')}"
+def create_execution_schema_and_tables(conn, strategy_id: str, strategy_name: str = None):
+    """Creates the 'execution' schema, positions table, strategy ledger table under 'execution_ledger' schema, and stats table."""
+    identifier = strategy_name or strategy_id
+    strat_table_name = get_sim_table_name(identifier)
     sql = f"""
     CREATE SCHEMA IF NOT EXISTS execution;
+    CREATE SCHEMA IF NOT EXISTS execution_ledger;
 
     CREATE TABLE IF NOT EXISTS execution.positions (
         strategy_id VARCHAR(128) PRIMARY KEY,
@@ -735,9 +776,9 @@ def create_execution_schema_and_tables(conn, strategy_id: str):
         last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
 
-    CREATE TABLE IF NOT EXISTS execution.{strat_table_name} (
+    CREATE TABLE IF NOT EXISTS execution_ledger.{strat_table_name} (
         trade_id VARCHAR(64) PRIMARY KEY,
-        entry_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        entry_time TIMESTAMP WITH TIME ZONE UNIQUE NOT NULL,
         exit_time TIMESTAMP WITH TIME ZONE NOT NULL,
         direction VARCHAR(16) NOT NULL,
         entry_price NUMERIC NOT NULL,
@@ -771,7 +812,23 @@ def create_execution_schema_and_tables(conn, strategy_id: str):
         with conn.cursor() as cur:
             cur.execute(sql)
             conn.commit()
-            logger.info(f"Execution schema & tables verified/created for '{strategy_id}'.")
+            
+            # Deduplicate and add unique constraint to existing table if not present
+            try:
+                cur.execute(f"""
+                    DELETE FROM execution_ledger.{strat_table_name} a
+                    USING execution_ledger.{strat_table_name} b
+                    WHERE a.ctid > b.ctid AND a.entry_time = b.entry_time;
+                """)
+                cur.execute(f"""
+                    ALTER TABLE execution_ledger.{strat_table_name}
+                    ADD CONSTRAINT {strat_table_name}_entry_time_uq UNIQUE (entry_time);
+                """)
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+            logger.info(f"Execution schema & tables verified/created for '{strategy_id}' (table: execution_ledger.{strat_table_name}).")
     except Exception as error:
         conn.rollback()
         logger.error(f"Error creating execution tables for strategy '{strategy_id}': {error}")
@@ -853,15 +910,31 @@ def close_execution_position(conn, strategy_id: str, exit_data: dict):
         logger.error(f"Error closing execution position for '{strategy_id}': {error}")
 
 
-def insert_execution_ledger(conn, strategy_id: str, completed_trade: dict):
-    """Inserts completed trade into execution.<strategy_id> table."""
-    strat_table_name = f"strat_{str(strategy_id).lower().replace('.', '_')}"
+def insert_execution_ledger(conn, strategy_id: str, completed_trade: dict, strategy_name: str = None):
+    """Inserts completed trade into execution_ledger.<strategy_name> table."""
+    identifier = strategy_name or strategy_id
+    strat_table_name = get_sim_table_name(identifier)
     insert_sql = f"""
-    INSERT INTO execution.{strat_table_name} (
+    INSERT INTO execution_ledger.{strat_table_name} (
         trade_id, entry_time, exit_time, direction, entry_price, exit_price,
         quantity, gross_pnl, commission, slippage, net_pnl, perc_pnl, exit_reason, balance
     )
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (entry_time) DO UPDATE SET
+        trade_id     = EXCLUDED.trade_id,
+        exit_time    = EXCLUDED.exit_time,
+        direction    = EXCLUDED.direction,
+        entry_price  = EXCLUDED.entry_price,
+        exit_price   = EXCLUDED.exit_price,
+        quantity     = EXCLUDED.quantity,
+        gross_pnl    = EXCLUDED.gross_pnl,
+        commission   = EXCLUDED.commission,
+        slippage     = EXCLUDED.slippage,
+        net_pnl      = EXCLUDED.net_pnl,
+        perc_pnl     = EXCLUDED.perc_pnl,
+        exit_reason  = EXCLUDED.exit_reason,
+        balance      = EXCLUDED.balance,
+        recorded_at  = CURRENT_TIMESTAMP;
     """
     try:
         with conn.cursor() as cur:
@@ -945,7 +1018,23 @@ def insert_account_history(conn, strategy_id: str, symbol: str, completed_trade:
         trade_id, strategy_id, symbol, direction, entry_price, exit_price,
         quantity, gross_pnl, commission, slippage, net_pnl, perc_pnl, exit_reason, balance, entry_time, exit_time
     )
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (strategy_id, entry_time) DO UPDATE SET
+        trade_id     = EXCLUDED.trade_id,
+        symbol       = EXCLUDED.symbol,
+        direction    = EXCLUDED.direction,
+        entry_price  = EXCLUDED.entry_price,
+        exit_price   = EXCLUDED.exit_price,
+        quantity     = EXCLUDED.quantity,
+        gross_pnl    = EXCLUDED.gross_pnl,
+        commission   = EXCLUDED.commission,
+        slippage     = EXCLUDED.slippage,
+        net_pnl      = EXCLUDED.net_pnl,
+        perc_pnl     = EXCLUDED.perc_pnl,
+        exit_reason  = EXCLUDED.exit_reason,
+        balance      = EXCLUDED.balance,
+        exit_time    = EXCLUDED.exit_time,
+        recorded_at  = CURRENT_TIMESTAMP;
     """
     try:
         with conn.cursor() as cur:
