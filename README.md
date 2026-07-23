@@ -10,9 +10,9 @@
 [![TA-Lib](https://img.shields.io/badge/TA--Lib-158%20Indicators-FF6F00?style=for-the-badge)](https://ta-lib.org)
 [![Plotly Charts](https://img.shields.io/badge/Plotly-Interactive%20Quant%20Visuals-3F4F75?style=for-the-badge&logo=plotly&logoColor=white)](https://plotly.com)
 
-**An institutional, production-grade cryptocurrency data ingestion, dynamic technical analysis, ML feature engineering, backtesting, event simulation, and live exchange execution framework built for quantitative analysts and financial engineers.**
+**An institutional, production-grade cryptocurrency data ingestion, dynamic technical analysis, NLP sentiment classification, ML feature engineering, backtesting, event simulation, and live exchange execution framework built for quantitative analysts and financial engineers.**
 
-[🌟 Key Features](#features) • [🏗️ System Flowchart](#flowchart) • [🗄️ Database Architecture](#database) • [⚡ Quick Start Guide](#quickstart) • [📁 Repository Structure](#structure) • [👨‍💻 Author](#author)
+[🌟 Key Features](#features) • [🏗️ System Flowchart](#flowchart) • [🗄️ Database Architecture](#database) • [🔬 Module Deep Dive](#modules) • [⚡ Quick Start Guide](#quickstart) • [📁 Repository Structure](#structure) • [👨‍💻 Author](#author)
 
 </div>
 
@@ -30,10 +30,10 @@
 | ⚡ **FAST** | **2. TA Engine** | `cryptosight.tal_Indicators` | **Dynamic 158 TA-Lib Wrapper** utilizing Python `__getattr__` interception with parameter hierarchy & dark-mode charts. |
 | 🎯 **RULES** | **3. Signals** | `cryptosight.signals` | **YAML-Driven Signal Pipeline** with look-back persistence windows and automatic `.shift(1)` look-ahead bias prevention. |
 | 🧪 **QUANT** | **4. Backtester** | `cryptosight.backtesting` | **Vectorized 10-Step Backtesting Engine** simulating realistic commissions (`0.05%`), slippage (`0.02%`), and dynamic TP/SL. |
-| 🧠 **NLP** | **5. Sentiment** | `cryptosight.sentiment` | **Reddit NLP Pipeline** with HTML/contraction cleaning, bot filtering, and **Hugging Face FinBERT** chunk-averaging. |
-| 🛡️ **CLEAN** | **6. ML Data** | `cryptosight.ml` | **Quant ML Feature Builder** generating lag-free features (`.shift(1)`), Log Return (`np.log`), and 3-class target matrices. |
-| 📊 **BENCH** | **7. Evaluation** | `cryptosight.preprocessing` | **Institutional Preprocessing & Leaderboard** testing ADF/KPSS stationarity across `Robust, MinMax, FracDiff, Winsorize, Log, Gaussian`. |
-| 📉 **METRICS** | **8. Analytics** | `cryptosight.stats` | **QuantStats Analytics & Frontend Charts Engine** computing 59+ ratios (`CAGR, Sharpe, Calmar`) and exporting `all_charts.json`. |
+| 🧠 **NLP** | **5. Sentiment** | `cryptosight.sentiment` | **Reddit NLP Pipeline** with PRAW scraping, text cleaning, and **Hugging Face FinBERT** chunk-averaged classification. |
+| 🛡️ **CLEAN** | **6. ML Data** | `cryptosight.ml` | **Quant ML Ecosystem** with lag-free feature extraction (`.shift(1)`), stationarity scaling, XGBoost/LightGBM/LSTM models, and out-of-sample forward inference. |
+| 📊 **BENCH** | **7. Evaluation** | `cryptosight.preprocessing` | **Institutional Preprocessing Leaderboard** evaluating ADF/KPSS stationarity across `Robust, MinMax, FracDiff, Winsorize, Log, Gaussian`. |
+| 📉 **METRICS** | **8. Analytics** | `cryptosight.stats` | **QuantStats Analytics & Plotly Engine** computing 59+ financial performance ratios (`CAGR, Sharpe, Sortino, Calmar`) and exporting interactive JSON charts. |
 | ⚙️ **SIMUL** | **9. Simulation** | `cryptosight.simulator` | **Sequential Event-Driven Trading Simulator Engine** running minute-by-minute with TP/SL validation, dynamic reversal logic, and dedicated `simulation_ledger.<strategy_name>` SQL tables. |
 | 🚀 **EXEC** | **10. Live Execution** | `cryptosight.execution` | **Automated Bybit Live Execution Bot** with DB credential lookup (`account.api_creds`), dynamic `top_n` strategy selection, Pybit V5 API order routing, `execution_ledger.<strategy_name>` trade history, and Task Scheduler support. |
 
@@ -131,13 +131,68 @@ PostgreSQL Database ('postgres')
 ```
 
 ### Key Database Design Principles:
-1. **Separation of Operational & Ledger Data**:
-   - Operational tables (`positions`, `stats`) are isolated in `execution` and `simulations` schemas using numeric `strategy_id` keys for fast relational queries.
-   - Completed trade ledgers are organized into dedicated **`execution_ledger`** and **`simulation_ledger`** schemas with clean, human-readable table names derived from strategy names (e.g., `execution_ledger.ada_15m_rsi_momentum`, `simulation_ledger.btc_1h_rsi_mean_reversion`).
-2. **Duplicate Prevention & Conflict Resolution**:
-   - All trade history tables enforce `UNIQUE (entry_time)` constraints.
-   - Insertion queries utilize `ON CONFLICT (entry_time) DO UPDATE SET ...` to overwrite and update existing trade details without creating duplicates.
-   - Startup migration scripts automatically purge legacy ctid/ID duplicates for existing databases.
+1. **Isolation of Operational State vs. Trade Ledgers**:
+   - Operational tables (`positions`, `stats`) reside in `execution` and `simulations` schemas, indexed by numeric `strategy_id` keys for high-performance relational joins.
+   - Closed trade history ledgers reside in dedicated **`execution_ledger`** and **`simulation_ledger`** schemas with human-readable table names derived directly from strategy names (e.g., `execution_ledger.ada_15m_rsi_momentum`, `simulation_ledger.btc_1h_rsi_mean_reversion`).
+2. **Duplicate Prevention & Conflict Resolution (`DO UPDATE SET`)**:
+   - Every single trade history table enforces a `UNIQUE (entry_time)` constraint.
+   - All insertion queries utilize `ON CONFLICT (entry_time) DO UPDATE SET ...` to safely overwrite and update existing trade details without creating duplicate rows.
+   - Startup migration scripts automatically clean up legacy duplicates via PostgreSQL `ctid` and `id` deduplication queries.
+
+<div align="right"><a href="#top">⬆️ Back to Top</a></div>
+
+---
+
+<div id="modules"></div>
+
+## 🔬 Module Deep Dive
+
+### 1️⃣ **Exchange Data Ingestion (`cryptosight.data`)**
+- **Gap-Filling Algorithm**: Queries PostgreSQL for the latest downloaded candle timestamp (`SELECT MAX(timestamp)`). Only missing candles are fetched via paginated API requests.
+- **Unclosed Bar Protection**: Strips the current live/unclosed candle before database insertion to prevent storing incomplete OHLCV bars.
+- **Bulk COPY Insertion**: Utilizes PostgreSQL binary `COPY` streams for high-speed multi-year OHLCV storage.
+
+### 2️⃣ **Technical Analysis Engine (`cryptosight.tal_Indicators`)**
+- **Dynamic Interception**: Uses Python `__getattr__` dynamic method dispatch to wrap all **158 TA-Lib indicators** seamlessly.
+- **Category Coverage**: Overlap Studies, Momentum Indicators, Volume Indicators, Volatility Indicators, Price Transform, Cycle Indicators, and Pattern Recognition.
+
+### 3️⃣ **Trading Signals Engine (`cryptosight.signals`)**
+- **YAML Rule Engine**: Configures multi-indicator condition sets and crossover rules in `strategy_config.yaml`.
+- **Look-Ahead Bias Prevention**: Enforces `.shift(1)` across indicator matrices before evaluating signal conditions.
+- **Persistence Windows**: Supports multi-bar persistence windows to confirm breakouts across timeframes.
+
+### 4️⃣ **Vectorized Backtesting Engine (`cryptosight.backtesting`)**
+- **10-Step Execution Simulation**: Models entry fill, commissions (`0.05%`), slippage (`0.02%`), take-profit percentage, stop-loss percentage, and trailing stops.
+- **Ledger Generation**: Exports trade logs into CSV and database tables with exact PnL and return percentages.
+
+### 5️⃣ **NLP Sentiment Engine (`cryptosight.sentiment`)**
+- **Reddit PRAW Scraper**: Automated scraper pulling posts and top comments from target cryptocurrency subreddits.
+- **Text Cleaning Engine**: Strips HTML tags, contracts, URLs, and bot-generated boilerplate text.
+- **FinBERT Classification**: Uses Hugging Face **FinBERT** (`yiyanghkust/finbert-tone`) with chunk-averaging to calculate Bullish, Bearish, and Neutral probabilities.
+
+### 6️⃣ **Machine Learning Ecosystem (`cryptosight.ml`)**
+- **Feature Builder**: Generates stationarity-transformed features, log returns (`np.log`), and 3-class target matrices (`Long`, `Short`, `Hold`).
+- **Chronological Splitter**: Enforces chronological train/validation/test splits to avoid temporal leakage.
+- **Multi-Model Suite**: Trains XGBoost, LightGBM, Random Forest, and PyTorch LSTM models.
+- **Out-of-Sample Inference**: Standalone forward-inference engine (`inference_pipeline.py`) running real-time signal predictions.
+
+### 7️⃣ **Preprocessing Benchmark (`cryptosight.preprocessing`)**
+- **Stationarity Testing**: Automated Augmented Dickey-Fuller (ADF) and KPSS stationarity tests.
+- **6-Scaler Benchmark**: Benchmarks signals across `RobustScaler`, `MinMaxScaler`, `Fractional Differentiation (FracDiff)`, `Winsorization`, `Log Transformation`, and `Gaussian Normalization`.
+
+### 8️⃣ **Quant Analytics (`cryptosight.stats`)**
+- **QuantStats Integration**: Calculates 59+ institutional performance ratios (Sharpe, Sortino, Calmar, Max Drawdown, CAGR, Win Rate).
+- **Plotly Visuals**: Exports dark-mode interactive HTML/JSON charts (`all_charts.json`) for web dashboard rendering.
+
+### 9️⃣ **Sequential Event Simulator (`cryptosight.simulator`)**
+- **1m Event Loop**: Iterates candle-by-candle to simulate real-world execution matching order book liquidity.
+- **Dynamic Reversals**: Handles position flipping (Long to Short / Short to Long) on opposing signals.
+- **Schema Persistence**: Writes closed trades to `simulation_ledger.<strategy_name>`, open trades to `simulations.positions`, and metrics to `simulations.stats`.
+
+### 🔟 **Live Bybit Execution Engine (`cryptosight.execution`)**
+- **Pybit V5 API**: Authenticated live/demo execution client interfacing with Bybit's Unified Trading Account.
+- **Dynamic Strategy Ranking**: Queries DB strategy performance (`COALESCE(st.total_pnl, 0.0)`) to execute the top-performing strategies automatically.
+- **Task Scheduler Ready**: Supported by `run_execution.bat` for Windows Task Scheduler cron automation.
 
 <div align="right"><a href="#top">⬆️ Back to Top</a></div>
 
@@ -211,6 +266,7 @@ cryptosight/
 │   ├── config.yaml                # Simulator default parameter specifications
 │   └── run_simulator.bat          # Windows batch runner script
 ├── data/                          # Exchange downloaders with smart SQL gap fill & live bar protection
+│   ├── downloader.py              # Master Downloader class with SQL COPY stream & resampling
 │   ├── binance/                   # Binance API fetcher, config.yaml, main.py & run_binance.bat
 │   └── bybit/                     # Bybit API fetcher, config.yaml, main.py & run_bybit.bat
 ├── tal_Indicators/                # Dynamic __getattr__ wrapper for all 158 TA-Lib technical indicators
