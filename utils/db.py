@@ -1136,7 +1136,8 @@ def create_execution_stats_table(conn):
 def insert_execution_ledger(
     conn,
     strategy_name: str,
-    order_id: str,
+    entry_order_id: str,
+    exit_order_id: str,
     entry_time,
     exit_time,
     direction: str,
@@ -1151,6 +1152,7 @@ def insert_execution_ledger(
 ):
     """
     Inserts a completed trade record into `execution_ledgers.<strategy_name>`.
+    STEP 5 FIX: Stores both entry_order_id and exit_order_id separately.
     """
     import re
     clean_strat = re.sub(r'[^a-zA-Z0-9_]+', '_', strategy_name.lower().strip())
@@ -1158,7 +1160,8 @@ def insert_execution_ledger(
     create_table_sql = f"""
     CREATE TABLE IF NOT EXISTS execution_ledgers.{clean_strat} (
         trade_id        BIGSERIAL PRIMARY KEY,
-        order_id        VARCHAR(128),
+        entry_order_id  VARCHAR(128),
+        exit_order_id   VARCHAR(128) UNIQUE,
         entry_time      TIMESTAMP WITH TIME ZONE NOT NULL,
         exit_time       TIMESTAMP WITH TIME ZONE NOT NULL,
         direction       VARCHAR(16) NOT NULL,
@@ -1175,17 +1178,20 @@ def insert_execution_ledger(
     """
     insert_sql = f"""
     INSERT INTO execution_ledgers.{clean_strat} (
-        order_id, entry_time, exit_time, direction, entry_price, exit_price,
+        entry_order_id, exit_order_id, entry_time, exit_time, direction, entry_price, exit_price,
         quantity, gross_pnl, commission, net_pnl, return_pct, exit_reason
     )
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
     """
     try:
         with conn.cursor() as cursor:
             cursor.execute(create_schema_sql)
             cursor.execute(create_table_sql)
+            # Defensive column addition if table already exists from older schema
+            cursor.execute(f"ALTER TABLE execution_ledgers.{clean_strat} ADD COLUMN IF NOT EXISTS entry_order_id VARCHAR(128);")
+            cursor.execute(f"ALTER TABLE execution_ledgers.{clean_strat} ADD COLUMN IF NOT EXISTS exit_order_id VARCHAR(128);")
             cursor.execute(insert_sql, (
-                order_id, entry_time, exit_time, direction, entry_price, exit_price,
+                entry_order_id, exit_order_id, entry_time, exit_time, direction, entry_price, exit_price,
                 quantity, gross_pnl, commission, net_pnl, return_pct, exit_reason
             ))
             conn.commit()
@@ -1327,4 +1333,107 @@ def calculate_and_store_stats(conn, strategy_id: int, schema_name: str, table_na
                         )
     except Exception as err:
         logger.warning(f"Could not calculate and store stats for strategy #{strategy_id}: {err}")
+
+
+# ── ACCOUNT HISTORY INGESTION (STEP 10) ────────────────────────────────────────
+
+def create_account_history_schema(conn):
+    """Creates the 'account_history' schema if it does not exist."""
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("CREATE SCHEMA IF NOT EXISTS account_history;")
+            conn.commit()
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating schema 'account_history': {error}")
+        raise
+
+
+def upsert_account_history_records(conn, table_name: str, records: list, pkey_col: str = "id"):
+    """
+    Dynamically creates/alters table `account_history.<table_name>` based on keys in `records`,
+    and upserts all records using `pkey_col` as the conflict target.
+    """
+    if not records:
+        return
+
+    create_account_history_schema(conn)
+    full_table = f"account_history.{table_name}"
+
+    all_keys = set()
+    for r in records:
+        all_keys.update(r.keys())
+
+    if pkey_col not in all_keys and records:
+        all_keys.add(pkey_col)
+
+    columns = list(all_keys)
+
+    try:
+        with conn.cursor() as cursor:
+            create_sql = f"""
+            CREATE TABLE IF NOT EXISTS {full_table} (
+                {pkey_col} VARCHAR(255) PRIMARY KEY,
+                ingested_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+            cursor.execute(create_sql)
+
+            for col in columns:
+                if col == pkey_col or col == "ingested_at":
+                    continue
+                sample_val = next((r[col] for r in records if r.get(col) is not None), None)
+                if isinstance(sample_val, bool):
+                    col_type = "BOOLEAN"
+                elif isinstance(sample_val, (int, float)):
+                    col_type = "NUMERIC(18,8)"
+                elif isinstance(sample_val, (dict, list)):
+                    col_type = "JSONB"
+                else:
+                    col_type = "VARCHAR(255)"
+                cursor.execute(f"ALTER TABLE {full_table} ADD COLUMN IF NOT EXISTS {col} {col_type};")
+
+            col_names_str = ", ".join(columns)
+            placeholders_str = ", ".join(["%s"] * len(columns))
+            update_assignments = [f"{col} = EXCLUDED.{col}" for col in columns if col != pkey_col]
+            update_str = ", ".join(update_assignments) if update_assignments else f"{pkey_col} = EXCLUDED.{pkey_col}"
+
+            upsert_sql = f"""
+            INSERT INTO {full_table} ({col_names_str}, ingested_at)
+            VALUES ({placeholders_str}, CURRENT_TIMESTAMP)
+            ON CONFLICT ({pkey_col}) DO UPDATE SET
+                {update_str},
+                ingested_at = CURRENT_TIMESTAMP;
+            """
+            for r in records:
+                vals = []
+                for c in columns:
+                    v = r.get(c)
+                    if isinstance(v, (dict, list)):
+                        v = json.dumps(v)
+                    vals.append(v)
+                cursor.execute(upsert_sql, tuple(vals))
+
+            conn.commit()
+            logger.info(f"Ingested {len(records)} records into '{full_table}'.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error ingesting into '{full_table}': {error}")
+        raise
+
+
+def ingest_account_executions(conn, executions: list):
+    """Stores raw Bybit executions into account_history.executions."""
+    upsert_account_history_records(conn, "executions", executions, pkey_col="execId")
+
+
+def ingest_account_closed_pnl(conn, closed_pnl_list: list):
+    """Stores raw Bybit closed PnL history into account_history.closed_pnl."""
+    upsert_account_history_records(conn, "closed_pnl", closed_pnl_list, pkey_col="orderId")
+
+
+def ingest_account_transaction_log(conn, tx_log_list: list):
+    """Stores raw Bybit transaction log into account_history.transaction_log."""
+    upsert_account_history_records(conn, "transaction_log", tx_log_list, pkey_col="id")
+
 

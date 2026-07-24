@@ -43,6 +43,7 @@ def get_latest_signal_and_price(strategy: dict) -> tuple:
 def calculate_position_quantity(conn, strategy: dict, current_price: float, wallet_balance: float) -> tuple:
     """
     Calculates trade position quantity, Take Profit price, and Stop Loss price.
+    STEP 9 FIX: Explicitly validates TP/SL configuration presence to prevent float(None) crashes.
     """
     sim_cfg = fetch_simulator_config(conn)
     initial_bal = float(sim_cfg["initial_balance"])
@@ -53,16 +54,53 @@ def calculate_position_quantity(conn, strategy: dict, current_price: float, wall
     allocated_usd = capital * (pos_val / 100.0) if pos_type in ("percent", "percentage") else pos_val
     quantity = round(allocated_usd / current_price, 4) if current_price > 0 else 0.0
 
-    strat_cfg = strategy["strategy_config"]
-    tp_pct = float(strat_cfg.get("tp", strat_cfg.get("take_profit")))
-    sl_pct = float(strat_cfg.get("sl", strat_cfg.get("stop_loss")))
+    strat_cfg = strategy.get("strategy_config", {})
+    tp_val = strat_cfg.get("tp") if strat_cfg.get("tp") is not None else strat_cfg.get("take_profit")
+    sl_val = strat_cfg.get("sl") if strat_cfg.get("sl") is not None else strat_cfg.get("stop_loss")
+
+    if tp_val is None or sl_val is None:
+        missing_key = "tp/take_profit" if tp_val is None else "sl/stop_loss"
+        err_msg = (
+            f"Strategy '{strategy.get('strategy_name')}' (ID #{strategy.get('strategy_id')}) missing "
+            f"required risk config '{missing_key}' in strategy_config."
+        )
+        logger.error(err_msg)
+        raise ValueError(err_msg)
+
+    tp_pct = float(tp_val) / 100.0
+    sl_pct = float(sl_val) / 100.0
 
     return quantity, tp_pct, sl_pct
 
 
-def record_closed_trade(conn, strategy: dict, order_id: str, direction: str, entry_price: float, exit_price: float, quantity: float, pnl: float, commission: float, exit_reason: str):
+def get_active_position_record(conn, strategy_id: int) -> dict:
+    """
+    Fetches OUR OWN stored active position record for a strategy directly from execution.active_positions.
+    """
+    query_sql = (
+        "SELECT order_id, direction, entry_price, entry_time "
+        "FROM execution.active_positions WHERE strategy_id = %s;"
+    )
+    try:
+        df = pd.read_sql_query(query_sql, conn, params=(strategy_id,))
+        if df.empty:
+            return None
+        row = df.iloc[0]
+        return {
+            "order_id": row["order_id"],
+            "direction": row["direction"],
+            "entry_price": float(row["entry_price"]),
+            "entry_time": row["entry_time"],
+        }
+    except Exception as err:
+        logger.warning(f"Could not fetch stored active position for strategy #{strategy_id}: {err}")
+        return None
+
+
+def record_closed_trade(conn, strategy: dict, entry_order_id: str, exit_order_id: str, direction: str, entry_price: float, exit_price: float, quantity: float, pnl: float, commission: float, exit_reason: str):
     """
     Helper to log closed trade into execution_ledgers and directly update execution.stats.
+    STEP 5 FIX: Receives entry_order_id and exit_order_id explicitly, deduping against exit_order_id.
     """
     strategy_id = strategy["strategy_id"]
     strategy_name = strategy["strategy_name"]
@@ -74,11 +112,28 @@ def record_closed_trade(conn, strategy: dict, order_id: str, direction: str, ent
     cost_basis = entry_price * quantity if (entry_price * quantity) > 0 else 1.0
     return_pct = float(net_pnl / cost_basis * 100.0)
 
+    import re
+    clean_strat = re.sub(r'[^a-zA-Z0-9_]', '_', strategy_name.lower().strip())
+    schema_name = "execution_ledgers"
+    table_name = clean_strat
+
+    # STEP 5: Duplicate check against exit_order_id
+    try:
+        dup_check_sql = f"SELECT 1 FROM {schema_name}.{table_name} WHERE exit_order_id = %s LIMIT 1;"
+        existing = pd.read_sql_query(dup_check_sql, conn, params=(exit_order_id,))
+        if not existing.empty:
+            logger.info(f"Exit order '{exit_order_id}' already recorded in ledger for '{strategy_name}'; skipping duplicate insert.")
+            delete_execution_active_position(conn, strategy_id)
+            return
+    except Exception as err:
+        logger.warning(f"Could not check for duplicate ledger entry for exit order '{exit_order_id}': {err}")
+
     # 1. Insert trade record into execution_ledgers.<strategy_name>
     insert_execution_ledger(
         conn=conn,
         strategy_name=strategy_name,
-        order_id=order_id,
+        entry_order_id=entry_order_id,
+        exit_order_id=exit_order_id,
         entry_time=now,
         exit_time=now,
         direction=direction,
@@ -96,10 +151,6 @@ def record_closed_trade(conn, strategy: dict, order_id: str, direction: str, ent
     delete_execution_active_position(conn, strategy_id)
 
     # 3. Read execution ledger and directly calculate & update execution.stats
-    import re
-    clean_strat = re.sub(r'[^a-zA-Z0-9_]', '_', strategy_name.lower().strip())
-    schema_name = "execution_ledgers"
-    table_name = clean_strat
     query_sql = f"SELECT * FROM {schema_name}.{table_name};"
 
     try:
@@ -140,27 +191,63 @@ def run_execution_cycle():
         strategy_name = strategy["strategy_name"]
         symbol = strategy["symbol"]
 
+        if str(strategy["exchange"]).lower() != "bybit":
+            logger.warning(f"Exchange '{strategy['exchange']}' is not yet supported for execution. Skipping this cycle for strategy #{strategy_id}.")
+            return
+
         executor = BybitExecutor(conn)
         wallet = executor.get_wallet_balance("USDT")
+
+        # STEP 8 FIX: If wallet fetch failed, skip cycle cleanly
+        if not wallet.get("fetch_ok", False):
+            logger.error(f"Wallet balance fetch failed for strategy '{strategy_name}'. Skipping cycle to prevent unsafe position sizing.")
+            return
+
         bybit_pos = executor.get_open_position(symbol)
 
         # 1. Reconcile TP/SL hit on Bybit
         if not bybit_pos:
-            closed_pnl_data = executor.get_closed_pnl(symbol)
-            if closed_pnl_data:
-                logger.info(f"Reconciling closed trade on Bybit: PnL=${closed_pnl_data['closed_pnl']:,.2f}, Reason={closed_pnl_data['exit_reason']}.")
-                record_closed_trade(
-                    conn=conn,
-                    strategy=strategy,
-                    order_id=closed_pnl_data["order_id"],
-                    direction="LONG" if "buy" in str(closed_pnl_data.get("exit_type", "")).lower() else "SHORT",
-                    entry_price=closed_pnl_data["entry_price"],
-                    exit_price=closed_pnl_data["exit_price"],
-                    quantity=closed_pnl_data["quantity"],
-                    pnl=closed_pnl_data["closed_pnl"],
-                    commission=closed_pnl_data["commission"],
-                    exit_reason=closed_pnl_data["exit_reason"],
-                )
+            stored_position = get_active_position_record(conn, strategy_id)
+
+            if stored_position and stored_position.get("order_id"):
+                # STEP 1 FIX: Query get_closed_pnl using startTime filter
+                closed_pnl_records = executor.get_closed_pnl(symbol, start_time=stored_position["entry_time"])
+                matched_record = None
+
+                if closed_pnl_records:
+                    start_ms = int(pd.Timestamp(stored_position["entry_time"]).timestamp() * 1000)
+                    for item in closed_pnl_records:
+                        entry_diff = abs(item["entry_price"] - stored_position["entry_price"])
+                        item_time = item["updated_time"] or item["created_time"]
+                        # Match: entry_price within 0.1% tolerance AND time >= entry_time
+                        if (entry_diff <= (0.001 * stored_position["entry_price"])) and (item_time >= start_ms - 1000):
+                            matched_record = item
+                            break
+
+                if matched_record:
+                    exit_reason = matched_record.get("exit_reason") or "TP_SL_RECONCILED"
+                    logger.info(f"Reconciling closed trade on Bybit: PnL=${matched_record['closed_pnl']:,.2f}, Reason={exit_reason}.")
+                    # STEP 5 FIX: Pass entry_order_id and exit_order_id
+                    record_closed_trade(
+                        conn=conn,
+                        strategy=strategy,
+                        entry_order_id=stored_position["order_id"],
+                        exit_order_id=matched_record["order_id"],
+                        direction=stored_position["direction"],
+                        entry_price=stored_position["entry_price"],
+                        exit_price=matched_record["exit_price"],
+                        quantity=matched_record["quantity"],
+                        pnl=matched_record["closed_pnl"],
+                        commission=matched_record["commission"],
+                        exit_reason=exit_reason,
+                    )
+                else:
+                    logger.warning(
+                        f"No matching closed PnL record found for strategy #{strategy_id} "
+                        f"(entry_price={stored_position['entry_price']}, entry_time={stored_position['entry_time']})."
+                    )
+            else:
+                logger.debug(f"No stored active position in DB for strategy #{strategy_id}.")
 
         # 2. Get latest candle signal and price
         signal, current_price = get_latest_signal_and_price(strategy)
@@ -169,6 +256,7 @@ def run_execution_cycle():
         if not bybit_pos:
             if signal != 0:
                 direction = "LONG" if signal == 1 else "SHORT"
+                # STEP 9: Validates TP/SL internally
                 quantity, tp_pct, sl_pct = calculate_position_quantity(conn, strategy, current_price, wallet["available_balance"])
 
                 tp_price = current_price * (1 + tp_pct) if direction == "LONG" else current_price * (1 - tp_pct)
@@ -183,14 +271,17 @@ def run_execution_cycle():
                 )
 
                 if order:
+                    entry_time = pd.Timestamp.now()
                     upsert_execution_active_position(
                         conn=conn,
                         strategy_id=strategy_id,
+                        strategy_name=strategy_name,
                         order_id=order["order_id"],
                         exchange=strategy["exchange"],
                         symbol=symbol,
                         timeframe=strategy["timeframe"],
                         direction=direction,
+                        entry_time=entry_time,
                         entry_price=current_price,
                         quantity=quantity,
                         mark_price=current_price,
@@ -209,21 +300,36 @@ def run_execution_cycle():
             if is_reversal:
                 logger.info(f"Signal Reversal: Closing {current_dir} and opening opposite position...")
                 if executor.close_position(symbol=symbol, direction=current_dir, quantity=bybit_pos["quantity"]):
-                    closed_pnl_data = executor.get_closed_pnl(symbol)
+                    stored_pos = get_active_position_record(conn, strategy_id)
+                    entry_order_id = stored_pos["order_id"] if (stored_pos and stored_pos.get("order_id")) else bybit_pos.get("order_id", "UNKNOWN_ENTRY")
+
+                    closed_pnl_records = executor.get_closed_pnl(symbol, start_time=stored_pos.get("entry_time") if stored_pos else None)
+                    closed_pnl_data = closed_pnl_records[0] if closed_pnl_records else None
+
                     pnl = closed_pnl_data["closed_pnl"] if closed_pnl_data else bybit_pos["unrealized_pnl"]
                     exit_price = closed_pnl_data["exit_price"] if closed_pnl_data else current_price
-                    order_id = closed_pnl_data["order_id"] if closed_pnl_data else "REVERSAL_ORDER"
 
+                    # STEP 4 FIX: Unique fallback for exit_order_id
+                    unique_fallback = f"REVERSAL_{strategy_id}_{int(pd.Timestamp.now().timestamp() * 1000)}"
+                    exit_order_id = closed_pnl_data["order_id"] if closed_pnl_data else unique_fallback
+
+                    # STEP 7 FIX: Real commission
+                    commission = (
+                        closed_pnl_data["commission"] if closed_pnl_data else executor.get_position_real_commission(symbol, start_time=stored_pos.get("entry_time") if stored_pos else None)
+                    )
+
+                    # STEP 5 FIX: Pass entry_order_id and exit_order_id
                     record_closed_trade(
                         conn=conn,
                         strategy=strategy,
-                        order_id=order_id,
+                        entry_order_id=entry_order_id,
+                        exit_order_id=exit_order_id,
                         direction=current_dir,
                         entry_price=bybit_pos["entry_price"],
                         exit_price=exit_price,
                         quantity=bybit_pos["quantity"],
                         pnl=pnl,
-                        commission=bybit_pos["order_value"] * 0.0006,
+                        commission=commission,
                         exit_reason="SIGNAL_REVERSAL",
                     )
 
@@ -242,14 +348,17 @@ def run_execution_cycle():
                     )
 
                     if new_order:
+                        entry_time = pd.Timestamp.now()
                         upsert_execution_active_position(
                             conn=conn,
                             strategy_id=strategy_id,
+                            strategy_name=strategy_name,
                             order_id=new_order["order_id"],
                             exchange=strategy["exchange"],
                             symbol=symbol,
                             timeframe=strategy["timeframe"],
                             direction=new_dir,
+                            entry_time=entry_time,
                             entry_price=current_price,
                             quantity=quantity,
                             mark_price=current_price,
@@ -261,14 +370,22 @@ def run_execution_cycle():
                         logger.info(f"Position Flipped: New {new_dir} {quantity} {symbol} at ${current_price:,.2f}.")
 
             else:
+                # STEP 2 FIX: Do NOT overwrite order_id with "ACTIVE_ORDER". Reuse stored order_id.
+                # STEP 3 FIX: Do NOT reset entry_time to now(). Reuse stored entry_time.
+                stored_pos = get_active_position_record(conn, strategy_id)
+                order_id = stored_pos["order_id"] if (stored_pos and stored_pos.get("order_id")) else bybit_pos.get("order_id")
+                entry_time = stored_pos["entry_time"] if (stored_pos and stored_pos.get("entry_time")) else pd.Timestamp.now()
+
                 upsert_execution_active_position(
                     conn=conn,
                     strategy_id=strategy_id,
-                    order_id=bybit_pos.get("order_id", "ACTIVE_ORDER"),
+                    strategy_name=strategy_name,
+                    order_id=order_id,
                     exchange=strategy["exchange"],
                     symbol=symbol,
                     timeframe=strategy["timeframe"],
                     direction=current_dir,
+                    entry_time=entry_time,
                     entry_price=bybit_pos["entry_price"],
                     quantity=bybit_pos["quantity"],
                     mark_price=bybit_pos["mark_price"],

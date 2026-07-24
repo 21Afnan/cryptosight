@@ -6,6 +6,7 @@ Includes automatic server timestamp synchronization to prevent ErrCode 10002.
 """
 
 import time
+import pandas as pd
 import pybit._helpers
 from pybit.unified_trading import HTTP
 from cryptosight.utils.db import get_account_api
@@ -78,6 +79,7 @@ class BybitExecutor:
     def get_wallet_balance(self, coin: str) -> dict:
         """
         Queries live account balance (total equity & available balance) from Bybit API.
+        STEP 8 FIX: Returns explicit fetch_ok flag to distinguish API errors from 0.0 balance.
         """
         try:
             response = self.session.get_wallet_balance(accountType="UNIFIED", coin=coin)
@@ -93,13 +95,13 @@ class BybitExecutor:
                             avail_bal = float(c.get("walletBalance", total_equity))
                             break
                     logger.info(f"Bybit Wallet ({coin}): Total Equity=${total_equity:,.2f}, Available=${avail_bal:,.2f}.")
-                    return {"total_equity": total_equity, "available_balance": avail_bal, "coin": coin}
+                    return {"total_equity": total_equity, "available_balance": avail_bal, "coin": coin, "fetch_ok": True}
             else:
                 logger.warning(f"Bybit get_wallet_balance returned error: {response.get('retMsg')}")
         except Exception as error:
             logger.error(f"Error fetching wallet balance: {error}")
 
-        return {"total_equity": 0.0, "available_balance": 0.0, "coin": coin}
+        return {"total_equity": 0.0, "available_balance": 0.0, "coin": coin, "fetch_ok": False}
 
     def get_open_position(self, symbol: str) -> dict:
         """
@@ -211,35 +213,105 @@ class BybitExecutor:
 
         return False
 
-    def get_closed_pnl(self, symbol: str) -> dict:
+    def get_executions(self, symbol: str, start_time=None) -> list:
         """
-        Fetches exact exit price, net PnL, and exit reason from Bybit closed PnL history.
+        STEP 7 helper: Fetches real execution fills from Bybit get_executions endpoint.
         """
         bybit_symbol = self.get_bybit_symbol(symbol)
+        params = {"category": self.category, "symbol": bybit_symbol, "limit": 50}
+        if start_time is not None:
+            try:
+                start_ms = int(pd.Timestamp(start_time).timestamp() * 1000)
+                params["startTime"] = start_ms
+            except Exception as e:
+                logger.warning(f"Could not convert start_time '{start_time}' to ms: {e}")
+
         try:
-            response = self.session.get_closed_pnl(category=self.category, symbol=bybit_symbol, limit=1)
+            response = self.session.get_executions(**params)
+            if response.get("retCode") == 0:
+                return response.get("result", {}).get("list", [])
+            else:
+                logger.warning(f"Bybit get_executions returned error: {response.get('retMsg')}")
+        except Exception as error:
+            logger.error(f"Error fetching executions for {bybit_symbol}: {error}")
+
+        return []
+
+    def get_position_real_commission(self, symbol: str, start_time=None) -> float:
+        """
+        STEP 7 FIX: Sums actual execFee for executions from start_time onwards.
+        If no execution data is returned, logs a warning and returns 0.0 (never a hardcoded fee rate).
+        """
+        execs = self.get_executions(symbol, start_time=start_time)
+        if not execs:
+            logger.warning(f"Fee data unavailable from get_executions for {symbol}; returning 0.0 real commission.")
+            return 0.0
+
+        total_fee = 0.0
+        for item in execs:
+            fee = float(item.get("execFee", 0.0))
+            total_fee += fee
+
+        return total_fee
+
+    def get_closed_pnl(self, symbol: str, start_time=None) -> list:
+        """
+        Fetches closed PnL records from Bybit API.
+        STEP 1 FIX: Accepts start_time parameter and queries Bybit with startTime filter.
+        STEP 6 FIX: Uses `stopOrderType` to map exit_reason ("TakeProfit"/"PartialTakeProfit" -> "TAKE_PROFIT", "StopLoss"/"PartialStopLoss" -> "STOP_LOSS", else None).
+        STEP 7 FIX: Fetches real commission via get_executions instead of 0.0006 hardcoded multiplier.
+        Returns a list of structured closed PnL dicts.
+        """
+        bybit_symbol = self.get_bybit_symbol(symbol)
+        params = {"category": self.category, "symbol": bybit_symbol, "limit": 50}
+
+        if start_time is not None:
+            try:
+                start_ms = int(pd.Timestamp(start_time).timestamp() * 1000)
+                params["startTime"] = start_ms
+            except Exception as e:
+                logger.warning(f"Could not parse start_time '{start_time}': {e}")
+
+        try:
+            response = self.session.get_closed_pnl(**params)
             if response.get("retCode") == 0:
                 pnl_list = response.get("result", {}).get("list", [])
-                if pnl_list:
-                    item = pnl_list[0]
-                    exec_type = str(item.get("execType", ""))
-                    exit_reason = "TAKE_PROFIT" if "tp" in exec_type.lower() else (
-                        "STOP_LOSS" if "sl" in exec_type.lower() else "SIGNAL_REVERSAL"
-                    )
-                    return {
+                records = []
+                for item in pnl_list:
+                    stop_order_type = str(item.get("stopOrderType", "")).strip()
+                    if stop_order_type in ("TakeProfit", "PartialTakeProfit"):
+                        exit_reason = "TAKE_PROFIT"
+                    elif stop_order_type in ("StopLoss", "PartialStopLoss"):
+                        exit_reason = "STOP_LOSS"
+                    else:
+                        exit_reason = None
+
+                    # STEP 7: Fetch real fee
+                    commission = self.get_position_real_commission(symbol, start_time=start_time)
+
+                    created_time = int(item.get("createdTime", 0)) if item.get("createdTime") else 0
+                    updated_time = int(item.get("updatedTime", 0)) if item.get("updatedTime") else 0
+
+                    records.append({
                         "order_id": item.get("orderId"),
-                        "closed_pnl": float(item.get("closedPnl")),
-                        "exit_price": float(item.get("avgExitPrice")),
-                        "entry_price": float(item.get("avgEntryPrice")),
-                        "quantity": float(item.get("qty")),
-                        "commission": float(item.get("cumExitValue")) * 0.0006,
-                        "exit_type": exec_type,
+                        "closed_pnl": float(item.get("closedPnl", 0.0)),
+                        "exit_price": float(item.get("avgExitPrice", 0.0)),
+                        "entry_price": float(item.get("avgEntryPrice", 0.0)),
+                        "quantity": float(item.get("qty", 0.0)),
+                        "commission": commission,
+                        "exit_type": str(item.get("execType", "")),
+                        "stop_order_type": stop_order_type,
                         "exit_reason": exit_reason,
-                    }
+                        "created_time": created_time,
+                        "updated_time": updated_time,
+                    })
+                return records
+            else:
+                logger.warning(f"Bybit get_closed_pnl returned error: {response.get('retMsg')}")
         except Exception as error:
             logger.error(f"Error fetching closed PnL for {bybit_symbol}: {error}")
 
-        return None
+        return []
 
 
 if __name__ == "__main__":

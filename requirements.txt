@@ -22,7 +22,7 @@ quantstats>=0.0.62
 # Scrapping
 praw>=8.0.2     
 emoji>=2.15.0
-contractions>=0.2.1
+contractions>=0.1.73
 
 # Machine Learning & Quantitative Preprocessing (`models.py / preprocessor.py`)
 scikit-learn>=1.7.2
@@ -30,3 +30,7 @@ scipy>=1.15.3
 xgboost>=3.2.0
 lightgbm>=4.6.0
 statsmodels>=0.14.0
+
+# FastAPI Web Framework & Server
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
