@@ -269,6 +269,7 @@ def create_strategy_data(conn):
                 end_time          TIMESTAMP WITH TIME ZONE,
                 max_retries       INT,
                 retry_delay       INT,
+                execution_enabled BOOLEAN DEFAULT TRUE,
 
                 indicators_config JSONB,
                 strategy_config   JSONB,
@@ -287,6 +288,7 @@ def create_strategy_data(conn):
                 "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS end_time     TIMESTAMP WITH TIME ZONE;",
                 "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS max_retries  INT;",
                 "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS retry_delay  INT;",
+                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS execution_enabled BOOLEAN DEFAULT TRUE;",
             ]
             create_index_sql = """
             CREATE INDEX IF NOT EXISTS idx_strategy_data_lookup
@@ -575,6 +577,42 @@ def upsert_simulator_config(
         raise
 
 
+def fetch_simulator_config(conn) -> dict:
+    """
+    Fetches the single global simulator configuration row from `metadata.simulator_config`.
+    Returns dict with keys: initial_balance, position_size_type, position_size_value, commission, slippage.
+    """
+    create_simulator_config(conn)
+    query_sql = """
+    SELECT initial_balance, position_size_type, position_size_value, commission, slippage
+    FROM metadata.simulator_config
+    WHERE config_id = 1;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(query_sql)
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "initial_balance": float(row[0]),
+                    "position_size_type": str(row[1]),
+                    "position_size_value": float(row[2]),
+                    "commission": float(row[3]),
+                    "slippage": float(row[4]),
+                }
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error fetching simulator config: {error}")
+
+    return {
+        "initial_balance": 1000.0,
+        "position_size_type": "percent",
+        "position_size_value": 10.0,
+        "commission": 0.0006,
+        "slippage": 0.0001,
+    }
+
+
 def create_simulation_data(conn):
     """
     Creates the `metadata.simulation_data` table if it does not exist.
@@ -658,6 +696,83 @@ def upsert_simulation_data(
         conn.rollback()
         logger.error(f"Error updating simulation metadata for strategy #{strategy_id}: {error}")
         raise
+
+
+def create_execution_config(conn):
+    """
+    Creates the `metadata.execution_config` table if it does not exist.
+    Stores live/demo execution settings (category='linear'/'spot', order_type='Market'/'Limit').
+    """
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS metadata;"
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS metadata.execution_config (
+        config_id         INT PRIMARY KEY DEFAULT 1,
+        category          VARCHAR(32) NOT NULL DEFAULT 'linear',
+        order_type        VARCHAR(32) NOT NULL DEFAULT 'Market',
+        updated_at        TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_table_sql)
+            conn.commit()
+            logger.info("Table 'metadata.execution_config' verified/created successfully.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating table 'metadata.execution_config': {error}")
+        raise
+
+
+def upsert_execution_config(
+    conn,
+    category: str = "linear",
+    order_type: str = "Market",
+) -> dict:
+    """
+    Inserts or updates execution configuration in `metadata.execution_config`.
+    Supports switching category ('linear', 'spot') and order_type ('Market', 'Limit').
+    """
+    create_execution_config(conn)
+
+    upsert_sql = """
+    INSERT INTO metadata.execution_config (
+        config_id, category, order_type, updated_at
+    )
+    VALUES (1, %s, %s, CURRENT_TIMESTAMP)
+    ON CONFLICT (config_id) DO UPDATE SET
+        category   = EXCLUDED.category,
+        order_type = EXCLUDED.order_type,
+        updated_at = CURRENT_TIMESTAMP;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(upsert_sql, (category.lower().strip(), order_type.strip()))
+            conn.commit()
+            logger.info(f"Execution config saved to 'metadata.execution_config' (category='{category}', order_type='{order_type}').")
+            return {"category": category, "order_type": order_type}
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error upserting execution config: {error}")
+        raise
+
+
+def fetch_execution_config(conn) -> dict:
+    """
+    Fetches execution settings from `metadata.execution_config`.
+    """
+    create_execution_config(conn)
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT category, order_type FROM metadata.execution_config LIMIT 1;")
+            row = cursor.fetchone()
+            if row:
+                return {"category": str(row[0]), "order_type": str(row[1])}
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error fetching metadata.execution_config: {error}")
+    return {"category": "linear", "order_type": "Market"}
+
 
 
 

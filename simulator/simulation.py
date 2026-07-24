@@ -40,6 +40,7 @@ class SimulatorEngine:
         self.logger = logger
         self.conn = conn
         self.exec_config = self.load_simulator_config()
+        create_strategy_data(self.conn)  # ensure referenced table exists first
         create_active_positions_table(self.conn)  # ensure table exists once at startup
 
     def load_simulator_config(self) -> dict:
@@ -121,7 +122,6 @@ class SimulatorEngine:
         if ohlcv_df.empty or signals_df.empty:
             return pd.DataFrame()
 
-        # Align index types
         if not isinstance(ohlcv_df.index, pd.DatetimeIndex):
             ohlcv_df.index = pd.to_datetime(ohlcv_df.index)
         if not isinstance(signals_df.index, pd.DatetimeIndex):
@@ -132,7 +132,24 @@ class SimulatorEngine:
         if signals_df.index.tz is not None:
             signals_df.index = signals_df.index.tz_localize(None)
 
-        df = ohlcv_df.merge(signals_df, left_index=True, right_index=True, how="inner")
+        # pd.merge_asof requires both dataframes to be sorted by their merge keys (index)
+        ohlcv_df = ohlcv_df.sort_index()
+        signals_df = signals_df.sort_index()
+
+        # Perform backward asof merge to align every 1m candle with the most recent past signal
+        df = pd.merge_asof(
+            ohlcv_df,
+            signals_df,
+            left_index=True,
+            right_index=True,
+            direction="backward"
+        )
+
+        # Fill missing signal values with 0 (Hold) and cast signal columns to integer
+        for col in signals_df.columns:
+            if col in df.columns:
+                df[col] = df[col].fillna(0).astype(int)
+
         return df
 
     def run_single_strategy_simulation(self, strat_dict: dict) -> pd.DataFrame:
@@ -204,6 +221,10 @@ class SimulatorEngine:
         slip_rate = float(self.exec_config["slippage"])
 
         current_position = fetch_active_position(self.conn, strategy_id)
+        if current_position is not None and current_position.get("entry_time") is not None:
+            entry_ts = pd.Timestamp(current_position["entry_time"])
+            if entry_ts.tz is not None:
+                current_position["entry_time"] = entry_ts.tz_localize(None)
         trade_counter = 0
         completed_trades = []
 

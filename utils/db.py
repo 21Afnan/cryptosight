@@ -975,3 +975,356 @@ def get_account_api(conn, exchange: str) -> dict:
         conn.rollback()
         logger.error(f"Error fetching API credentials for exchange '{exchange}': {error}")
     return None
+
+
+def create_execution_active_positions_table(conn):
+    """
+    Creates the 'execution' schema and 'execution.active_positions' table if they do not exist.
+    Tracks live Bybit demo open positions using `strategy_id PRIMARY KEY` to enforce single-position limits.
+    """
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS execution;"
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS execution.active_positions (
+        strategy_id      BIGINT PRIMARY KEY REFERENCES metadata.strategy_data(strategy_id) ON DELETE CASCADE,
+        strategy_name    VARCHAR(128) NOT NULL,
+        exchange         VARCHAR(32) NOT NULL,
+        symbol           VARCHAR(32) NOT NULL,
+        timeframe        VARCHAR(16) NOT NULL,
+        order_id         VARCHAR(128) UNIQUE,
+        direction        VARCHAR(16) NOT NULL,
+        entry_time       TIMESTAMP WITH TIME ZONE NOT NULL,
+        entry_price      NUMERIC(18,8) NOT NULL,
+        quantity         NUMERIC(18,8) NOT NULL,
+        order_value      NUMERIC(18,8),
+        mark_price       NUMERIC(18,8),
+        liq_price        NUMERIC(18,8),
+        take_profit      NUMERIC(18,8),
+        stop_loss        NUMERIC(18,8),
+        unrealized_pnl   NUMERIC(18,8),
+        status           VARCHAR(32),
+        updated_at       TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_table_sql)
+            conn.commit()
+            logger.info("Table 'execution.active_positions' verified/created successfully.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating table 'execution.active_positions': {error}")
+        raise
+
+
+def upsert_execution_active_position(
+    conn,
+    strategy_id: int,
+    strategy_name: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str,
+    order_id: str,
+    direction: str,
+    entry_time,
+    entry_price: float,
+    quantity: float,
+    take_profit: float = None,
+    stop_loss: float = None,
+    mark_price: float = None,
+    liq_price: float = None,
+    unrealized_pnl: float = 0.0,
+    status: str = "OPEN"
+):
+    """
+    Inserts or updates an active open position row in `execution.active_positions`.
+    """
+    create_execution_active_positions_table(conn)
+
+    order_value = float(entry_price) * float(quantity)
+    upsert_sql = """
+    INSERT INTO execution.active_positions (
+        strategy_id, strategy_name, exchange, symbol, timeframe,
+        order_id, direction, entry_time, entry_price, quantity,
+        order_value, take_profit, stop_loss, mark_price, liq_price, unrealized_pnl, status, updated_at
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+    ON CONFLICT (strategy_id) DO UPDATE SET
+        strategy_name  = EXCLUDED.strategy_name,
+        exchange       = EXCLUDED.exchange,
+        symbol         = EXCLUDED.symbol,
+        timeframe      = EXCLUDED.timeframe,
+        order_id       = EXCLUDED.order_id,
+        direction      = EXCLUDED.direction,
+        entry_time     = EXCLUDED.entry_time,
+        entry_price    = EXCLUDED.entry_price,
+        quantity       = EXCLUDED.quantity,
+        order_value    = EXCLUDED.order_value,
+        take_profit    = EXCLUDED.take_profit,
+        stop_loss      = EXCLUDED.stop_loss,
+        mark_price     = EXCLUDED.mark_price,
+        liq_price      = EXCLUDED.liq_price,
+        unrealized_pnl = EXCLUDED.unrealized_pnl,
+        status         = EXCLUDED.status,
+        updated_at     = CURRENT_TIMESTAMP;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(upsert_sql, (
+                strategy_id, strategy_name, exchange, symbol, timeframe,
+                order_id, direction, entry_time, entry_price, quantity,
+                order_value, take_profit, stop_loss, mark_price, liq_price, unrealized_pnl, status
+            ))
+            conn.commit()
+            logger.debug(f"Execution active position updated for strategy '{strategy_name}' (ID #{strategy_id}).")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error upserting execution active position for strategy #{strategy_id}: {error}")
+        raise
+
+
+def delete_execution_active_position(conn, strategy_id: int):
+    """
+    Deletes the active position row from `execution.active_positions` when a trade closes.
+    """
+    create_execution_active_positions_table(conn)
+    query = "DELETE FROM execution.active_positions WHERE strategy_id = %s;"
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(query, (strategy_id,))
+            conn.commit()
+            logger.info(f"Execution active position deleted for strategy #{strategy_id}.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error deleting execution active position for strategy #{strategy_id}: {error}")
+        raise
+
+
+def create_execution_stats_table(conn):
+    """
+    Creates the 'execution' schema and 'execution.stats' table if they do not exist.
+    """
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS execution;"
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS execution.stats (
+        strategy_id     BIGINT PRIMARY KEY REFERENCES metadata.strategy_data(strategy_id) ON DELETE CASCADE,
+        strategy_name   VARCHAR(128) NOT NULL,
+        exchange        VARCHAR(32) NOT NULL,
+        symbol          VARCHAR(32) NOT NULL,
+        timeframe       VARCHAR(16) NOT NULL,
+        total_trades    INT DEFAULT 0,
+        winning_trades  INT DEFAULT 0,
+        losing_trades   INT DEFAULT 0,
+        win_rate        NUMERIC(18,8) DEFAULT 0.0,
+        net_pnl         NUMERIC(18,8) DEFAULT 0.0,
+        final_balance   NUMERIC(18,8) DEFAULT 10000.0,
+        updated_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_table_sql)
+            conn.commit()
+            logger.info("Table 'execution.stats' verified/created successfully.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating table 'execution.stats': {error}")
+        raise
+
+
+def insert_execution_ledger(
+    conn,
+    strategy_name: str,
+    order_id: str,
+    entry_time,
+    exit_time,
+    direction: str,
+    entry_price: float,
+    exit_price: float,
+    quantity: float,
+    gross_pnl: float,
+    commission: float,
+    net_pnl: float,
+    return_pct: float,
+    exit_reason: str
+):
+    """
+    Inserts a completed trade record into `execution_ledgers.<strategy_name>`.
+    """
+    import re
+    clean_strat = re.sub(r'[^a-zA-Z0-9_]+', '_', strategy_name.lower().strip())
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS execution_ledgers;"
+    create_table_sql = f"""
+    CREATE TABLE IF NOT EXISTS execution_ledgers.{clean_strat} (
+        trade_id        BIGSERIAL PRIMARY KEY,
+        order_id        VARCHAR(128),
+        entry_time      TIMESTAMP WITH TIME ZONE NOT NULL,
+        exit_time       TIMESTAMP WITH TIME ZONE NOT NULL,
+        direction       VARCHAR(16) NOT NULL,
+        entry_price     NUMERIC(18,8) NOT NULL,
+        exit_price      NUMERIC(18,8) NOT NULL,
+        quantity        NUMERIC(18,8) NOT NULL,
+        gross_pnl       NUMERIC(18,8) NOT NULL,
+        commission      NUMERIC(18,8) DEFAULT 0.0,
+        net_pnl         NUMERIC(18,8) NOT NULL,
+        return_pct      NUMERIC(18,8) NOT NULL,
+        exit_reason     VARCHAR(32) NOT NULL,
+        created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    insert_sql = f"""
+    INSERT INTO execution_ledgers.{clean_strat} (
+        order_id, entry_time, exit_time, direction, entry_price, exit_price,
+        quantity, gross_pnl, commission, net_pnl, return_pct, exit_reason
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_table_sql)
+            cursor.execute(insert_sql, (
+                order_id, entry_time, exit_time, direction, entry_price, exit_price,
+                quantity, gross_pnl, commission, net_pnl, return_pct, exit_reason
+            ))
+            conn.commit()
+            logger.info(f"Closed trade logged to 'execution_ledgers.{clean_strat}' ({exit_reason}, Net PnL=${net_pnl:,.2f}).")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error logging closed trade for strategy '{strategy_name}': {error}")
+        raise
+
+
+def upsert_execution_stats(
+    conn,
+    strategy_id: int,
+    strategy_name: str,
+    exchange: str,
+    symbol: str,
+    timeframe: str,
+    initial_balance: float,
+    ledger_df: pd.DataFrame = None,
+):
+    """
+    Inserts or updates live execution performance statistics and dynamic tabular metrics in `execution.stats`.
+    Dynamically creates PostgreSQL columns for all QuantStats performance metrics in execution.stats.
+    """
+    import re
+    create_execution_stats_table(conn)
+
+    has_trades = ledger_df is not None and not ledger_df.empty
+    total_trades = len(ledger_df) if has_trades else 0
+    winning_trades = int((ledger_df["net_pnl"] > 0).sum()) if has_trades else 0
+    losing_trades = int((ledger_df["net_pnl"] < 0).sum()) if has_trades else 0
+    win_rate = float(winning_trades / total_trades * 100.0) if has_trades and total_trades > 0 else 0.0
+    net_pnl = float(ledger_df["net_pnl"].sum()) if has_trades else 0.0
+    final_balance = initial_balance + net_pnl
+
+    data_map = {
+        "strategy_id": strategy_id,
+        "strategy_name": strategy_name,
+        "exchange": exchange.lower(),
+        "symbol": symbol.lower(),
+        "timeframe": timeframe.lower(),
+        "total_trades": total_trades,
+        "winning_trades": winning_trades,
+        "losing_trades": losing_trades,
+        "win_rate": win_rate,
+        "net_pnl": net_pnl,
+        "final_balance": final_balance,
+    }
+
+    if has_trades:
+        try:
+            from cryptosight.stats.metrices import compute_all_metrics, to_json_safe
+            pnl_col = "net_pnl" if "net_pnl" in ledger_df.columns else "gross_pnl"
+            if pnl_col in ledger_df.columns and not ledger_df[pnl_col].empty:
+                raw_metrics = compute_all_metrics(ledger_df[pnl_col], is_percentage=False)
+                clean_metrics = to_json_safe(raw_metrics)
+                for metric_name, val in clean_metrics.items():
+                    if isinstance(val, (dict, list)):
+                        continue
+                    col_key = re.sub(r'[^a-zA-Z0-9_]', '_', metric_name.lower())
+                    data_map[col_key] = val
+        except Exception as e:
+            logger.warning(f"Could not compute live execution metrics for strategy '{strategy_name}': {e}")
+
+    try:
+        with conn.cursor() as cursor:
+            for col, val in data_map.items():
+                if col in ("strategy_id", "strategy_name", "exchange", "symbol", "timeframe"):
+                    continue
+                col_type = "NUMERIC(18,8)" if isinstance(val, (int, float)) or val is None else "VARCHAR(255)"
+                cursor.execute(f"ALTER TABLE execution.stats ADD COLUMN IF NOT EXISTS {col} {col_type};")
+
+            columns = list(data_map.keys())
+            values = [data_map[col] for col in columns]
+
+            col_names_str = ", ".join(columns)
+            placeholders_str = ", ".join(["%s"] * len(columns))
+            update_assignments = [f"{col} = EXCLUDED.{col}" for col in columns if col != "strategy_id"]
+            update_str = ", ".join(update_assignments)
+
+            upsert_sql = f"""
+            INSERT INTO execution.stats ({col_names_str}, updated_at)
+            VALUES ({placeholders_str}, CURRENT_TIMESTAMP)
+            ON CONFLICT (strategy_id) DO UPDATE SET
+                {update_str},
+                updated_at = CURRENT_TIMESTAMP;
+            """
+            cursor.execute(upsert_sql, tuple(values))
+            conn.commit()
+            logger.info(f"Live execution stats saved in 'execution.stats' for strategy '{strategy_name}' (ID #{strategy_id}).")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error updating 'execution.stats' for strategy #{strategy_id}: {error}")
+        raise
+
+
+def calculate_and_store_stats(conn, strategy_id: int, schema_name: str, table_name: str, target_schema: str = "execution"):
+    """
+    Queries ledger history from `{schema_name}.{table_name}`, computes QuantStats metrics,
+    and updates `{target_schema}.stats` table in PostgreSQL.
+    """
+    from cryptosight.utils.metadata import fetch_simulator_config
+    query_sql = f"SELECT * FROM {schema_name}.{table_name};"
+    try:
+        df_ledger = pd.read_sql_query(query_sql, conn)
+        if df_ledger is not None and not df_ledger.empty:
+            sim_cfg = fetch_simulator_config(conn)
+            initial_balance = float(sim_cfg["initial_balance"])
+
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT strategy_name, exchange, symbol, timeframe FROM metadata.strategy_data WHERE strategy_id = %s;",
+                    (strategy_id,)
+                )
+                row = cursor.fetchone()
+                if row:
+                    strat_name, exchange, symbol, timeframe = row[0], row[1], row[2], row[3]
+                    if target_schema.lower() == "execution":
+                        upsert_execution_stats(
+                            conn=conn,
+                            strategy_id=strategy_id,
+                            strategy_name=strat_name,
+                            exchange=exchange,
+                            symbol=symbol,
+                            timeframe=timeframe,
+                            initial_balance=initial_balance,
+                            ledger_df=df_ledger,
+                        )
+                    else:
+                        upsert_simulation_stats(
+                            conn=conn,
+                            strategy_id=strategy_id,
+                            strategy_name=strat_name,
+                            exchange=exchange,
+                            symbol=symbol,
+                            timeframe=timeframe,
+                            initial_balance=initial_balance,
+                            ledger_df=df_ledger,
+                        )
+    except Exception as err:
+        logger.warning(f"Could not calculate and store stats for strategy #{strategy_id}: {err}")
+
