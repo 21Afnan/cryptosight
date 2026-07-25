@@ -5,78 +5,78 @@ export const COLORS = {
   // Brand — Sage / Mint green family
   // NOTE: This is the BRAND accent. It is intentionally a muted, sophisticated
   // sage green. It must NOT be confused with PnL positive green below.
-  accent:        '#5E8B6E',   // sage green — sidebar, primary buttons, links
-  accentLight:   '#7DAD8C',   // lighter sage for hovers / highlights
-  accentDark:    '#4A7A5A',   // darker sage for pressed states
+  accent: '#5E8B6E',   // sage green — sidebar, primary buttons, links
+  accentLight: '#7DAD8C',   // lighter sage for hovers / highlights
+  accentDark: '#4A7A5A',   // darker sage for pressed states
   accentSurface: '#EBF3ED',   // very light sage tint — hover backgrounds (light)
   accentSurfaceDark: '#1E3028', // deep sage tint for dark surfaces
 
   // Secondary accent palette — used ONLY for icon bubbles and decorative
   // highlights, never for financial data signals.
-  secondaryA:    '#F4A9A8',   // soft coral/rose
-  secondaryB:    '#C4B5FD',   // soft lavender
-  secondaryC:    '#FCD34D',   // soft amber
-  secondaryD:    '#93C5FD',   // soft sky blue
-  secondaryE:    '#6EE7B7',   // soft mint (lighter than sage)
+  secondaryA: '#F4A9A8',   // soft coral/rose
+  secondaryB: '#C4B5FD',   // soft lavender
+  secondaryC: '#FCD34D',   // soft amber
+  secondaryD: '#93C5FD',   // soft sky blue
+  secondaryE: '#6EE7B7',   // soft mint (lighter than sage)
 
   // Icon bubble backgrounds (light mode)
-  bubbleGreen:   'rgba(94,139,110,0.12)',   // sage
-  bubbleCoral:   'rgba(244,169,168,0.18)',  // coral
-  bubbleLavender:'rgba(196,181,253,0.20)',  // lavender
-  bubbleAmber:   'rgba(252,211,77,0.18)',   // amber
-  bubbleSky:     'rgba(147,197,253,0.18)',  // sky
+  bubbleGreen: 'rgba(94,139,110,0.12)',   // sage
+  bubbleCoral: 'rgba(244,169,168,0.18)',  // coral
+  bubbleLavender: 'rgba(196,181,253,0.20)',  // lavender
+  bubbleAmber: 'rgba(252,211,77,0.18)',   // amber
+  bubbleSky: 'rgba(147,197,253,0.18)',  // sky
 
   // ── PnL / Financial semantic colors ──────────────────────────────────────
   // CRITICAL: These are INTENTIONALLY more vivid/saturated than the sage brand
   // accent so traders can instantly distinguish "brand chrome" from "real gain".
-  pnlGreen: '#22C55E',  // vivid positive — clearly not the same sage as accent
-  pnlRed:   '#F43F5E',  // vivid negative
+  pnlGreen: '#22C55E',  // vivid positive
+  pnlRed: '#EE5D5D',  // soft, eye-friendly matte crimson red
 
   // ── Light theme backgrounds ───────────────────────────────────────────────
-  lightBg:         '#F4F7F4',  // warm off-white with faint mint tint
-  lightSurface:    '#FFFFFF',  // card surface — pure white
+  lightBg: '#F4F7F4',  // warm off-white with faint mint tint
+  lightSurface: '#FFFFFF',  // card surface — pure white
   lightSurfaceAlt: '#EFF3F0',  // subtle alternate surface
-  lightBorder:     'rgba(15,40,25,0.07)',  // very faint warm border (rarely used)
+  lightBorder: 'rgba(15,40,25,0.07)',  // very faint warm border (rarely used)
 
   // ── Dark theme backgrounds ────────────────────────────────────────────────
   // Warm charcoal — green undertone distinguishes it from cold blue-black.
-  darkBg:         '#181C1A',
-  darkSurface:    '#20261F',
+  darkBg: '#181C1A',
+  darkSurface: '#20261F',
   darkSurfaceAlt: '#262E25',
-  darkBorder:     'rgba(255,255,255,0.05)',
+  darkBorder: 'rgba(255,255,255,0.05)',
 
   // ── Sidebar ───────────────────────────────────────────────────────────────
   sidebarLight: '#5E8B6E',  // sage green
-  sidebarDark:  '#2D4A38',  // deeper sage for dark mode
+  sidebarDark: '#2D4A38',  // deeper sage for dark mode
 
   // ── Text ─────────────────────────────────────────────────────────────────
-  darkTextPrimary:   '#E8EDE9',   // warm off-white, hint of green
+  darkTextPrimary: '#E8EDE9',   // warm off-white, hint of green
   darkTextSecondary: '#8FA895',   // muted grey-green
-  darkTextDisabled:  '#4D6055',
+  darkTextDisabled: '#4D6055',
 
-  lightTextPrimary:   '#1C2B1E',  // dark warm charcoal
+  lightTextPrimary: '#1C2B1E',  // dark warm charcoal
   lightTextSecondary: '#6B7F70',  // muted grey-green
 
   // ── Chart helpers ─────────────────────────────────────────────────────────
-  chartGridDark:  'rgba(255,255,255,0.04)',
+  chartGridDark: 'rgba(255,255,255,0.04)',
   chartGridLight: 'rgba(15,40,25,0.05)',
 
   // ── Status chip semantics ─────────────────────────────────────────────────
-  statusActive:    '#22C55E',
-  statusPaused:    '#FCD34D',
-  statusStopped:   '#F43F5E',
+  statusActive: '#22C55E',
+  statusPaused: '#FCD34D',
+  statusStopped: '#EE5D5D',
   statusConnected: '#22C55E',
-  statusError:     '#F43F5E',
-  statusDisabled:  '#8FA895',
-  statusPending:   '#FCD34D',
-  statusRunning:   '#7DAD8C',
+  statusError: '#EE5D5D',
+  statusDisabled: '#8FA895',
+  statusPending: '#FCD34D',
+  statusRunning: '#7DAD8C',
   statusCompleted: '#22C55E',
-  statusFailed:    '#F43F5E',
-  statusFilled:    '#22C55E',
-  statusCancelled: '#F43F5E',
-  statusLong:      '#22C55E',
-  statusShort:     '#F43F5E',
-  statusNeutral:   '#FCD34D',
+  statusFailed: '#EE5D5D',
+  statusFilled: '#22C55E',
+  statusCancelled: '#EE5D5D',
+  statusLong: '#22C55E',
+  statusShort: '#EE5D5D',
+  statusNeutral: '#FCD34D',
 
   // ── Warning ───────────────────────────────────────────────────────────────
   warning: '#F59E0B',
@@ -84,16 +84,16 @@ export const COLORS = {
 
 // Icon bubble palette — cycles across StatCards for visual variety
 export const ICON_BUBBLE_COLORS = [
-  { bg: COLORS.bubbleGreen,   icon: COLORS.accent },
-  { bg: COLORS.bubbleCoral,   icon: '#D97070' },
-  { bg: COLORS.bubbleLavender,icon: '#8B5CF6' },
-  { bg: COLORS.bubbleAmber,   icon: '#D97706' },
-  { bg: COLORS.bubbleSky,     icon: '#3B82F6' },
+  { bg: COLORS.bubbleGreen, icon: COLORS.accent },
+  { bg: COLORS.bubbleCoral, icon: '#D97070' },
+  { bg: COLORS.bubbleLavender, icon: '#8B5CF6' },
+  { bg: COLORS.bubbleAmber, icon: '#D97706' },
+  { bg: COLORS.bubbleSky, icon: '#3B82F6' },
   { bg: 'rgba(110,231,183,0.18)', icon: '#059669' },
-  { bg: COLORS.bubbleCoral,   icon: '#D97070' },
-  { bg: COLORS.bubbleLavender,icon: '#8B5CF6' },
-  { bg: COLORS.bubbleAmber,   icon: '#D97706' },
-  { bg: COLORS.bubbleSky,     icon: '#3B82F6' },
+  { bg: COLORS.bubbleCoral, icon: '#D97070' },
+  { bg: COLORS.bubbleLavender, icon: '#8B5CF6' },
+  { bg: COLORS.bubbleAmber, icon: '#D97706' },
+  { bg: COLORS.bubbleSky, icon: '#3B82F6' },
 ];
 
 export const GRADIENTS = {
@@ -103,10 +103,10 @@ export const GRADIENTS = {
 
   // Subtle accent tint for cards/panels
   accentSubtle: 'linear-gradient(135deg, rgba(94,139,110,0.08) 0%, rgba(94,139,110,0.02) 100%)',
-  greenSubtle:  'linear-gradient(135deg, rgba(34,197,94,0.08) 0%, rgba(34,197,94,0.02) 100%)',
-  redSubtle:    'linear-gradient(135deg, rgba(244,63,94,0.08) 0%, rgba(244,63,94,0.02) 100%)',
-  sidebar:      'linear-gradient(180deg, #638F73 0%, #5E8B6E 100%)',
-  sidebarDark:  'linear-gradient(180deg, #334F3E 0%, #2D4A38 100%)',
+  greenSubtle: 'linear-gradient(135deg, rgba(34,197,94,0.08) 0%, rgba(34,197,94,0.02) 100%)',
+  redSubtle: 'linear-gradient(135deg, rgba(244,63,94,0.08) 0%, rgba(244,63,94,0.02) 100%)',
+  sidebar: 'linear-gradient(180deg, #638F73 0%, #5E8B6E 100%)',
+  sidebarDark: 'linear-gradient(180deg, #334F3E 0%, #2D4A38 100%)',
 };
 
 // ─── Typography ───────────────────────────────────────────────────────────────
@@ -418,12 +418,12 @@ export const lightTheme = createTheme({
       main: COLORS.secondaryA,
     },
     success: { main: COLORS.pnlGreen },
-    error:   { main: COLORS.pnlRed },
+    error: { main: COLORS.pnlRed },
     warning: { main: COLORS.warning },
     text: {
-      primary:   COLORS.lightTextPrimary,
+      primary: COLORS.lightTextPrimary,
       secondary: COLORS.lightTextSecondary,
-      disabled:  '#A8BAAd',
+      disabled: '#A8BAAd',
     },
     divider: COLORS.lightBorder,
   },
@@ -450,12 +450,12 @@ export const darkTheme = createTheme({
       main: COLORS.secondaryA,
     },
     success: { main: COLORS.pnlGreen },
-    error:   { main: COLORS.pnlRed },
+    error: { main: COLORS.pnlRed },
     warning: { main: COLORS.warning },
     text: {
-      primary:   COLORS.darkTextPrimary,
+      primary: COLORS.darkTextPrimary,
       secondary: COLORS.darkTextSecondary,
-      disabled:  COLORS.darkTextDisabled,
+      disabled: COLORS.darkTextDisabled,
     },
     divider: COLORS.darkBorder,
   },

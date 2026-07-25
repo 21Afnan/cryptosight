@@ -93,6 +93,21 @@ export default function EquityCurveChart({ data = [], height = 300, label = 'Por
         crosshairMarkerBorderColor: COLORS.pnlGreen,
         crosshairMarkerBackgroundColor: isDark ? COLORS.darkSurface : COLORS.lightSurface,
         priceFormat: { type: 'price', precision: 0, minMove: 1 },
+        autoscaleInfoProvider: (original) => {
+          const res = original();
+          if (res && res.priceRange) {
+            const { minValue, maxValue } = res.priceRange;
+            if (minValue === maxValue) {
+              return {
+                priceRange: {
+                  minValue: minValue * 0.95,
+                  maxValue: maxValue * 1.05,
+                },
+              };
+            }
+          }
+          return res;
+        },
       };
 
       const series = typeof chart.addAreaSeries === 'function'
@@ -104,7 +119,8 @@ export default function EquityCurveChart({ data = [], height = 300, label = 'Por
       // Deduplicate by time and keep last value per day, then sort strictly ascending
       const cleanData = [];
       const map = new Map();
-      (data || []).forEach((item) => {
+      const rawList = Array.isArray(data) ? data : (data?.raw_values || data?.values || data?.data || []);
+      rawList.forEach((item) => {
         if (!item || item.time == null) return;
         const timeStr = String(item.time).split(' ')[0].split('T')[0];
         const val = Number(item.value ?? 0);
@@ -118,6 +134,14 @@ export default function EquityCurveChart({ data = [], height = 300, label = 'Por
       });
 
       cleanData.sort((a, b) => (a.time > b.time ? 1 : a.time < b.time ? -1 : 0));
+
+      // Guarantee at least 2 points for lightweight-charts area series rendering
+      if (cleanData.length === 1) {
+        const dt = new Date(cleanData[0].time);
+        dt.setDate(dt.getDate() - 1);
+        const prevStr = dt.toISOString().split('T')[0];
+        cleanData.unshift({ time: prevStr, value: 10000.0 });
+      }
 
       if (cleanData.length > 0) {
         series.setData(cleanData);
@@ -168,10 +192,32 @@ export default function EquityCurveChart({ data = [], height = 300, label = 'Por
 
   // Update data without recreating chart
   useEffect(() => {
-    if (seriesRef.current && data.length > 0) {
+    if (seriesRef.current && data) {
       try {
-        seriesRef.current.setData(data);
-        chartRef.current?.timeScale().fitContent();
+        const clean = [];
+        const map = new Map();
+        const rawList = Array.isArray(data) ? data : (data?.raw_values || data?.values || data?.data || []);
+        rawList.forEach((item) => {
+          if (!item || item.time == null) return;
+          const timeStr = String(item.time).split(' ')[0].split('T')[0];
+          const val = Number(item.value ?? 0);
+          if (timeStr && !isNaN(val)) {
+            map.set(timeStr, val);
+          }
+        });
+        map.forEach((val, timeStr) => clean.push({ time: timeStr, value: val }));
+        clean.sort((a, b) => (a.time > b.time ? 1 : a.time < b.time ? -1 : 0));
+
+        if (clean.length === 1) {
+          const dt = new Date(clean[0].time);
+          dt.setDate(dt.getDate() - 1);
+          clean.unshift({ time: dt.toISOString().split('T')[0], value: 10000.0 });
+        }
+
+        if (clean.length > 0) {
+          seriesRef.current.setData(clean);
+          chartRef.current?.timeScale().fitContent();
+        }
       } catch (e) {
         console.warn("EquityCurveChart setData warning:", e);
       }

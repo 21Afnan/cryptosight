@@ -471,6 +471,83 @@ def insert_backtest_ledger(conn, exchange: str, symbol: str, timeframe: str, led
         raise
 
 
+# ── BACKTEST STATS ────────────────────────────────────────────────────────────
+
+def create_backtest_stats_table(conn):
+    """
+    Creates the 'backtests.stats' table to store computed performance metrics
+    and chart data for each strategy's backtest run.
+
+    Uses 2 dynamic JSONB columns so no schema migration is ever needed:
+      - metrics: entire compute_all_metrics() output dict (sharpe, sortino, cagr, ...)
+      - charts:  entire all_charts.json from plots.py (equity_curve, drawdown, monthly, ...)
+
+    Status values: 'pending' | 'running' | 'completed' | 'failed'
+    """
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS backtests;"
+    create_table_sql  = """
+    CREATE TABLE IF NOT EXISTS backtests.stats (
+        strategy_id   BIGINT PRIMARY KEY
+                      REFERENCES metadata.strategy_data(strategy_id) ON DELETE CASCADE,
+        status        VARCHAR(16)               NOT NULL DEFAULT 'pending',
+        metrics       JSONB,
+        charts        JSONB,
+        last_updated  TIMESTAMP WITH TIME ZONE  DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_table_sql)
+        conn.commit()
+        logger.info("Table 'backtests.stats' verified/created successfully.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating table 'backtests.stats': {error}")
+        raise
+
+
+def upsert_backtest_stats(conn, strategy_id: int, status: str, metrics: dict = None, charts: dict = None):
+    """
+    Inserts or updates a row in backtests.stats for a given strategy_id.
+
+    Args:
+        strategy_id : int   — FK to metadata.strategy_data
+        status      : str   — 'pending' | 'running' | 'completed' | 'failed'
+        metrics     : dict  — full output of compute_all_metrics()  (can be None)
+        charts      : dict  — full all_charts.json from plots.py    (can be None)
+
+    The JSONB columns store everything dynamically — new metrics/charts from
+    future module updates are automatically persisted without any ALTER TABLE.
+    """
+    create_backtest_stats_table(conn)
+
+    import json as _json
+
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO backtests.stats (strategy_id, status, metrics, charts, last_updated)
+                VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (strategy_id) DO UPDATE SET
+                    status       = EXCLUDED.status,
+                    metrics      = COALESCE(EXCLUDED.metrics, backtests.stats.metrics),
+                    charts       = COALESCE(EXCLUDED.charts,  backtests.stats.charts),
+                    last_updated = CURRENT_TIMESTAMP;
+            """, (
+                strategy_id,
+                status,
+                _json.dumps(metrics) if metrics else None,
+                _json.dumps(charts)  if charts  else None,
+            ))
+        conn.commit()
+        logger.info(f"backtests.stats upserted for strategy_id={strategy_id} → status={status}")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error upserting backtests.stats for strategy_id={strategy_id}: {error}")
+        raise
+
+
 # ── SIMULATIONS ───────────────────────────────────────────────────────────────
 
 def fetch_signals_from_db(conn, exchange: str, symbol: str, target_timeframe: str) -> pd.DataFrame:

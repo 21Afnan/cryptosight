@@ -87,9 +87,18 @@ export default function Topbar({ title }) {
   }, []);
 
   const isDbActive = dbStatus.connected;
-  const chipBg = isDbActive ? 'rgba(14, 203, 129, 0.15)' : 'rgba(246, 70, 93, 0.15)';
-  const chipColor = isDbActive ? '#0ECB81' : '#F6465D';
-  const chipShadow = isDbActive ? '0 4px 14px rgba(14, 203, 129, 0.28)' : '0 4px 14px rgba(246, 70, 93, 0.28)';
+  const chipBg = isDbActive
+    ? (isDark ? 'rgba(125, 173, 140, 0.22)' : 'rgba(94, 139, 110, 0.18)')
+    : (isDark ? 'rgba(246, 70, 93, 0.22)' : 'rgba(246, 70, 93, 0.14)');
+  const chipColor = isDbActive
+    ? (isDark ? '#7DAD8C' : '#4A7A5A')
+    : '#F6465D';
+  const chipBorder = isDbActive
+    ? (isDark ? '1px solid rgba(125, 173, 140, 0.4)' : '1px solid rgba(94, 139, 110, 0.35)')
+    : (isDark ? '1px solid rgba(246, 70, 93, 0.4)' : '1px solid rgba(246, 70, 93, 0.35)');
+  const chipShadow = isDbActive
+    ? '0 4px 14px rgba(94, 139, 110, 0.25)'
+    : '0 4px 14px rgba(246, 70, 93, 0.25)';
 
   return (
     <AppBar
@@ -148,7 +157,7 @@ export default function Topbar({ title }) {
               fontSize: '0.75rem',
               background: chipBg,
               color: chipColor,
-              border: 'none',
+              border: chipBorder,
               boxShadow: chipShadow,
               transition: 'all 0.3s ease',
               '&:hover': {

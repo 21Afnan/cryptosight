@@ -11,6 +11,7 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import TableSortLabel from '@mui/material/TableSortLabel';
 import Button from '@mui/material/Button';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
@@ -121,11 +122,44 @@ export default function BacktestDetails() {
   const [snack, setSnack] = useState(null);
   const [chartTab, setChartTab] = useState(0);
   const [ledgerFilters, setLedgerFilters] = useState({ startDate: '', endDate: '', side: 'all', symbol: '' });
+  const [sortConfig, setSortConfig] = useState({ key: 'entry_time', direction: 'desc' });
 
   const { data: bt, loading, error } = useMockFetch(() => getBacktestById(id), [id]);
 
   const rawTrades = bt?.trades ?? [];
   const filteredTrades = filterLedgerRows(rawTrades, ledgerFilters);
+
+  const handleSort = (columnKey) => {
+    setSortConfig((prev) => ({
+      key: columnKey,
+      direction: prev.key === columnKey && prev.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
+
+  const sortedTrades = React.useMemo(() => {
+    const items = [...filteredTrades];
+    if (!sortConfig.key) return items;
+
+    return items.sort((a, b) => {
+      let valA = a[sortConfig.key];
+      let valB = b[sortConfig.key];
+
+      if (sortConfig.key === 'entry_time' || sortConfig.key === 'exit_time') {
+        valA = new Date(valA || 0).getTime();
+        valB = new Date(valB || 0).getTime();
+      } else if (typeof valA === 'string') {
+        valA = (valA || '').toLowerCase();
+        valB = (valB || '').toLowerCase();
+      } else {
+        valA = Number(valA || 0);
+        valB = Number(valB || 0);
+      }
+
+      if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredTrades, sortConfig]);
 
   if (loading) return <PageContainer title="Backtest Details" breadcrumbs="Backtests"><Box sx={{ pt: 3 }}><LoadingSkeleton variant="detail" /></Box></PageContainer>;
   if (error || !bt) return (
@@ -135,14 +169,14 @@ export default function BacktestDetails() {
   );
 
   // Dynamic Value-Based Color Evaluation (Green = Profit/Good, Red = Loss/Bad)
-  const pnlColor = (bt.net_pnl ?? 0) >= 0 ? '#0ECB81' : '#F6465D';
-  const cagrColor = (bt.cagr ?? 0) >= 0 ? '#0ECB81' : '#F6465D';
-  const winRateColor = (bt.win_rate ?? 0) >= 0.5 ? '#0ECB81' : '#F6465D';
-  const tradesColor = (bt.avg_trade_pnl ?? 0) >= 0 ? '#0ECB81' : '#F6465D';
-  const sharpeColor = (bt.sharpe ?? 0) >= 1.0 ? '#0ECB81' : '#F6465D';
-  const sortinoColor = (bt.sortino ?? 0) >= 1.0 ? '#0ECB81' : '#F6465D';
-  const calmarColor = (bt.calmar ?? 0) >= 1.0 ? '#0ECB81' : '#F6465D';
-  const ddColor = '#F6465D'; // Drawdown is always loss/decline
+  const pnlColor = (bt.net_pnl ?? 0) >= 0 ? '#0ECB81' : COLORS.pnlRed;
+  const cagrColor = (bt.cagr ?? 0) >= 0 ? '#0ECB81' : COLORS.pnlRed;
+  const winRateColor = (bt.win_rate ?? 0) >= 0.5 ? '#0ECB81' : COLORS.pnlRed;
+  const tradesColor = (bt.avg_trade_pnl ?? 0) >= 0 ? '#0ECB81' : COLORS.pnlRed;
+  const sharpeColor = (bt.sharpe ?? 0) >= 1.0 ? '#0ECB81' : COLORS.pnlRed;
+  const sortinoColor = (bt.sortino ?? 0) >= 1.0 ? '#0ECB81' : COLORS.pnlRed;
+  const calmarColor = (bt.calmar ?? 0) >= 1.0 ? '#0ECB81' : COLORS.pnlRed;
+  const ddColor = COLORS.pnlRed; // Drawdown is always loss/decline
 
   const cardLightShadow = '0 6px 22px rgba(14, 203, 129, 0.25)';
   const cardLightBorder = '1.5px solid #0ECB81';
@@ -406,23 +440,104 @@ export default function BacktestDetails() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell>#</TableCell>
-                    <TableCell>Entry Time</TableCell>
-                    <TableCell>Exit Time</TableCell>
-                    <TableCell>Side</TableCell>
-                    <TableCell align="right">Entry Price</TableCell>
-                    <TableCell align="right">Exit Price</TableCell>
-                    <TableCell align="right">Net PnL</TableCell>
-                    <TableCell align="right">Return %</TableCell>
+                    <TableCell>
+                      <TableSortLabel
+                        active={sortConfig.key === 'entry_time'}
+                        direction={sortConfig.key === 'entry_time' ? sortConfig.direction : 'asc'}
+                        onClick={() => handleSort('entry_time')}
+                      >
+                        Entry Time
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell>
+                      <TableSortLabel
+                        active={sortConfig.key === 'exit_time'}
+                        direction={sortConfig.key === 'exit_time' ? sortConfig.direction : 'asc'}
+                        onClick={() => handleSort('exit_time')}
+                      >
+                        Exit Time
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell>
+                      <TableSortLabel
+                        active={sortConfig.key === 'side'}
+                        direction={sortConfig.key === 'side' ? sortConfig.direction : 'asc'}
+                        onClick={() => handleSort('side')}
+                      >
+                        Side
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell>
+                      <TableSortLabel
+                        active={sortConfig.key === 'exit_reason'}
+                        direction={sortConfig.key === 'exit_reason' ? sortConfig.direction : 'asc'}
+                        onClick={() => handleSort('exit_reason')}
+                      >
+                        Exit Reason
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell>
+                      <TableSortLabel
+                        active={sortConfig.key === 'status'}
+                        direction={sortConfig.key === 'status' ? sortConfig.direction : 'asc'}
+                        onClick={() => handleSort('status')}
+                      >
+                        Status
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell align="right">
+                      <TableSortLabel
+                        active={sortConfig.key === 'entry_price'}
+                        direction={sortConfig.key === 'entry_price' ? sortConfig.direction : 'asc'}
+                        onClick={() => handleSort('entry_price')}
+                      >
+                        Entry Price
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell align="right">
+                      <TableSortLabel
+                        active={sortConfig.key === 'exit_price'}
+                        direction={sortConfig.key === 'exit_price' ? sortConfig.direction : 'asc'}
+                        onClick={() => handleSort('exit_price')}
+                      >
+                        Exit Price
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell align="right">
+                      <TableSortLabel
+                        active={sortConfig.key === 'net_pnl'}
+                        direction={sortConfig.key === 'net_pnl' ? sortConfig.direction : 'asc'}
+                        onClick={() => handleSort('net_pnl')}
+                      >
+                        Net PnL
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell align="right">
+                      <TableSortLabel
+                        active={sortConfig.key === 'return_pct'}
+                        direction={sortConfig.key === 'return_pct' ? sortConfig.direction : 'asc'}
+                        onClick={() => handleSort('return_pct')}
+                      >
+                        Return %
+                      </TableSortLabel>
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {filteredTrades.slice(0, 50).map((trade) => (
-                    <TableRow key={trade.trade_id} hover>
-                      <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{trade.trade_id}</Typography></TableCell>
-                      <TableCell><Typography variant="body2" sx={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{new Date(trade.entry_time).toLocaleDateString()}</Typography></TableCell>
-                      <TableCell><Typography variant="body2" sx={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{new Date(trade.exit_time).toLocaleDateString()}</Typography></TableCell>
+                  {sortedTrades.slice(0, 200).map((trade, idx) => (
+                    <TableRow key={trade.trade_id || idx} hover>
+                      <TableCell><Typography variant="body2" sx={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{trade.entry_time ? new Date(trade.entry_time).toLocaleString() : '—'}</Typography></TableCell>
+                      <TableCell><Typography variant="body2" sx={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{trade.exit_time ? new Date(trade.exit_time).toLocaleString() : '—'}</Typography></TableCell>
                       <TableCell><StatusChip status={trade.side} /></TableCell>
+                      <TableCell>
+                        <Chip
+                          label={trade.exit_reason ? String(trade.exit_reason).replace(/_/g, ' ').toUpperCase() : 'TAKE PROFIT'}
+                          size="small"
+                          variant="outlined"
+                          sx={{ height: 22, fontSize: 11, fontWeight: 700 }}
+                        />
+                      </TableCell>
+                      <TableCell><StatusChip status={trade.status || 'Completed'} /></TableCell>
                       <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${trade.entry_price?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography></TableCell>
                       <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', color: trade.net_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed, fontWeight: 700 }}>${trade.exit_price?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography></TableCell>
                       <TableCell align="right"><Typography variant="body2" sx={{ color: trade.net_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{trade.net_pnl >= 0 ? '+' : ''}${trade.net_pnl?.toFixed(2)}</Typography></TableCell>

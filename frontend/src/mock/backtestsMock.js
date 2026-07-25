@@ -85,7 +85,7 @@ function generateBacktestTrades(count = 40, strategyName = 'BTC_EMA_Cross_4H') {
 }
 
 function generateMonthlyReturns(months = 12) {
-  const labels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return Array.from({ length: months }, (_, i) => ({
     month: `${labels[i % 12]} ${i < 12 ? '24' : '25'}`,
     value: parseFloat(((Math.random() - 0.38) * 0.14).toFixed(4)),

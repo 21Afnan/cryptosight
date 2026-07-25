@@ -472,53 +472,56 @@ export default function BacktestRequests() {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {backtests.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((bt) => (
-                        <TableRow
-                          key={bt.backtest_id}
-                          hover
-                          onClick={() => bt.status === 'completed' && navigate(`/backtests/${bt.backtest_id}`)}
-                          sx={{ cursor: bt.status === 'completed' ? 'pointer' : 'default' }}
-                        >
-                          <TableCell>
-                            <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                              {bt.strategy_name}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Chip label={bt.symbol} size="small" sx={{ height: 22, fontSize: 11, fontWeight: 600, background: `${COLORS.accent}15`, color: COLORS.accent }} />
-                          </TableCell>
-                          <TableCell>{bt.exchange}</TableCell>
-                          <TableCell>{bt.timeframe}</TableCell>
-                          <TableCell>
-                            <Box>
-                              <StatusChip status={bt.status} />
-                              {bt.status === 'running' && bt.progress != null && (
-                                <LinearProgress variant="determinate" value={bt.progress * 100} sx={{ mt: 0.5, height: 3, borderRadius: 2 }} />
-                              )}
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                              {new Date(bt.submitted_at).toLocaleDateString()}
-                            </Typography>
-                          </TableCell>
-                          <TableCell align="right">
-                            <Typography variant="body2" sx={{ color: bt.net_pnl != null ? (bt.net_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed) : 'inherit', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>
-                              {bt.net_pnl != null ? `${bt.net_pnl >= 0 ? '+' : ''}$${bt.net_pnl?.toFixed(0)}` : '—'}
-                            </Typography>
-                          </TableCell>
-                          <TableCell align="right">
-                            <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
-                              {bt.win_rate != null ? `${(bt.win_rate * 100).toFixed(1)}%` : '—'}
-                            </Typography>
-                          </TableCell>
-                          <TableCell align="right">
-                            <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
-                              {bt.sharpe?.toFixed(2) ?? '—'}
-                            </Typography>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {backtests.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((bt) => {
+                        const targetId = bt.id || bt.strategy_id || bt.backtest_id;
+                        return (
+                          <TableRow
+                            key={targetId}
+                            hover
+                            onClick={() => bt.status === 'completed' && navigate(`/backtests/${targetId}`)}
+                            sx={{ cursor: bt.status === 'completed' ? 'pointer' : 'default' }}
+                          >
+                            <TableCell>
+                              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                {bt.strategy_name}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Chip label={bt.symbol} size="small" sx={{ height: 22, fontSize: 11, fontWeight: 600, background: `${COLORS.accent}15`, color: COLORS.accent }} />
+                            </TableCell>
+                            <TableCell>{bt.exchange}</TableCell>
+                            <TableCell>{bt.timeframe}</TableCell>
+                            <TableCell>
+                              <Box>
+                                <StatusChip status={bt.status} />
+                                {bt.status === 'running' && bt.progress != null && (
+                                  <LinearProgress variant="determinate" value={bt.progress * 100} sx={{ mt: 0.5, height: 3, borderRadius: 2 }} />
+                                )}
+                              </Box>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                {new Date(bt.submitted_at).toLocaleDateString()}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Typography variant="body2" sx={{ color: bt.net_pnl != null ? (bt.net_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed) : 'inherit', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>
+                                {bt.net_pnl != null ? `${bt.net_pnl >= 0 ? '+' : ''}$${bt.net_pnl?.toFixed(0)}` : '—'}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                                {bt.win_rate != null ? `${(bt.win_rate * 100).toFixed(1)}%` : '—'}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                                {bt.sharpe?.toFixed(2) ?? '—'}
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </TableContainer>

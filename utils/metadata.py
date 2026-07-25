@@ -283,11 +283,11 @@ def create_strategy_data(conn):
             );
             """
             alter_sqls = [
-                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS timeframe    VARCHAR(16);",
-                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS start_time   TIMESTAMP WITH TIME ZONE;",
-                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS end_time     TIMESTAMP WITH TIME ZONE;",
-                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS max_retries  INT;",
-                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS retry_delay  INT;",
+                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS timeframe         VARCHAR(16);",
+                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS start_time        TIMESTAMP WITH TIME ZONE;",
+                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS end_time          TIMESTAMP WITH TIME ZONE;",
+                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS max_retries       INT;",
+                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS retry_delay       INT;",
                 "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS execution_enabled BOOLEAN DEFAULT TRUE;",
             ]
             create_index_sql = """

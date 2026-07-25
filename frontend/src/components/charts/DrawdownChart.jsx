@@ -76,9 +76,27 @@ export default function DrawdownChart({ data = [], height = 220 }) {
         lineColor: COLORS.pnlRed,
         topColor: `${COLORS.pnlRed}00`,
         bottomColor: `${COLORS.pnlRed}35`,
-        lineWidth: 1.5,
+        lineWidth: 2,
         priceLineVisible: false,
-        priceFormat: { type: 'price', precision: 1, minMove: 0.1 },
+        priceFormat: {
+          type: 'custom',
+          formatter: (price) => `${(price * 100).toFixed(2)}%`,
+        },
+        autoscaleInfoProvider: (original) => {
+          const res = original();
+          if (res && res.priceRange) {
+            const { minValue, maxValue } = res.priceRange;
+            if (minValue === 0 && maxValue === 0) {
+              return {
+                priceRange: {
+                  minValue: -0.1,
+                  maxValue: 0.02,
+                },
+              };
+            }
+          }
+          return res;
+        },
       };
 
       const series = typeof chart.addAreaSeries === 'function'
@@ -90,7 +108,8 @@ export default function DrawdownChart({ data = [], height = 220 }) {
       // Deduplicate by time and keep last value per day, then sort strictly ascending
       const cleanData = [];
       const map = new Map();
-      (data || []).forEach((item) => {
+      const rawList = Array.isArray(data) ? data : (data?.raw_values || data?.values || data?.data || []);
+      rawList.forEach((item) => {
         if (!item || item.time == null) return;
         const timeStr = String(item.time).split(' ')[0].split('T')[0];
         const val = Number(item.value ?? 0);
@@ -104,6 +123,14 @@ export default function DrawdownChart({ data = [], height = 220 }) {
       });
 
       cleanData.sort((a, b) => (a.time > b.time ? 1 : a.time < b.time ? -1 : 0));
+
+      // Guarantee at least 2 points for lightweight-charts area series rendering
+      if (cleanData.length === 1) {
+        const dt = new Date(cleanData[0].time);
+        dt.setDate(dt.getDate() - 1);
+        const prevStr = dt.toISOString().split('T')[0];
+        cleanData.unshift({ time: prevStr, value: 0.0 });
+      }
 
       if (cleanData.length > 0) {
         series.setData(cleanData);
@@ -152,10 +179,32 @@ export default function DrawdownChart({ data = [], height = 220 }) {
   }, [isDark, height]);
 
   useEffect(() => {
-    if (seriesRef.current && data.length > 0) {
+    if (seriesRef.current && data) {
       try {
-        seriesRef.current.setData(data);
-        chartRef.current?.timeScale().fitContent();
+        const clean = [];
+        const map = new Map();
+        const rawList = Array.isArray(data) ? data : (data?.raw_values || data?.values || data?.data || []);
+        rawList.forEach((item) => {
+          if (!item || item.time == null) return;
+          const timeStr = String(item.time).split(' ')[0].split('T')[0];
+          const val = Number(item.value ?? 0);
+          if (timeStr && !isNaN(val)) {
+            map.set(timeStr, val);
+          }
+        });
+        map.forEach((val, timeStr) => clean.push({ time: timeStr, value: val }));
+        clean.sort((a, b) => (a.time > b.time ? 1 : a.time < b.time ? -1 : 0));
+
+        if (clean.length === 1) {
+          const dt = new Date(clean[0].time);
+          dt.setDate(dt.getDate() - 1);
+          clean.unshift({ time: dt.toISOString().split('T')[0], value: 0.0 });
+        }
+
+        if (clean.length > 0) {
+          seriesRef.current.setData(clean);
+          chartRef.current?.timeScale().fitContent();
+        }
       } catch (e) {
         console.warn("DrawdownChart setData warning:", e);
       }

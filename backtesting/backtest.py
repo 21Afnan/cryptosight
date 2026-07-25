@@ -217,6 +217,54 @@ class BacktestingEngine:
                     ledger_df=ledger_df,
                 )
 
+                # ── Compute stats + charts → store in backtests.stats ──────────
+                try:
+                    from cryptosight.stats.metrices import compute_all_metrics
+                    from cryptosight.stats.plots import generate_all_plots
+                    from cryptosight.utils.db import upsert_backtest_stats, create_backtest_stats_table
+
+                    # Mark as running before computation
+                    create_backtest_stats_table(conn)
+                    upsert_backtest_stats(conn, strategy_id=strat_id_num, status="running")
+
+                    # compute_all_metrics expects a returns series (perc_pnl column)
+                    returns_series = ledger_df["perc_pnl"].dropna()
+
+                    metrics_dict = {}
+                    charts_dict  = {}
+
+                    if not returns_series.empty:
+                        metrics_dict = compute_all_metrics(returns_series, is_percentage=True)
+                        # Enrich metrics with key trade stats not in QuantStats
+                        total = len(ledger_df)
+                        wins  = int((ledger_df["net_pnl"] > 0).sum())
+                        metrics_dict["total_trades"]  = total
+                        metrics_dict["win_rate"]       = round(wins / total, 4) if total else 0.0
+                        metrics_dict["net_pnl"]        = float(ledger_df["net_pnl"].sum())
+                        metrics_dict["final_balance"]  = float(ledger_df["balance"].iloc[-1]) if not ledger_df.empty else 0.0
+
+                    try:
+                        _, charts_dict = generate_all_plots(returns_series, is_percentage=True)
+                    except Exception as chart_err:
+                        self.logger.warning(f"Charts generation skipped for '{strategy_name}': {chart_err}")
+
+                    upsert_backtest_stats(
+                        conn,
+                        strategy_id=strat_id_num,
+                        status="completed",
+                        metrics=metrics_dict,
+                        charts=charts_dict,
+                    )
+                    
+                    self.logger.info(f"backtests.stats populated for strategy_id={strat_id_num} ('{strategy_name}')")
+
+                except Exception as stats_err:
+                    self.logger.warning(f"Could not compute/store stats for '{strategy_name}': {stats_err}")
+                    try:
+                        upsert_backtest_stats(conn, strategy_id=strat_id_num, status="failed")
+                    except Exception:
+                        pass
+
             conn.close()
             self.logger.info(f"Backtest completed & saved to DB for strategy '{strategy_name}' (ID #{strat_id_num}).")
         except Exception as e:
