@@ -1103,6 +1103,7 @@ def create_execution_active_positions_table(conn):
         with conn.cursor() as cursor:
             cursor.execute(create_schema_sql)
             cursor.execute(create_table_sql)
+            cursor.execute("DELETE FROM execution.active_positions WHERE order_id IS NULL OR order_id = '';")
             conn.commit()
             logger.info("Table 'execution.active_positions' verified/created successfully.")
     except Exception as error:
@@ -1544,7 +1545,7 @@ def ingest_account_closed_pnl(conn, closed_pnl_list: list):
 
 def ingest_account_transaction_log(conn, tx_log_list: list):
     """Stores raw Bybit transaction log into account_history.transaction_log."""
-    upsert_account_history_records(conn, "transaction_log", tx_log_list, pkey_col="transactionId")
+    upsert_account_history_records(conn, "transaction_log", tx_log_list, pkey_col="id")
 
 
 def create_ingestion_state_table(conn):

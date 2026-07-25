@@ -95,53 +95,60 @@ def get_top_strategies(conn, limit=3) -> list:
 
     selected_strategies = []
     seen_ids = set()
+    seen_symbols = set()
 
     try:
         with conn.cursor() as cursor:
-            # 1. Fetch all active open positions (MUST manage them even if it exceeds limit, but we cap array returned)
-            # Actually, to be safe, if we have 4 open positions and limit=3, we should probably return all 4 so they are managed.
-            # But let's stick to the limit for simplicity.
+            # 1. Fetch all active open positions (MUST manage existing open positions)
             cursor.execute(query_active)
             for row in cursor.fetchall():
                 if len(selected_strategies) >= limit: break
                 strat = row_to_dict(row)
+                sym = str(strat["symbol"]).upper().strip()
                 if strat["strategy_id"] not in seen_ids:
                     selected_strategies.append(strat)
                     seen_ids.add(strat["strategy_id"])
-                    logger.info(f"Selected Strategy #{strat['strategy_id']} '{strat['strategy_name']}' to manage open position.")
+                    seen_symbols.add(sym)
+                    logger.info(f"Selected Strategy #{strat['strategy_id']} '{strat['strategy_name']}' ({sym}) to manage open position.")
 
-            # 2. Live Performance Check
+            # 2. Live Performance Check (1 strategy per symbol)
             if len(selected_strategies) < limit:
                 cursor.execute(query_exec_stats)
                 for row in cursor.fetchall():
                     if len(selected_strategies) >= limit: break
                     strat = row_to_dict(row)
-                    if strat["strategy_id"] not in seen_ids:
+                    sym = str(strat["symbol"]).upper().strip()
+                    if strat["strategy_id"] not in seen_ids and sym not in seen_symbols:
                         selected_strategies.append(strat)
                         seen_ids.add(strat["strategy_id"])
-                        logger.info(f"Selected Strategy #{strat['strategy_id']} '{strat['strategy_name']}' based on live stats.")
+                        seen_symbols.add(sym)
+                        logger.info(f"Selected Strategy #{strat['strategy_id']} '{strat['strategy_name']}' ({sym}) based on live stats.")
 
-            # 3. Simulation Stats Fallback
+            # 3. Simulation Stats Fallback (1 strategy per symbol)
             if len(selected_strategies) < limit:
                 cursor.execute(query_sim_stats)
                 for row in cursor.fetchall():
                     if len(selected_strategies) >= limit: break
                     strat = row_to_dict(row)
-                    if strat["strategy_id"] not in seen_ids:
+                    sym = str(strat["symbol"]).upper().strip()
+                    if strat["strategy_id"] not in seen_ids and sym not in seen_symbols:
                         selected_strategies.append(strat)
                         seen_ids.add(strat["strategy_id"])
-                        logger.info(f"Selected Strategy #{strat['strategy_id']} '{strat['strategy_name']}' based on sim stats.")
+                        seen_symbols.add(sym)
+                        logger.info(f"Selected Strategy #{strat['strategy_id']} '{strat['strategy_name']}' ({sym}) based on sim stats.")
 
-            # 4. Final Fallback
+            # 4. Final Fallback (1 strategy per symbol)
             if len(selected_strategies) < limit:
                 cursor.execute(query_fallback)
                 for row in cursor.fetchall():
                     if len(selected_strategies) >= limit: break
                     strat = row_to_dict(row)
-                    if strat["strategy_id"] not in seen_ids:
+                    sym = str(strat["symbol"]).upper().strip()
+                    if strat["strategy_id"] not in seen_ids and sym not in seen_symbols:
                         selected_strategies.append(strat)
                         seen_ids.add(strat["strategy_id"])
-                        logger.info(f"Selected Strategy #{strat['strategy_id']} '{strat['strategy_name']}' from fallback.")
+                        seen_symbols.add(sym)
+                        logger.info(f"Selected Strategy #{strat['strategy_id']} '{strat['strategy_name']}' ({sym}) from fallback.")
 
         if not selected_strategies:
             logger.warning("No enabled strategies found in metadata.strategy_data.")

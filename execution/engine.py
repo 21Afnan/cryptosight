@@ -4,6 +4,7 @@ Handles signal generation, position tracking, TP/SL reconciliation, signal rever
 and execution ledger & stats calculations.
 """
 
+import math
 import pandas as pd
 from cryptosight.utils.db import (
     get_connection,
@@ -49,15 +50,25 @@ def get_latest_signal_and_price(strategy: dict) -> tuple:
     return latest_signal, latest_close
 
 
-def calculate_position_quantity(conn, strategy: dict, current_price: float, wallet_balance: float) -> tuple:
+def calculate_position_quantity(conn, strategy: dict, current_price: float, wallet_balance: float, executor=None) -> tuple:
     """
     Calculates trade position quantity, Take Profit price, and Stop Loss price.
-    STEP 9 FIX: Explicitly validates TP/SL configuration presence to prevent float(None) crashes.
+    Rounds quantity down to nearest valid multiple of symbol's lot size step (qtyStep)
+    and checks against minimum order quantity (minOrderQty).
     """
     exec_cfg = fetch_execution_config(conn)
     initial_bal = float(exec_cfg["reference_balance"])
     pos_type = str(exec_cfg["position_size_type"]).lower()
     pos_val = float(exec_cfg["position_size_value"])
+
+    symbol = strategy.get("symbol", "BTCUSDT")
+    qty_step = 0.001
+    min_order_qty = 0.001
+
+    if executor:
+        info = executor.get_instrument_info(symbol)
+        qty_step = info.get("qty_step", 0.001)
+        min_order_qty = info.get("min_order_qty", 0.001)
 
     capital = float(wallet_balance)
     if capital <= 0:
@@ -65,7 +76,17 @@ def calculate_position_quantity(conn, strategy: dict, current_price: float, wall
         quantity = 0.0
     else:
         allocated_usd = capital * (pos_val / 100.0) if pos_type in ("percent", "percentage") else pos_val
-        quantity = round(allocated_usd / current_price, 4) if current_price > 0 else 0.0
+        raw_qty = allocated_usd / current_price if current_price > 0 else 0.0
+        if qty_step > 0:
+            quantity = math.floor(raw_qty / qty_step) * qty_step
+            precision = max(0, -int(math.floor(math.log10(qty_step)))) if qty_step < 1 else 4
+            quantity = round(quantity, precision)
+        else:
+            quantity = round(raw_qty, 4)
+
+        if quantity < min_order_qty:
+            logger.warning(f"Computed quantity {quantity} is below symbol minimum {min_order_qty}, skipping entry.")
+            quantity = 0.0
 
     strat_cfg = strategy.get("strategy_config", {})
     tp_val = strat_cfg.get("tp") if strat_cfg.get("tp") is not None else strat_cfg.get("take_profit")
@@ -214,7 +235,7 @@ def run_execution_cycle():
         create_execution_stats_table(conn)
         create_simulation_stats_table(conn)
 
-        strategies = get_top_strategies(conn, limit=3)
+        strategies = get_top_strategies(conn, limit=10)
         if not strategies:
             logger.warning("No enabled strategy available in DB.")
             return
@@ -280,6 +301,7 @@ def run_execution_cycle():
                             f"No matching closed PnL record found for strategy #{strategy_id} "
                             f"(entry_price={stored_position['entry_price']}, entry_time={stored_position['entry_time']})."
                         )
+                    delete_execution_active_position(conn, strategy_id)
                 else:
                     logger.debug(f"No stored active position in DB for strategy #{strategy_id}.")
 
@@ -291,7 +313,7 @@ def run_execution_cycle():
                 if signal != 0:
                     direction = "LONG" if signal == 1 else "SHORT"
                     # STEP 9: Validates TP/SL internally
-                    quantity, tp_pct, sl_pct = calculate_position_quantity(conn, strategy, current_price, wallet["available_balance"])
+                    quantity, tp_pct, sl_pct = calculate_position_quantity(conn, strategy, current_price, wallet["available_balance"], executor=executor)
 
                     tp_price = current_price * (1 + tp_pct) if direction == "LONG" else current_price * (1 - tp_pct)
                     sl_price = current_price * (1 - sl_pct) if direction == "LONG" else current_price * (1 + sl_pct)
@@ -380,7 +402,7 @@ def run_execution_cycle():
                         )
 
                         new_dir = "LONG" if signal == 1 else "SHORT"
-                        quantity, tp_pct, sl_pct = calculate_position_quantity(conn, strategy, current_price, wallet["available_balance"])
+                        quantity, tp_pct, sl_pct = calculate_position_quantity(conn, strategy, current_price, wallet["available_balance"], executor=executor)
 
                         tp_price = current_price * (1 + tp_pct) if new_dir == "LONG" else current_price * (1 - tp_pct)
                         sl_price = current_price * (1 - sl_pct) if new_dir == "LONG" else current_price * (1 + sl_pct)

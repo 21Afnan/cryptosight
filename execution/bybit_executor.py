@@ -43,6 +43,7 @@ class BybitExecutor:
         self.api_key = api_creds["api_key"]
         self.api_secret = api_creds["api_secret"]
         self.demo = api_creds["demo"]
+        self.instruments_cache = {}
 
         # 2. Sync server time to prevent ErrCode 10002 timestamp skew
         self.sync_server_time()
@@ -83,6 +84,33 @@ class BybitExecutor:
         """Standardizes coin symbol to Bybit pair e.g. 'btc' -> 'BTCUSDT'."""
         sym = symbol.upper().strip()
         return sym if sym.endswith("USDT") else f"{sym}USDT"
+
+    def get_instrument_info(self, symbol: str) -> dict:
+        """
+        Fetches lot size step and min order qty for symbol from Bybit v5 instruments-info endpoint.
+        Caches results per symbol in-memory on the BybitExecutor instance.
+        """
+        bybit_symbol = self.get_bybit_symbol(symbol)
+        if bybit_symbol in self.instruments_cache:
+            return self.instruments_cache[bybit_symbol]
+
+        try:
+            response = self.session.get_instruments_info(category=self.category, symbol=bybit_symbol)
+            if response.get("retCode") == 0:
+                inst_list = response.get("result", {}).get("list", [])
+                if inst_list:
+                    lot_filter = inst_list[0].get("lotSizeFilter", {})
+                    qty_step = float(lot_filter.get("qtyStep", 0.001))
+                    min_order_qty = float(lot_filter.get("minOrderQty", 0.001))
+                    info = {"qty_step": qty_step, "min_order_qty": min_order_qty}
+                    self.instruments_cache[bybit_symbol] = info
+                    return info
+        except Exception as error:
+            logger.error(f"Error fetching instrument info for {bybit_symbol}: {error}")
+
+        default_info = {"qty_step": 0.001, "min_order_qty": 0.001}
+        self.instruments_cache[bybit_symbol] = default_info
+        return default_info
 
     def get_wallet_balance(self, coin: str) -> dict:
         """
@@ -349,7 +377,10 @@ class BybitExecutor:
         params = {"category": self.category, "limit": 100}
         if start_time is not None:
             try:
-                params["startTime"] = self.to_epoch_ms(start_time)
+                st_ms = self.to_epoch_ms(start_time)
+                min_valid_ms = int((time.time() - 700 * 86400) * 1000)
+                if st_ms and st_ms > min_valid_ms:
+                    params["startTime"] = st_ms
             except Exception as e:
                 logger.warning(f"Could not parse start_time '{start_time}': {e}")
 
@@ -389,7 +420,10 @@ class BybitExecutor:
         params = {"category": self.category, "limit": 100}
         if start_time is not None:
             try:
-                params["startTime"] = self.to_epoch_ms(start_time)
+                st_ms = self.to_epoch_ms(start_time)
+                min_valid_ms = int((time.time() - 700 * 86400) * 1000)
+                if st_ms and st_ms > min_valid_ms:
+                    params["startTime"] = st_ms
             except Exception as e:
                 logger.warning(f"Could not parse start_time '{start_time}': {e}")
 
@@ -429,7 +463,10 @@ class BybitExecutor:
         params = {"accountType": "UNIFIED", "limit": 100}
         if start_time is not None:
             try:
-                params["startTime"] = self.to_epoch_ms(start_time)
+                st_ms = self.to_epoch_ms(start_time)
+                min_valid_ms = int((time.time() - 700 * 86400) * 1000)
+                if st_ms and st_ms > min_valid_ms:
+                    params["startTime"] = st_ms
             except Exception as e:
                 logger.warning(f"Could not parse start_time '{start_time}': {e}")
 
