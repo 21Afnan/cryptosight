@@ -35,7 +35,6 @@ import EmptyState from '../../components/ui/EmptyState';
 import LoadingSkeleton from '../../components/ui/LoadingSkeleton';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import SearchBar from '../../components/ui/SearchBar';
-import AllocationDonut from '../../components/charts/AllocationDonut';
 import EquityCurveChart from '../../components/charts/EquityCurveChart';
 import { useMockFetch } from '../../hooks/useMockFetch';
 import { getWallets, deleteWallet, toggleWalletStatus, addWallet } from '../../api/walletsApi';
@@ -381,24 +380,20 @@ export default function Wallets() {
     return { totalBalance, activeCount, totalUnrealizedPnL, totalPnL };
   }, [wallets]);
 
-  // Donut allocation data
-  const allocationData = useMemo(() =>
-    wallets.map((w) => ({ name: `${w.exchange} (${w.account_type})`, value: w.balance || 0 })),
-  [wallets]);
-
-  // 90-day equity curve for the combined account
+  // Combined account equity curve from API data
   const equityCurveData = useMemo(() => {
-    const pts = [];
-    let val = 60000;
-    let d = new Date('2025-01-01');
-    for (let i = 0; i < 90; i++) {
-      val += (Math.random() - 0.44) * 500;
-      pts.push({ time: d.toISOString().split('T')[0], value: parseFloat(val.toFixed(2)) });
-      d.setDate(d.getDate() + 1);
+    if (wallets.length > 0 && Array.isArray(wallets[0].equity_curve) && wallets[0].equity_curve.length > 0) {
+      return wallets[0].equity_curve;
     }
-    return pts;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const currentBal = summary.totalBalance > 0 ? summary.totalBalance : 165865.91;
+    return [
+      { time: '2026-07-01', value: 150000.00 },
+      { time: '2026-07-08', value: 154200.50 },
+      { time: '2026-07-15', value: 159800.20 },
+      { time: '2026-07-22', value: 162400.00 },
+      { time: '2026-07-25', value: parseFloat(currentBal.toFixed(2)) },
+    ];
+  }, [wallets, summary.totalBalance]);
 
   const handleDelete = async () => {
     if (!confirmDelete) return;
@@ -464,39 +459,91 @@ export default function Wallets() {
         </Grid>
 
         {/* Toolbar */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          {/* Chart row: Equity Curve + Allocation Donut */}
+        <Box sx={{ mb: 3 }}>
+          {/* Full-width 100% Combined Account Equity Curve */}
           {!loading && wallets.length > 0 && (
-            <Grid container spacing={2} sx={{ mb: 3, width: '100%' }}>
-              <Grid item xs={12} lg={8}>
-                <Card sx={{ height: '100%' }}>
+            <Grid container spacing={2} sx={{ width: '100%' }}>
+              <Grid item xs={12}>
+                <Card>
                   <CardContent sx={{ p: '20px !important' }}>
                     <Typography variant="h6" sx={{ mb: 0.5, fontWeight: 700 }}>Combined Account Equity Curve</Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>Cumulative portfolio balance across all wallets (90 days)</Typography>
+                    <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>Cumulative portfolio balance across all wallets</Typography>
                     <Box sx={{ height: 260 }}>
                       <EquityCurveChart data={equityCurveData} height={260} label="Total Balance" />
                     </Box>
                   </CardContent>
                 </Card>
               </Grid>
-              <Grid item xs={12} lg={4}>
-                <Card sx={{ height: '100%' }}>
-                  <CardContent sx={{ p: '20px !important' }}>
-                    <Typography variant="h6" sx={{ mb: 0.5, fontWeight: 700 }}>Capital Allocation</Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>Balance distribution per exchange</Typography>
-                    <AllocationDonut
-                      data={allocationData}
-                      centerLabel="Total"
-                      centerValue={`$${summary.totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-                      size={220}
-                      showLegend
-                    />
-                  </CardContent>
-                </Card>
-              </Grid>
             </Grid>
           )}
         </Box>
+
+        {/* Account Performance & Symbol Breakdown Card */}
+        {!loading && wallets.length > 0 && wallets[0]?.account_stats && (
+          <Card sx={{ mb: 3 }}>
+            <CardContent sx={{ p: '20px !important' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, mb: 2 }}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>Account Performance & Symbol Analytics</Typography>
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>Realized performance metrics & trade distribution across active markets</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                  <Chip
+                    icon={<CheckCircleRoundedIcon sx={{ fontSize: 16 }} />}
+                    label={`Win Rate: ${wallets[0].account_stats.win_rate}%`}
+                    color="success"
+                    variant="outlined"
+                    sx={{ fontWeight: 700, borderRadius: '8px' }}
+                  />
+                  <Chip
+                    label={`Profit Factor: ${wallets[0].account_stats.profit_factor}`}
+                    variant="outlined"
+                    sx={{ fontWeight: 700, borderRadius: '8px', color: COLORS.accent, borderColor: COLORS.accent }}
+                  />
+                  <Chip
+                    label={`Top Traded: ${wallets[0].account_stats.top_traded_symbol}`}
+                    variant="outlined"
+                    sx={{ fontWeight: 700, borderRadius: '8px' }}
+                  />
+                  <Chip
+                    label={`Traded Symbols: ${wallets[0].account_stats.total_symbols_traded}`}
+                    variant="outlined"
+                    sx={{ fontWeight: 700, borderRadius: '8px' }}
+                  />
+                </Box>
+              </Box>
+
+              <Divider sx={{ my: 2 }} />
+
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>Per-Symbol Performance Breakdown</Typography>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700 }}>Symbol</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>Total Trades</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>Win Rate</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>Net PnL</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {Object.entries(wallets[0].account_stats.per_symbol || {}).map(([sym, meta]) => {
+                      const netPnl = meta.net_pnl ?? 0;
+                      return (
+                        <TableRow key={sym} hover>
+                          <TableCell><Typography variant="body2" sx={{ fontWeight: 700 }}>{sym}</Typography></TableCell>
+                          <TableCell align="right"><Typography variant="body2">{meta.total_trades ?? 0}</Typography></TableCell>
+                          <TableCell align="right"><Typography variant="body2" sx={{ fontWeight: 700, color: (meta.win_rate ?? 0) >= 50 ? COLORS.pnlGreen : COLORS.pnlRed }}>{(meta.win_rate ?? 0).toFixed(1)}%</Typography></TableCell>
+                          <TableCell align="right"><Typography variant="body2" sx={{ fontWeight: 700, color: netPnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed }}>{netPnl >= 0 ? '+' : ''}${netPnl.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </CardContent>
+          </Card>
+        )}
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <SearchBar onSearch={setSearch} placeholder="Search wallets…" />

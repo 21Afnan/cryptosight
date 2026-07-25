@@ -10,7 +10,7 @@ from cryptosight.backend.services import backtest_service
 router = APIRouter()
 
 
-@router.get("/health")
+@router.api_route("/health", methods=["GET", "HEAD"])
 def get_db_health():
     """
     Real PostgreSQL connection health status indicator.
@@ -19,7 +19,7 @@ def get_db_health():
     return backtest_service.check_db_health()
 
 
-@router.get("")
+@router.api_route("", methods=["GET", "HEAD"])
 def list_backtests(
     search: str = Query("", description="Search by strategy name, symbol, or exchange"),
     status: str = Query("all", description="all | pending | running | completed | failed"),
@@ -37,7 +37,7 @@ def list_backtests(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{id}")
+@router.api_route("/{id}", methods=["GET", "HEAD"])
 def get_backtest_details(id: str):
     """
     GET /api/v1/backtests/{id}
