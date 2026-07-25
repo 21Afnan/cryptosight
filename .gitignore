@@ -24,6 +24,8 @@ logs/
 
 # Generated CSV Reports & Backtest Output (auto-generated, do not commit)
 csv_files/
+stats/charts/
+cryptosight/stats/charts/
 
 # ─── Frontend ────────────────────────────────────────────────────────────────
 
