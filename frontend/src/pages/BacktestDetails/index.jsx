@@ -412,10 +412,8 @@ export default function BacktestDetails() {
                     <TableCell>Side</TableCell>
                     <TableCell align="right">Entry Price</TableCell>
                     <TableCell align="right">Exit Price</TableCell>
-                    <TableCell align="right">Size</TableCell>
                     <TableCell align="right">Net PnL</TableCell>
                     <TableCell align="right">Return %</TableCell>
-                    <TableCell align="right">Fees</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -427,10 +425,8 @@ export default function BacktestDetails() {
                       <TableCell><StatusChip status={trade.side} /></TableCell>
                       <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${trade.entry_price?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography></TableCell>
                       <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', color: trade.net_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed, fontWeight: 700 }}>${trade.exit_price?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography></TableCell>
-                      <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${trade.position_size?.toFixed(0)}</Typography></TableCell>
                       <TableCell align="right"><Typography variant="body2" sx={{ color: trade.net_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{trade.net_pnl >= 0 ? '+' : ''}${trade.net_pnl?.toFixed(2)}</Typography></TableCell>
                       <TableCell align="right"><Typography variant="body2" sx={{ color: trade.return_pct >= 0 ? COLORS.pnlGreen : COLORS.pnlRed, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{trade.return_pct >= 0 ? '+' : ''}{trade.return_pct?.toFixed(2)}%</Typography></TableCell>
-                      <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', color: theme.palette.text.secondary }}>${trade.fees?.toFixed(2)}</Typography></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

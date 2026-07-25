@@ -43,75 +43,75 @@ const STATUS_TABS = ['all', 'pending', 'running', 'completed', 'failed'];
 
 const PRESET_STRATEGIES = [
   {
-    name: 'BTC EMA Cross 4H',
+    name: 'BTC Trend Rider 4H',
     tag: 'Trend Following',
     color: '#0ECB81',
     config: {
-      strategy_name: 'BTC_EMA_Cross_4H',
+      strategy_name: 'BTC Trend Rider 4H',
       symbol: 'BTC/USDT',
-      exchange: 'binance',
+      exchange: 'bybit',
       timeframe: '4h',
       start_date: '2024-01-01',
-      end_date: '2024-12-31',
+      end_date: '2025-12-31',
       initial_balance: 10000,
-      commission: 0.0005,
+      commission: 0.0006,
       slippage: 0.0002,
-      take_profit: 0.045,
+      take_profit: 0.05,
       stop_loss: 0.02,
     },
   },
   {
-    name: 'ETH RSI Reversion 1H',
+    name: 'ETH Mean Reversion 1H',
     tag: 'Mean Reversion',
-    color: '#0ECB81',
+    color: '#F6465D',
     config: {
-      strategy_name: 'ETH_RSI_Rev_1H',
+      strategy_name: 'ETH Mean Reversion 1H',
       symbol: 'ETH/USDT',
       exchange: 'bybit',
       timeframe: '1h',
       start_date: '2024-01-01',
-      end_date: '2024-12-31',
+      end_date: '2025-12-31',
       initial_balance: 15000,
       commission: 0.0006,
       slippage: 0.0003,
-      take_profit: 0.035,
-      stop_loss: 0.015,
+      take_profit: 0.04,
+      stop_loss: 0.018,
     },
   },
   {
-    name: 'SOL Breakout 1D',
+    name: 'SOL Momentum Breakout 1D',
     tag: 'Momentum',
-    color: '#0ECB81',
+    color: '#F0B90B',
     config: {
-      strategy_name: 'SOL_Breakout_1D',
+      strategy_name: 'SOL Momentum Breakout 1D',
       symbol: 'SOL/USDT',
-      exchange: 'okx',
+      exchange: 'bybit',
       timeframe: '1d',
       start_date: '2024-01-01',
-      end_date: '2024-12-31',
+      end_date: '2026-06-30',
       initial_balance: 20000,
-      commission: 0.0005,
+      commission: 0.0006,
       slippage: 0.0004,
-      take_profit: 0.06,
-      stop_loss: 0.025,
+      take_profit: 0.07,
+      stop_loss: 0.03,
     },
   },
   {
-    name: 'BNB MACD Scalp 15M',
+    name: 'DOGE Scalp 15M',
     tag: 'Scalping',
-    color: '#0ECB81',
+    color: '#858CA2',
     config: {
-      strategy_name: 'BNB_MACD_Scalp_15M',
-      symbol: 'BNB/USDT',
-      exchange: 'binance',
+      strategy_name: 'DOGE Scalp 15M',
+      symbol: 'DOGE/USDT',
+      exchange: 'bybit',
       timeframe: '15m',
-      start_date: '2024-01-01',
-      end_date: '2024-12-31',
-      initial_balance: 25000,
-      commission: 0.0004,
-      slippage: 0.0002,
-      take_profit: 0.025,
-      stop_loss: 0.01,
+      start_date: '2024-06-01',
+      end_date: '2026-06-30',
+      initial_balance: 5000,
+      commission: 0.0006,
+      slippage: 0.0003,
+      take_profit: 0.02,
+      stop_loss: 0.008,
     },
   },
 ];
@@ -208,9 +208,9 @@ export default function BacktestRequests() {
   const { data: mktData } = useMockFetch(getMarketDataOptions);
   const backtests = data?.data ?? [];
 
-  const symbols = [...new Set([...(mktData?.data ?? []).map((m) => m.symbol), 'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT'])];
-  const exchanges = [...new Set([...(mktData?.data ?? []).map((m) => m.exchange), 'binance', 'bybit', 'okx'])];
-  const timeframes = [...new Set([...(mktData?.data ?? []).map((m) => m.timeframe), '1m', '5m', '15m', '1h', '4h', '1d'])];
+  const symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'LTC/USDT', 'DOGE/USDT', 'MINA/USDT', 'SUI/USDT', 'ADA/USDT'];
+  const exchanges = ['bybit', 'binance'];
+  const timeframes = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
 
   const completedList = backtests.filter((b) => b.status === 'completed');
   const avgWinRate = completedList.length
@@ -294,7 +294,7 @@ export default function BacktestRequests() {
                 key={preset.name}
                 onClick={() => {
                   setForm(preset.config);
-                  setSnack({ severity: 'info', message: `Loaded preset: ${preset.name}` });
+                  setSnack({ severity: 'success', message: `Loaded preset: ${preset.name}` });
                 }}
                 sx={{
                   p: '14px 18px',

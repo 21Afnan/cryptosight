@@ -1,10 +1,11 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
 import InputBase from '@mui/material/InputBase';
 import { useTheme } from '@mui/material/styles';
@@ -16,6 +17,7 @@ import { useSearch } from '../../context/SearchContext';
 import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded';
 import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
+import StorageRoundedIcon from '@mui/icons-material/StorageRounded';
 
 const PAGE_TITLES = {
   '/': 'Dashboard',
@@ -40,7 +42,7 @@ function getRouteTitle(pathname, passedTitle) {
 }
 
 /**
- * Topbar — Sage Green Crystal Glass Navbar with clean heading text (no pill wrapper) and text hover glow.
+ * Topbar — Sage Green Crystal Glass Navbar with Real PostgreSQL DB Connection Health Status Sign (Active / Inactive)
  */
 export default function Topbar({ title }) {
   const theme = useTheme();
@@ -51,6 +53,43 @@ export default function Topbar({ title }) {
   const isDark = theme.palette.mode === 'dark';
 
   const pageTitle = getRouteTitle(location.pathname, title);
+
+  // Real Database Health Connection State (NO fake static defaults)
+  const [dbStatus, setDbStatus] = useState({ connected: false, loading: true });
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchDbHealth = async () => {
+      try {
+        const res = await fetch('http://localhost:8000/api/v1/backtests/health');
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            setDbStatus({
+              connected: data.status === 'active' || data.connected === true,
+              loading: false,
+            });
+          }
+        } else {
+          if (isMounted) setDbStatus({ connected: false, loading: false });
+        }
+      } catch (err) {
+        if (isMounted) setDbStatus({ connected: false, loading: false });
+      }
+    };
+
+    fetchDbHealth();
+    const interval = setInterval(fetchDbHealth, 15000); // refresh every 15s
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const isDbActive = dbStatus.connected;
+  const chipBg = isDbActive ? 'rgba(14, 203, 129, 0.15)' : 'rgba(246, 70, 93, 0.15)';
+  const chipColor = isDbActive ? '#0ECB81' : '#F6465D';
+  const chipShadow = isDbActive ? '0 4px 14px rgba(14, 203, 129, 0.28)' : '0 4px 14px rgba(246, 70, 93, 0.28)';
 
   return (
     <AppBar
@@ -75,7 +114,7 @@ export default function Topbar({ title }) {
       }}
     >
       <Toolbar sx={{ minHeight: '64px !important', px: 3, gap: 2 }}>
-        {/* Page Title — Rendered directly on glass topbar with text-shadow hover feedback (No pill wrapper) */}
+        {/* Page Title — Rendered directly on glass topbar with text-shadow hover feedback */}
         <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center' }}>
           <Typography
             variant="h4"
@@ -94,6 +133,31 @@ export default function Topbar({ title }) {
             {pageTitle}
           </Typography>
         </Box>
+
+        {/* Real PostgreSQL Database Connection Health Status Sign (Navbar Mounted) */}
+        <Tooltip title={isDbActive ? 'PostgreSQL Database: Connected & Active' : 'PostgreSQL Database: Connection Offline'}>
+          <Chip
+            icon={<StorageRoundedIcon sx={{ fontSize: 16, color: `${chipColor} !important` }} />}
+            label={dbStatus.loading ? 'DB Checking…' : isDbActive ? '● DB Active' : '● DB Inactive'}
+            size="small"
+            sx={{
+              height: 32,
+              px: 1,
+              borderRadius: '999px',
+              fontWeight: 800,
+              fontSize: '0.75rem',
+              background: chipBg,
+              color: chipColor,
+              border: 'none',
+              boxShadow: chipShadow,
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                transform: 'scale(1.04)',
+                boxShadow: chipShadow,
+              },
+            }}
+          />
+        </Tooltip>
 
         {/* Global Search Bar */}
         <Box

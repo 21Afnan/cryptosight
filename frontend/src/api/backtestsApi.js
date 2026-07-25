@@ -1,89 +1,80 @@
 /**
  * backtestsApi.js
- * Mirrors: GET /backtests, GET /backtests/:id, POST /backtests
- * TODO(security): POST /backtests would need CSRF token when real API is wired.
+ * FastAPI Backend integrated API client for /api/v1/backtests and DB connection health.
+ * Communicates directly with http://localhost:8000/api/v1/backtests
  */
-import { BACKTESTS, MARKET_DATA_OPTIONS } from '../mock/backtestsMock';
-import { findMockById } from '../utils/findMockById';
 
-const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+const BASE_URL = 'http://localhost:8000/api/v1/backtests';
 
-let backtestStore = [...BACKTESTS];
-
-function applyFilters(data, { search = '', filter = {}, sort = {} } = {}) {
-  let result = [...data];
-  if (search) {
-    const q = search.toLowerCase();
-    result = result.filter(
-      (b) =>
-        b.strategy_name.toLowerCase().includes(q) ||
-        b.symbol.toLowerCase().includes(q),
-    );
+/** GET /api/v1/backtests/health — Real PostgreSQL DB Connection Health Status Indicator */
+export async function getDbHealth() {
+  try {
+    const res = await fetch(`${BASE_URL}/health`);
+    if (!res.ok) throw new Error('Health check failed');
+    return await res.json();
+  } catch (err) {
+    return { status: 'inactive', connected: false, error: err.message };
   }
-  if (filter.status) result = result.filter((b) => b.status === filter.status);
-  if (filter.exchange) result = result.filter((b) => b.exchange === filter.exchange);
-  if (sort.field) {
-    const dir = sort.dir === 'desc' ? -1 : 1;
-    result.sort((a, b) => {
-      if (a[sort.field] == null) return 1;
-      if (b[sort.field] == null) return -1;
-      return (a[sort.field] < b[sort.field] ? -1 : 1) * dir;
-    });
-  }
-  return result;
 }
 
-/** GET /backtests */
-export async function getBacktests({ search, filter, sort, page = 1, pageSize = 50 } = {}) {
-  await delay(350 + Math.random() * 200);
-  const filtered = applyFilters(backtestStore, { search, filter, sort });
-  const start = (page - 1) * pageSize;
+/** GET /api/v1/backtests — Fetch backtest list from FastAPI backend service */
+export async function getBacktests({ search = '', filter = {}, sort = {}, page = 1, pageSize = 50 } = {}) {
+  const queryParams = new URLSearchParams();
+  if (search) queryParams.append('search', search);
+  if (filter.status) queryParams.append('status', filter.status);
+
+  const res = await fetch(`${BASE_URL}?${queryParams.toString()}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch backtests from backend service: ${res.statusText}`);
+  }
+  const json = await res.json();
   return {
-    data: filtered.slice(start, start + pageSize),
-    total: filtered.length,
+    data: json.data || [],
+    total: json.count || json.data?.length || 0,
     page,
     pageSize,
   };
 }
 
-/** GET /backtests/:id */
+/** GET /api/v1/backtests/:id — Fetch backtest details from FastAPI backend service */
 export async function getBacktestById(id) {
-  await delay(300 + Math.random() * 150);
-  const bt = findMockById(backtestStore, id, ['backtest_id']);
-  if (!bt) throw new Error(`Backtest "${id}" not found`);
-  return { ...bt };
+  const res = await fetch(`${BASE_URL}/${id}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch backtest details for "${id}" from backend service: ${res.statusText}`);
+  }
+  const json = await res.json();
+  return json.data;
 }
 
-/** POST /backtests — submit a new backtest request */
+/** POST /api/v1/backtests — submit a new backtest request to FastAPI backend service */
 export async function submitBacktest(payload) {
-  await delay(600 + Math.random() * 200);
-  const newBt = {
-    backtest_id: `bt-${Date.now()}`,
-    ...payload,
-    status: 'pending',
-    submitted_at: new Date().toISOString(),
-    completed_at: null,
-    total_trades: null,
-    win_rate: null,
-    net_pnl: null,
-    final_balance: null,
-    sharpe: null,
-    sortino: null,
-    calmar: null,
-    max_drawdown: null,
-    cagr: null,
-    equity_curve: [],
-    drawdown_curve: [],
-    monthly_returns: [],
-    rolling_metrics: [],
-    trades: [],
-  };
-  backtestStore = [...backtestStore, newBt];
-  return { ...newBt };
+  const res = await fetch(BASE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to submit backtest job to backend service: ${res.statusText}`);
+  }
+  const json = await res.json();
+  return json.data;
 }
 
-/** GET /market-data — for symbol/timeframe pickers */
+/** GET /market-data — 8 Standard Configured Trading Pairs */
 export async function getMarketDataOptions() {
-  await delay(200);
-  return { data: MARKET_DATA_OPTIONS, total: MARKET_DATA_OPTIONS.length, page: 1, pageSize: MARKET_DATA_OPTIONS.length };
+  return {
+    data: [
+      { exchange: 'Binance', symbol: 'BTC/USDT', timeframe: '1m' },
+      { exchange: 'Bybit', symbol: 'ETH/USDT', timeframe: '1m' },
+      { exchange: 'Binance', symbol: 'SOL/USDT', timeframe: '1m' },
+      { exchange: 'Bybit', symbol: 'LTC/USDT', timeframe: '1m' },
+      { exchange: 'Binance', symbol: 'DOGE/USDT', timeframe: '1m' },
+      { exchange: 'Bybit', symbol: 'MINA/USDT', timeframe: '1m' },
+      { exchange: 'Binance', symbol: 'SUI/USDT', timeframe: '1m' },
+      { exchange: 'Bybit', symbol: 'ADA/USDT', timeframe: '1m' },
+    ],
+    total: 8,
+    page: 1,
+    pageSize: 8,
+  };
 }
