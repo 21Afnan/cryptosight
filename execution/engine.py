@@ -12,12 +12,21 @@ from cryptosight.utils.db import (
     insert_execution_ledger,
     upsert_execution_stats,
     get_table_names,
+    ingest_account_executions,
+    ingest_account_closed_pnl,
+    ingest_account_transaction_log,
+    get_ingestion_state,
+    update_ingestion_state,
+    create_execution_active_positions_table,
+    create_execution_stats_table,
+    create_simulation_stats_table,
 )
-from cryptosight.utils.metadata import fetch_simulator_config
-from cryptosight.execution.selector import get_best_strategy
+from cryptosight.utils.metadata import fetch_simulator_config, fetch_execution_config, create_strategy_data
+from cryptosight.execution.selector import get_top_strategies
 from cryptosight.execution.bybit_executor import BybitExecutor
 from cryptosight.signals.main import run_signals_pipeline
 from cryptosight.utils.logger import get_logger
+from cryptosight.execution.account_stats import run_account_stats_cycle
 
 logger = get_logger("ExecutionEngine")
 
@@ -45,14 +54,18 @@ def calculate_position_quantity(conn, strategy: dict, current_price: float, wall
     Calculates trade position quantity, Take Profit price, and Stop Loss price.
     STEP 9 FIX: Explicitly validates TP/SL configuration presence to prevent float(None) crashes.
     """
-    sim_cfg = fetch_simulator_config(conn)
-    initial_bal = float(sim_cfg["initial_balance"])
-    pos_type = str(sim_cfg["position_size_type"]).lower()
-    pos_val = float(sim_cfg["position_size_value"])
+    exec_cfg = fetch_execution_config(conn)
+    initial_bal = float(exec_cfg["reference_balance"])
+    pos_type = str(exec_cfg["position_size_type"]).lower()
+    pos_val = float(exec_cfg["position_size_value"])
 
-    capital = wallet_balance if wallet_balance > 0 else initial_bal
-    allocated_usd = capital * (pos_val / 100.0) if pos_type in ("percent", "percentage") else pos_val
-    quantity = round(allocated_usd / current_price, 4) if current_price > 0 else 0.0
+    capital = float(wallet_balance)
+    if capital <= 0:
+        logger.warning(f"Wallet balance is {capital} (<= 0), cannot size position. Returning 0 quantity.")
+        quantity = 0.0
+    else:
+        allocated_usd = capital * (pos_val / 100.0) if pos_type in ("percent", "percentage") else pos_val
+        quantity = round(allocated_usd / current_price, 4) if current_price > 0 else 0.0
 
     strat_cfg = strategy.get("strategy_config", {})
     tp_val = strat_cfg.get("tp") if strat_cfg.get("tp") is not None else strat_cfg.get("take_profit")
@@ -97,7 +110,7 @@ def get_active_position_record(conn, strategy_id: int) -> dict:
         return None
 
 
-def record_closed_trade(conn, strategy: dict, entry_order_id: str, exit_order_id: str, direction: str, entry_price: float, exit_price: float, quantity: float, pnl: float, commission: float, exit_reason: str):
+def record_closed_trade(conn, strategy: dict, entry_order_id: str, exit_order_id: str, direction: str, entry_price: float, exit_price: float, quantity: float, pnl: float, commission: float, exit_reason: str, entry_time=None, exit_time=None):
     """
     Helper to log closed trade into execution_ledgers and directly update execution.stats.
     STEP 5 FIX: Receives entry_order_id and exit_order_id explicitly, deduping against exit_order_id.
@@ -106,7 +119,20 @@ def record_closed_trade(conn, strategy: dict, entry_order_id: str, exit_order_id
     strategy_name = strategy["strategy_name"]
     symbol = strategy["symbol"]
 
-    now = pd.Timestamp.now()
+    def to_utc_timestamp(t):
+        if t is None:
+            return pd.Timestamp.now(tz="UTC")
+        if isinstance(t, pd.Timestamp) or hasattr(t, "tzinfo"):
+            ts = pd.Timestamp(t)
+            return ts.tz_convert("UTC") if ts.tzinfo else ts.tz_localize("UTC")
+        if isinstance(t, (int, float)):
+            return pd.Timestamp(t, unit='ms', tz='UTC')
+        ts = pd.Timestamp(t)
+        return ts.tz_convert("UTC") if ts.tzinfo else ts.tz_localize("UTC")
+
+    final_entry = to_utc_timestamp(entry_time)
+    final_exit = to_utc_timestamp(exit_time)
+
     gross_pnl = float(pnl + commission)
     net_pnl = float(pnl)
     cost_basis = entry_price * quantity if (entry_price * quantity) > 0 else 1.0
@@ -134,8 +160,8 @@ def record_closed_trade(conn, strategy: dict, entry_order_id: str, exit_order_id
         strategy_name=strategy_name,
         entry_order_id=entry_order_id,
         exit_order_id=exit_order_id,
-        entry_time=now,
-        exit_time=now,
+        entry_time=final_entry,
+        exit_time=final_exit,
         direction=direction,
         entry_price=entry_price,
         exit_price=exit_price,
@@ -155,8 +181,8 @@ def record_closed_trade(conn, strategy: dict, entry_order_id: str, exit_order_id
 
     try:
         df_ledger = pd.read_sql_query(query_sql, conn)
-        sim_cfg = fetch_simulator_config(conn)
-        initial_balance = float(sim_cfg["initial_balance"])
+        exec_cfg = fetch_execution_config(conn)
+        initial_balance = float(exec_cfg["reference_balance"])
 
         upsert_execution_stats(
             conn=conn,
@@ -182,182 +208,113 @@ def run_execution_cycle():
         return
 
     try:
-        strategy = get_best_strategy(conn)
-        if not strategy:
+        # Initialize required tables before the selector runs
+        create_strategy_data(conn)
+        create_execution_active_positions_table(conn)
+        create_execution_stats_table(conn)
+        create_simulation_stats_table(conn)
+
+        strategies = get_top_strategies(conn, limit=3)
+        if not strategies:
             logger.warning("No enabled strategy available in DB.")
             return
 
-        strategy_id = strategy["strategy_id"]
-        strategy_name = strategy["strategy_name"]
-        symbol = strategy["symbol"]
-
-        if str(strategy["exchange"]).lower() != "bybit":
-            logger.warning(f"Exchange '{strategy['exchange']}' is not yet supported for execution. Skipping this cycle for strategy #{strategy_id}.")
-            return
-
         executor = BybitExecutor(conn)
-        wallet = executor.get_wallet_balance("USDT")
 
-        # STEP 8 FIX: If wallet fetch failed, skip cycle cleanly
-        if not wallet.get("fetch_ok", False):
-            logger.error(f"Wallet balance fetch failed for strategy '{strategy_name}'. Skipping cycle to prevent unsafe position sizing.")
-            return
+        for strategy in strategies:
+            strategy_id = strategy["strategy_id"]
+            strategy_name = strategy["strategy_name"]
+            symbol = strategy["symbol"]
 
-        bybit_pos = executor.get_open_position(symbol)
+            if str(strategy["exchange"]).lower() != "bybit":
+                logger.warning(f"Exchange '{strategy['exchange']}' is not yet supported for execution. Skipping this cycle for strategy #{strategy_id}.")
+                continue
 
-        # 1. Reconcile TP/SL hit on Bybit
-        if not bybit_pos:
-            stored_position = get_active_position_record(conn, strategy_id)
+            wallet = executor.get_wallet_balance("USDT")
+            if not wallet.get("fetch_ok", False):
+                logger.error(f"Wallet balance fetch failed for strategy '{strategy_name}'. Skipping cycle to prevent unsafe position sizing.")
+                continue
 
-            if stored_position and stored_position.get("order_id"):
-                # STEP 1 FIX: Query get_closed_pnl using startTime filter
-                closed_pnl_records = executor.get_closed_pnl(symbol, start_time=stored_position["entry_time"])
-                matched_record = None
+            bybit_pos = executor.get_open_position(symbol)
 
-                if closed_pnl_records:
-                    start_ms = int(pd.Timestamp(stored_position["entry_time"]).timestamp() * 1000)
-                    for item in closed_pnl_records:
-                        entry_diff = abs(item["entry_price"] - stored_position["entry_price"])
-                        item_time = item["updated_time"] or item["created_time"]
-                        # Match: entry_price within 0.1% tolerance AND time >= entry_time
-                        if (entry_diff <= (0.001 * stored_position["entry_price"])) and (item_time >= start_ms - 1000):
-                            matched_record = item
-                            break
+            # 1. Reconcile TP/SL hit on Bybit
+            if not bybit_pos:
+                stored_position = get_active_position_record(conn, strategy_id)
 
-                if matched_record:
-                    exit_reason = matched_record.get("exit_reason") or "TP_SL_RECONCILED"
-                    logger.info(f"Reconciling closed trade on Bybit: PnL=${matched_record['closed_pnl']:,.2f}, Reason={exit_reason}.")
-                    # STEP 5 FIX: Pass entry_order_id and exit_order_id
-                    record_closed_trade(
-                        conn=conn,
-                        strategy=strategy,
-                        entry_order_id=stored_position["order_id"],
-                        exit_order_id=matched_record["order_id"],
-                        direction=stored_position["direction"],
-                        entry_price=stored_position["entry_price"],
-                        exit_price=matched_record["exit_price"],
-                        quantity=matched_record["quantity"],
-                        pnl=matched_record["closed_pnl"],
-                        commission=matched_record["commission"],
-                        exit_reason=exit_reason,
-                    )
+                if stored_position and stored_position.get("order_id"):
+                    # STEP 1 FIX: Query get_closed_pnl using startTime filter
+                    closed_pnl_records = executor.get_closed_pnl(symbol, start_time=stored_position["entry_time"])
+                    matched_record = None
+
+                    if closed_pnl_records:
+                        start_ms = int(pd.Timestamp(stored_position["entry_time"]).timestamp() * 1000)
+                        for item in closed_pnl_records:
+                            entry_diff = abs(item["entry_price"] - stored_position["entry_price"])
+                            item_time = item["updated_time"] or item["created_time"]
+                            # Match: entry_price within 0.1% tolerance AND time >= entry_time
+                            if (entry_diff <= (0.001 * stored_position["entry_price"])) and (item_time >= start_ms - 1000):
+                                matched_record = item
+                                break
+
+                    if matched_record:
+                        exit_reason = matched_record.get("exit_reason") or "TP_SL_RECONCILED"
+                        logger.info(f"Reconciling closed trade on Bybit: PnL=${matched_record['closed_pnl']:,.2f}, Reason={exit_reason}.")
+                        # STEP 5 FIX: Pass entry_order_id and exit_order_id
+                        record_closed_trade(
+                            conn=conn,
+                            strategy=strategy,
+                            entry_order_id=stored_position["order_id"],
+                            exit_order_id=matched_record["order_id"],
+                            direction=stored_position["direction"],
+                            entry_price=stored_position["entry_price"],
+                            exit_price=matched_record["exit_price"],
+                            quantity=matched_record["quantity"],
+                            pnl=matched_record["closed_pnl"],
+                            commission=matched_record["commission"],
+                            exit_reason=exit_reason,
+                            entry_time=stored_position["entry_time"],
+                            exit_time=matched_record.get("updated_time") or matched_record.get("created_time"),
+                        )
+                    else:
+                        logger.warning(
+                            f"No matching closed PnL record found for strategy #{strategy_id} "
+                            f"(entry_price={stored_position['entry_price']}, entry_time={stored_position['entry_time']})."
+                        )
                 else:
-                    logger.warning(
-                        f"No matching closed PnL record found for strategy #{strategy_id} "
-                        f"(entry_price={stored_position['entry_price']}, entry_time={stored_position['entry_time']})."
-                    )
-            else:
-                logger.debug(f"No stored active position in DB for strategy #{strategy_id}.")
+                    logger.debug(f"No stored active position in DB for strategy #{strategy_id}.")
 
-        # 2. Get latest candle signal and price
-        signal, current_price = get_latest_signal_and_price(strategy)
+            # 2. Get latest candle signal and price
+            signal, current_price = get_latest_signal_and_price(strategy)
 
-        # 3. New Entry Logic (No Position Open)
-        if not bybit_pos:
-            if signal != 0:
-                direction = "LONG" if signal == 1 else "SHORT"
-                # STEP 9: Validates TP/SL internally
-                quantity, tp_pct, sl_pct = calculate_position_quantity(conn, strategy, current_price, wallet["available_balance"])
-
-                tp_price = current_price * (1 + tp_pct) if direction == "LONG" else current_price * (1 - tp_pct)
-                sl_price = current_price * (1 - sl_pct) if direction == "LONG" else current_price * (1 + sl_pct)
-
-                order = executor.place_market_order(
-                    symbol=symbol,
-                    direction=direction,
-                    quantity=quantity,
-                    take_profit=tp_price,
-                    stop_loss=sl_price,
-                )
-
-                if order:
-                    entry_time = pd.Timestamp.now()
-                    upsert_execution_active_position(
-                        conn=conn,
-                        strategy_id=strategy_id,
-                        strategy_name=strategy_name,
-                        order_id=order["order_id"],
-                        exchange=strategy["exchange"],
-                        symbol=symbol,
-                        timeframe=strategy["timeframe"],
-                        direction=direction,
-                        entry_time=entry_time,
-                        entry_price=current_price,
-                        quantity=quantity,
-                        mark_price=current_price,
-                        liq_price=None,
-                        take_profit=tp_price,
-                        stop_loss=sl_price,
-                        unrealized_pnl=0.0,
-                    )
-                    logger.info(f"Opened New Position: {direction} {quantity} {symbol} at ${current_price:,.2f}.")
-
-        # 4. Signal Reversal Logic (Position Currently Open)
-        else:
-            current_dir = bybit_pos["direction"]
-            is_reversal = (current_dir == "LONG" and signal == -1) or (current_dir == "SHORT" and signal == 1)
-
-            if is_reversal:
-                logger.info(f"Signal Reversal: Closing {current_dir} and opening opposite position...")
-                if executor.close_position(symbol=symbol, direction=current_dir, quantity=bybit_pos["quantity"]):
-                    stored_pos = get_active_position_record(conn, strategy_id)
-                    entry_order_id = stored_pos["order_id"] if (stored_pos and stored_pos.get("order_id")) else bybit_pos.get("order_id", "UNKNOWN_ENTRY")
-
-                    closed_pnl_records = executor.get_closed_pnl(symbol, start_time=stored_pos.get("entry_time") if stored_pos else None)
-                    closed_pnl_data = closed_pnl_records[0] if closed_pnl_records else None
-
-                    pnl = closed_pnl_data["closed_pnl"] if closed_pnl_data else bybit_pos["unrealized_pnl"]
-                    exit_price = closed_pnl_data["exit_price"] if closed_pnl_data else current_price
-
-                    # STEP 4 FIX: Unique fallback for exit_order_id
-                    unique_fallback = f"REVERSAL_{strategy_id}_{int(pd.Timestamp.now().timestamp() * 1000)}"
-                    exit_order_id = closed_pnl_data["order_id"] if closed_pnl_data else unique_fallback
-
-                    # STEP 7 FIX: Real commission
-                    commission = (
-                        closed_pnl_data["commission"] if closed_pnl_data else executor.get_position_real_commission(symbol, start_time=stored_pos.get("entry_time") if stored_pos else None)
-                    )
-
-                    # STEP 5 FIX: Pass entry_order_id and exit_order_id
-                    record_closed_trade(
-                        conn=conn,
-                        strategy=strategy,
-                        entry_order_id=entry_order_id,
-                        exit_order_id=exit_order_id,
-                        direction=current_dir,
-                        entry_price=bybit_pos["entry_price"],
-                        exit_price=exit_price,
-                        quantity=bybit_pos["quantity"],
-                        pnl=pnl,
-                        commission=commission,
-                        exit_reason="SIGNAL_REVERSAL",
-                    )
-
-                    new_dir = "LONG" if signal == 1 else "SHORT"
+            # 3. New Entry Logic (No Position Open)
+            if not bybit_pos:
+                if signal != 0:
+                    direction = "LONG" if signal == 1 else "SHORT"
+                    # STEP 9: Validates TP/SL internally
                     quantity, tp_pct, sl_pct = calculate_position_quantity(conn, strategy, current_price, wallet["available_balance"])
 
-                    tp_price = current_price * (1 + tp_pct) if new_dir == "LONG" else current_price * (1 - tp_pct)
-                    sl_price = current_price * (1 - sl_pct) if new_dir == "LONG" else current_price * (1 + sl_pct)
+                    tp_price = current_price * (1 + tp_pct) if direction == "LONG" else current_price * (1 - tp_pct)
+                    sl_price = current_price * (1 - sl_pct) if direction == "LONG" else current_price * (1 + sl_pct)
 
-                    new_order = executor.place_market_order(
+                    order = executor.place_market_order(
                         symbol=symbol,
-                        direction=new_dir,
+                        direction=direction,
                         quantity=quantity,
                         take_profit=tp_price,
                         stop_loss=sl_price,
                     )
 
-                    if new_order:
+                    if order:
                         entry_time = pd.Timestamp.now()
                         upsert_execution_active_position(
                             conn=conn,
                             strategy_id=strategy_id,
                             strategy_name=strategy_name,
-                            order_id=new_order["order_id"],
+                            order_id=order["order_id"],
                             exchange=strategy["exchange"],
                             symbol=symbol,
                             timeframe=strategy["timeframe"],
-                            direction=new_dir,
+                            direction=direction,
                             entry_time=entry_time,
                             entry_price=current_price,
                             quantity=quantity,
@@ -366,35 +323,164 @@ def run_execution_cycle():
                             take_profit=tp_price,
                             stop_loss=sl_price,
                             unrealized_pnl=0.0,
+                            status="OPEN"
                         )
-                        logger.info(f"Position Flipped: New {new_dir} {quantity} {symbol} at ${current_price:,.2f}.")
+                        logger.info(f"Opened New Position: {direction} {quantity} {symbol} at ${current_price:,.2f}.")
 
+            # 4. Signal Reversal Logic (Position Currently Open)
             else:
-                # STEP 2 FIX: Do NOT overwrite order_id with "ACTIVE_ORDER". Reuse stored order_id.
-                # STEP 3 FIX: Do NOT reset entry_time to now(). Reuse stored entry_time.
-                stored_pos = get_active_position_record(conn, strategy_id)
-                order_id = stored_pos["order_id"] if (stored_pos and stored_pos.get("order_id")) else bybit_pos.get("order_id")
-                entry_time = stored_pos["entry_time"] if (stored_pos and stored_pos.get("entry_time")) else pd.Timestamp.now()
+                current_dir = bybit_pos["direction"]
+                is_reversal = (current_dir == "LONG" and signal == -1) or (current_dir == "SHORT" and signal == 1)
 
-                upsert_execution_active_position(
-                    conn=conn,
-                    strategy_id=strategy_id,
-                    strategy_name=strategy_name,
-                    order_id=order_id,
-                    exchange=strategy["exchange"],
-                    symbol=symbol,
-                    timeframe=strategy["timeframe"],
-                    direction=current_dir,
-                    entry_time=entry_time,
-                    entry_price=bybit_pos["entry_price"],
-                    quantity=bybit_pos["quantity"],
-                    mark_price=bybit_pos["mark_price"],
-                    liq_price=bybit_pos["liq_price"],
-                    take_profit=bybit_pos["take_profit"],
-                    stop_loss=bybit_pos["stop_loss"],
-                    unrealized_pnl=bybit_pos["unrealized_pnl"],
-                )
-                logger.info(f"Position Active: {current_dir} {bybit_pos['quantity']} {symbol} | Mark: ${bybit_pos['mark_price']:,.2f} | Unrel PnL: ${bybit_pos['unrealized_pnl']:,.2f}.")
+                if is_reversal:
+                    logger.info(f"Signal Reversal: Closing {current_dir} and opening opposite position...")
+                    if executor.close_position(symbol=symbol, direction=current_dir, quantity=bybit_pos["quantity"]):
+                        stored_pos = get_active_position_record(conn, strategy_id)
+                        entry_order_id = stored_pos["order_id"] if (stored_pos and stored_pos.get("order_id")) else bybit_pos.get("order_id", "UNKNOWN_ENTRY")
+
+                        closed_pnl_records = executor.get_closed_pnl(symbol, start_time=stored_pos.get("entry_time") if stored_pos else None)
+                        
+                        closed_pnl_data = None
+                        if closed_pnl_records and stored_pos and stored_pos.get("entry_time"):
+                            start_ms = int(pd.Timestamp(stored_pos["entry_time"]).timestamp() * 1000)
+                            for item in closed_pnl_records:
+                                entry_diff = abs(item["entry_price"] - bybit_pos["entry_price"])
+                                item_time = item["updated_time"] or item["created_time"]
+                                if (entry_diff <= (0.001 * bybit_pos["entry_price"])) and (item_time >= start_ms - 1000):
+                                    closed_pnl_data = item
+                                    break
+
+                        pnl = closed_pnl_data["closed_pnl"] if closed_pnl_data else bybit_pos["unrealized_pnl"]
+                        exit_price = closed_pnl_data["exit_price"] if closed_pnl_data else current_price
+
+                        # STEP 4 FIX: Unique fallback for exit_order_id
+                        unique_fallback = f"REVERSAL_{strategy_id}_{int(pd.Timestamp.now().timestamp() * 1000)}"
+                        exit_order_id = closed_pnl_data["order_id"] if closed_pnl_data else unique_fallback
+
+                        # STEP 7 FIX: Real commission
+                        commission = (
+                            closed_pnl_data["commission"] if closed_pnl_data else executor.get_position_real_commission(symbol, start_time=stored_pos.get("entry_time") if stored_pos else None)
+                        )
+
+                        # STEP 5 FIX: Pass entry_order_id and exit_order_id
+                        record_closed_trade(
+                            conn=conn,
+                            strategy=strategy,
+                            entry_order_id=entry_order_id,
+                            exit_order_id=exit_order_id,
+                            direction=current_dir,
+                            entry_price=bybit_pos["entry_price"],
+                            exit_price=exit_price,
+                            quantity=bybit_pos["quantity"],
+                            pnl=pnl,
+                            commission=commission,
+                            exit_reason="SIGNAL_REVERSAL",
+                            entry_time=stored_pos.get("entry_time") if stored_pos else None,
+                            exit_time=closed_pnl_data.get("updated_time") if closed_pnl_data else None,
+                        )
+
+                        new_dir = "LONG" if signal == 1 else "SHORT"
+                        quantity, tp_pct, sl_pct = calculate_position_quantity(conn, strategy, current_price, wallet["available_balance"])
+
+                        tp_price = current_price * (1 + tp_pct) if new_dir == "LONG" else current_price * (1 - tp_pct)
+                        sl_price = current_price * (1 - sl_pct) if new_dir == "LONG" else current_price * (1 + sl_pct)
+
+                        new_order = executor.place_market_order(
+                            symbol=symbol,
+                            direction=new_dir,
+                            quantity=quantity,
+                            take_profit=tp_price,
+                            stop_loss=sl_price,
+                        )
+
+                        if new_order:
+                            entry_time = pd.Timestamp.now()
+                            upsert_execution_active_position(
+                                conn=conn,
+                                strategy_id=strategy_id,
+                                strategy_name=strategy_name,
+                                order_id=new_order["order_id"],
+                                exchange=strategy["exchange"],
+                                symbol=symbol,
+                                timeframe=strategy["timeframe"],
+                                direction=new_dir,
+                                entry_time=entry_time,
+                                entry_price=current_price,
+                                quantity=quantity,
+                                mark_price=current_price,
+                                liq_price=None,
+                                take_profit=tp_price,
+                                stop_loss=sl_price,
+                                unrealized_pnl=0.0,
+                                status="OPEN"
+                            )
+                            logger.info(f"Position Flipped: New {new_dir} {quantity} {symbol} at ${current_price:,.2f}.")
+
+                else:
+                    # STEP 2 FIX: Do NOT overwrite order_id with "ACTIVE_ORDER". Reuse stored order_id.
+                    # STEP 3 FIX: Do NOT reset entry_time to now(). Reuse stored entry_time.
+                    stored_pos = get_active_position_record(conn, strategy_id)
+                    order_id = stored_pos["order_id"] if (stored_pos and stored_pos.get("order_id")) else bybit_pos.get("order_id")
+                    entry_time = stored_pos["entry_time"] if (stored_pos and stored_pos.get("entry_time")) else pd.Timestamp.now()
+
+                    upsert_execution_active_position(
+                        conn=conn,
+                        strategy_id=strategy_id,
+                        strategy_name=strategy_name,
+                        order_id=order_id,
+                        exchange=strategy["exchange"],
+                        symbol=symbol,
+                        timeframe=strategy["timeframe"],
+                        direction=current_dir,
+                        entry_time=entry_time,
+                        entry_price=bybit_pos["entry_price"],
+                        quantity=bybit_pos["quantity"],
+                        mark_price=bybit_pos["mark_price"],
+                        liq_price=bybit_pos["liq_price"],
+                        take_profit=bybit_pos["take_profit"],
+                        stop_loss=bybit_pos["stop_loss"],
+                        unrealized_pnl=bybit_pos["unrealized_pnl"],
+                        status="OPEN"
+                    )
+                    logger.info(f"Position Active: {current_dir} {bybit_pos['quantity']} {symbol} | Mark: ${bybit_pos['mark_price']:,.2f} | Unrel PnL: ${bybit_pos['unrealized_pnl']:,.2f}.")
+
+        # Account history ingestion step
+        try:
+            state = get_ingestion_state(conn)
+            last_exec = state.get("last_executions_time")
+            last_pnl = state.get("last_closed_pnl_time")
+            last_tx = state.get("last_tx_log_time")
+
+            acc_execs = executor.get_account_executions(start_time=last_exec)
+            acc_pnl = executor.get_account_closed_pnl(start_time=last_pnl)
+            acc_tx = executor.get_transaction_log(start_time=last_tx)
+
+            if acc_execs:
+                ingest_account_executions(conn, acc_execs)
+                max_exec = max([int(item.get("execTime", 0)) for item in acc_execs if item.get("execTime")])
+                if max_exec > (last_exec or 0):
+                    update_ingestion_state(conn, last_executions_time=max_exec)
+
+            if acc_pnl:
+                ingest_account_closed_pnl(conn, acc_pnl)
+                max_pnl = max([int(item.get("updatedTime", 0)) for item in acc_pnl if item.get("updatedTime")])
+                if max_pnl > (last_pnl or 0):
+                    update_ingestion_state(conn, last_closed_pnl_time=max_pnl)
+
+            if acc_tx:
+                ingest_account_transaction_log(conn, acc_tx)
+                max_tx = max([int(item.get("transactionTime", 0)) for item in acc_tx if item.get("transactionTime")])
+                if max_tx > (last_tx or 0):
+                    update_ingestion_state(conn, last_tx_log_time=max_tx)
+                    
+        except Exception as e:
+            logger.warning(f"Failed to ingest account history: {e}")
+
+        # Account stats cycle
+        try:
+            run_account_stats_cycle(conn)
+        except Exception as e:
+            logger.warning(f"Failed to run account stats cycle: {e}")
 
     except Exception as error:
         conn.rollback()

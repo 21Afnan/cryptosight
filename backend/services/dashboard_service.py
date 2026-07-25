@@ -7,6 +7,7 @@ connected exchange accounts, and real strategy definitions from PostgreSQL.
 import random
 from cryptosight.utils.db import get_connection
 from cryptosight.backend.services.strategy_service import get_all_strategies
+from cryptosight.execution.bybit_executor import BybitExecutor
 
 def generate_sparkline(base, length=20, drift=0.005, vol=0.02):
     if base is None or base == 0:
@@ -86,6 +87,15 @@ def get_dashboard_summary():
                     total_portfolio_value = float(row[1] or 0.0)
             except Exception:
                 conn.rollback()
+
+            # 6. Try fetching real live Bybit account wallet balance from execution API
+            try:
+                executor = BybitExecutor(conn=conn)
+                wallet = executor.get_wallet_balance("USDT")
+                if wallet and wallet.get("fetch_ok") and wallet.get("total_equity", 0.0) > 0:
+                    total_portfolio_value = float(wallet["total_equity"])
+            except Exception:
+                pass
 
     finally:
         conn.close()

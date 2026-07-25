@@ -10,6 +10,7 @@ import re
 import numpy as np
 import pandas as pd
 from cryptosight.utils.logger import get_logger
+from cryptosight.utils.metadata import fetch_execution_config
 
 logger = get_logger("AccountStats")
 
@@ -69,7 +70,7 @@ def fetch_account_history_data(conn) -> tuple:
     return df_executions, df_closed_pnl, df_tx_log
 
 
-def compute_account_metrics(df_exec: pd.DataFrame, df_pnl: pd.DataFrame, df_tx: pd.DataFrame) -> dict:
+def compute_account_metrics(conn, df_exec: pd.DataFrame, df_pnl: pd.DataFrame, df_tx: pd.DataFrame) -> dict:
     """
     Computes ~105 comprehensive account metrics and per-symbol breakdowns.
     """
@@ -124,6 +125,13 @@ def compute_account_metrics(df_exec: pd.DataFrame, df_pnl: pd.DataFrame, df_tx: 
     # Use closed_pnl as primary source if available
     df_trades = df_pnl if not df_pnl.empty else pd.DataFrame()
 
+    try:
+        exec_cfg = fetch_execution_config(conn)
+        initial_balance = float(exec_cfg.get("reference_balance", 0.0))
+    except Exception as e:
+        logger.warning(f"Failed to fetch execution config reference_balance: {e}")
+        initial_balance = 0.0
+
     if not df_trades.empty:
         pnl_col = "closed_pnl" if "closed_pnl" in df_trades.columns else ("closedPnl" if "closedPnl" in df_trades.columns else None)
         side_col = "side" if "side" in df_trades.columns else None
@@ -160,20 +168,37 @@ def compute_account_metrics(df_exec: pd.DataFrame, df_pnl: pd.DataFrame, df_tx: 
             if metrics["avg_loss_pnl"] != 0:
                 metrics["risk_reward_ratio"] = abs(metrics["avg_win_pnl"] / metrics["avg_loss_pnl"])
 
+            if "created_time" in df_trades.columns and "updated_time" in df_trades.columns:
+                holding_times = (pd.to_numeric(df_trades["updated_time"], errors='coerce') - pd.to_numeric(df_trades["created_time"], errors='coerce')) / 1000.0
+                valid_ht = holding_times.dropna()
+                if not valid_ht.empty:
+                    metrics["avg_holding_time_seconds"] = float(valid_ht.mean())
+                    metrics["max_holding_time_seconds"] = float(valid_ht.max())
+                    metrics["min_holding_time_seconds"] = float(valid_ht.min())
+
+                    win_ht = valid_ht[pnls.loc[valid_ht.index] > 0]
+                    loss_ht = valid_ht[pnls.loc[valid_ht.index] < 0]
+                    metrics["avg_win_holding_time_seconds"] = float(win_ht.mean()) if not win_ht.empty else 0.0
+                    metrics["avg_loss_holding_time_seconds"] = float(loss_ht.mean()) if not loss_ht.empty else 0.0
+
+            metrics["total_return_pct"] = float(metrics["net_pnl"] / initial_balance * 100.0) if initial_balance > 0 else 0.0
+
             # Cumulative returns and drawdown
             if total > 1:
                 cum = pnls.cumsum()
                 peak = np.maximum.accumulate(cum)
                 dd = (cum - peak)
-                metrics["max_drawdown_pct"] = abs(float(dd.min()))
+                metrics["max_drawdown_pct"] = abs(float(dd.min()) / initial_balance * 100.0) if initial_balance > 0 else 0.0
 
                 std = pnls.std()
                 if std > 0:
-                    metrics["sharpe_ratio"] = float((pnls.mean() / std) * np.sqrt(252))
+                    metrics["sharpe_ratio"] = float((pnls.mean() / std))
 
                 downside_std = pnls[pnls < 0].std()
                 if downside_std > 0:
-                    metrics["sortino_ratio"] = float((pnls.mean() / downside_std) * np.sqrt(252))
+                    metrics["sortino_ratio"] = float((pnls.mean() / downside_std))
+
+            metrics["calmar_ratio"] = float(metrics["total_return_pct"] / metrics["max_drawdown_pct"]) if metrics["max_drawdown_pct"] != 0 else 0.0
 
         # Side breakdowns
         if side_col and side_col in df_trades.columns:
@@ -299,7 +324,7 @@ def run_account_stats_cycle(conn):
     """
     try:
         df_exec, df_pnl, df_tx = fetch_account_history_data(conn)
-        metrics = compute_account_metrics(df_exec, df_pnl, df_tx)
+        metrics = compute_account_metrics(conn, df_exec, df_pnl, df_tx)
         upsert_account_stats(conn, metrics)
     except Exception as err:
         logger.error(f"Error running account stats cycle: {err}")

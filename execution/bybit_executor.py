@@ -14,8 +14,6 @@ from cryptosight.utils.metadata import fetch_execution_config
 from cryptosight.utils.logger import get_logger
 
 logger = get_logger("BybitExecutor")
-
-
 class BybitExecutor:
     """
     Bybit API Execution Client for Demo/Testnet Trading.
@@ -23,14 +21,21 @@ class BybitExecutor:
     Auto-syncs local timestamp with Bybit server time to eliminate clock drift errors.
     """
 
+    def to_epoch_ms(self, value):
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            # Already an epoch-millisecond value (e.g. from Bybit API fields like 
+            # createdTime/updatedTime, or from account_history.ingestion_state)
+            return int(value)
+        # Otherwise assume it's a pandas Timestamp / datetime / date-string
+        return int(pd.Timestamp(value).timestamp() * 1000)
+
     def __init__(self, conn):
         self.conn = conn
         self.exchange = "bybit"
 
-        # 1. Sync server time to prevent ErrCode 10002 timestamp skew
-        self.sync_server_time()
-
-        # 2. Fetch credentials from PostgreSQL account.api table
+        # 1. Fetch credentials from PostgreSQL account.api table
         api_creds = get_account_api(conn, self.exchange)
         if not api_creds:
             raise ValueError(f"No API credentials found in PostgreSQL 'account.api' for exchange '{self.exchange}'.")
@@ -38,6 +43,9 @@ class BybitExecutor:
         self.api_key = api_creds["api_key"]
         self.api_secret = api_creds["api_secret"]
         self.demo = api_creds["demo"]
+
+        # 2. Sync server time to prevent ErrCode 10002 timestamp skew
+        self.sync_server_time()
 
         # 3. Fetch execution settings from metadata.execution_config
         exec_cfg = fetch_execution_config(conn)
@@ -62,7 +70,7 @@ class BybitExecutor:
     def sync_server_time(self):
         """Auto-syncs local timestamp with Bybit server time to prevent ErrCode 10002."""
         try:
-            res = HTTP(demo=True).get_server_time()
+            res = HTTP(demo=self.demo).get_server_time()
             if res.get("retCode") == 0:
                 server_ms = int(res["result"]["timeNano"]) // 10**6
                 offset_ms = server_ms - int(time.time() * 1000)
@@ -213,23 +221,44 @@ class BybitExecutor:
 
         return False
 
-    def get_executions(self, symbol: str, start_time=None) -> list:
+    def get_executions(self, symbol: str, start_time=None, end_time=None) -> list:
         """
         STEP 7 helper: Fetches real execution fills from Bybit get_executions endpoint.
         """
         bybit_symbol = self.get_bybit_symbol(symbol)
         params = {"category": self.category, "symbol": bybit_symbol, "limit": 50}
+        
+        start_ms = None
         if start_time is not None:
             try:
-                start_ms = int(pd.Timestamp(start_time).timestamp() * 1000)
+                start_ms = self.to_epoch_ms(start_time)
                 params["startTime"] = start_ms
             except Exception as e:
                 logger.warning(f"Could not convert start_time '{start_time}' to ms: {e}")
+        
+        end_ms = None
+        if end_time is not None:
+            try:
+                end_ms = self.to_epoch_ms(end_time)
+                params["endTime"] = end_ms
+            except Exception as e:
+                logger.warning(f"Could not convert end_time '{end_time}' to ms: {e}")
 
         try:
             response = self.session.get_executions(**params)
             if response.get("retCode") == 0:
-                return response.get("result", {}).get("list", [])
+                execs = response.get("result", {}).get("list", [])
+                if start_ms or end_ms:
+                    filtered_execs = []
+                    for item in execs:
+                        exec_time = int(item.get("execTime", 0))
+                        if start_ms and exec_time < start_ms:
+                            continue
+                        if end_ms and exec_time > end_ms:
+                            continue
+                        filtered_execs.append(item)
+                    return filtered_execs
+                return execs
             else:
                 logger.warning(f"Bybit get_executions returned error: {response.get('retMsg')}")
         except Exception as error:
@@ -237,12 +266,12 @@ class BybitExecutor:
 
         return []
 
-    def get_position_real_commission(self, symbol: str, start_time=None) -> float:
+    def get_position_real_commission(self, symbol: str, start_time=None, end_time=None) -> float:
         """
         STEP 7 FIX: Sums actual execFee for executions from start_time onwards.
         If no execution data is returned, logs a warning and returns 0.0 (never a hardcoded fee rate).
         """
-        execs = self.get_executions(symbol, start_time=start_time)
+        execs = self.get_executions(symbol, start_time=start_time, end_time=end_time)
         if not execs:
             logger.warning(f"Fee data unavailable from get_executions for {symbol}; returning 0.0 real commission.")
             return 0.0
@@ -267,7 +296,7 @@ class BybitExecutor:
 
         if start_time is not None:
             try:
-                start_ms = int(pd.Timestamp(start_time).timestamp() * 1000)
+                start_ms = self.to_epoch_ms(start_time)
                 params["startTime"] = start_ms
             except Exception as e:
                 logger.warning(f"Could not parse start_time '{start_time}': {e}")
@@ -286,11 +315,11 @@ class BybitExecutor:
                     else:
                         exit_reason = None
 
-                    # STEP 7: Fetch real fee
-                    commission = self.get_position_real_commission(symbol, start_time=start_time)
-
                     created_time = int(item.get("createdTime", 0)) if item.get("createdTime") else 0
                     updated_time = int(item.get("updatedTime", 0)) if item.get("updatedTime") else 0
+
+                    # STEP 7: Fetch real fee scoped to this trade's window
+                    commission = self.get_position_real_commission(symbol, start_time=created_time, end_time=updated_time)
 
                     records.append({
                         "order_id": item.get("orderId"),
@@ -312,6 +341,126 @@ class BybitExecutor:
             logger.error(f"Error fetching closed PnL for {bybit_symbol}: {error}")
 
         return []
+
+    def get_account_executions(self, start_time=None, max_pages=20) -> list:
+        """
+        Fetches all account-wide executions without a symbol filter, with pagination.
+        """
+        params = {"category": self.category, "limit": 100}
+        if start_time is not None:
+            try:
+                params["startTime"] = self.to_epoch_ms(start_time)
+            except Exception as e:
+                logger.warning(f"Could not parse start_time '{start_time}': {e}")
+
+        all_records = []
+        page = 0
+        try:
+            while True:
+                if page >= max_pages:
+                    logger.warning(f"Reached max_pages limit ({max_pages}) in get_account_executions. Breaking.")
+                    break
+                page += 1
+                
+                response = self.session.get_executions(**params)
+                if response.get("retCode") == 0:
+                    result = response.get("result", {})
+                    items = result.get("list", [])
+                    if not items:
+                        break
+                    all_records.extend(items)
+                    next_cursor = result.get("nextPageCursor")
+                    if next_cursor:
+                        params["cursor"] = next_cursor
+                    else:
+                        break
+                else:
+                    logger.warning(f"Bybit get_executions (account) error: {response.get('retMsg')}")
+                    break
+        except Exception as error:
+            logger.error(f"Error fetching account executions: {error}")
+            
+        return all_records
+
+    def get_account_closed_pnl(self, start_time=None, max_pages=20) -> list:
+        """
+        Fetches all account-wide closed PnL without a symbol filter, with pagination.
+        """
+        params = {"category": self.category, "limit": 100}
+        if start_time is not None:
+            try:
+                params["startTime"] = self.to_epoch_ms(start_time)
+            except Exception as e:
+                logger.warning(f"Could not parse start_time '{start_time}': {e}")
+
+        all_records = []
+        page = 0
+        try:
+            while True:
+                if page >= max_pages:
+                    logger.warning(f"Reached max_pages limit ({max_pages}) in get_account_closed_pnl. Breaking.")
+                    break
+                page += 1
+                
+                response = self.session.get_closed_pnl(**params)
+                if response.get("retCode") == 0:
+                    result = response.get("result", {})
+                    items = result.get("list", [])
+                    if not items:
+                        break
+                    all_records.extend(items)
+                    next_cursor = result.get("nextPageCursor")
+                    if next_cursor:
+                        params["cursor"] = next_cursor
+                    else:
+                        break
+                else:
+                    logger.warning(f"Bybit get_closed_pnl (account) error: {response.get('retMsg')}")
+                    break
+        except Exception as error:
+            logger.error(f"Error fetching account closed PnL: {error}")
+            
+        return all_records
+
+    def get_transaction_log(self, start_time=None, max_pages=20) -> list:
+        """
+        Fetches account transaction log, with pagination.
+        """
+        params = {"accountType": "UNIFIED", "limit": 100}
+        if start_time is not None:
+            try:
+                params["startTime"] = self.to_epoch_ms(start_time)
+            except Exception as e:
+                logger.warning(f"Could not parse start_time '{start_time}': {e}")
+
+        all_records = []
+        page = 0
+        try:
+            while True:
+                if page >= max_pages:
+                    logger.warning(f"Reached max_pages limit ({max_pages}) in get_transaction_log. Breaking.")
+                    break
+                page += 1
+                
+                response = self.session.get_transaction_log(**params)
+                if response.get("retCode") == 0:
+                    result = response.get("result", {})
+                    items = result.get("list", [])
+                    if not items:
+                        break
+                    all_records.extend(items)
+                    next_cursor = result.get("nextPageCursor")
+                    if next_cursor:
+                        params["cursor"] = next_cursor
+                    else:
+                        break
+                else:
+                    logger.warning(f"Bybit get_transaction_log error: {response.get('retMsg')}")
+                    break
+        except Exception as error:
+            logger.error(f"Error fetching account transaction log: {error}")
+            
+        return all_records
 
 
 if __name__ == "__main__":

@@ -338,10 +338,10 @@ function StrategyDetailView({ id }) {
         {/* 4 Performance Charts: 2 per row (2 in row 1, 2 in row 2) */}
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2, mb: 3 }}>
           <ChartCard title="Equity Curve" height={300}>
-            <EquityCurveChart data={strategy.equity_curve ?? []} height={300} />
+            <EquityCurveChart data={strategy.charts?.returns?.raw_values?.length ? strategy.charts.returns.raw_values : (strategy.equity_curve ?? [])} height={300} />
           </ChartCard>
           <ChartCard title="Drawdown" height={300}>
-            <DrawdownChart data={strategy.drawdown_curve ?? []} height={300} />
+            <DrawdownChart data={strategy.charts?.drawdown?.raw_values?.length ? strategy.charts.drawdown.raw_values : (strategy.drawdown_curve ?? [])} height={300} />
           </ChartCard>
           <ChartCard title="Monthly Returns" height={270}>
             <MonthlyReturnsChart data={strategy.monthly_returns ?? []} height={270} />
@@ -374,9 +374,9 @@ function StrategyDetailView({ id }) {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {filteredTrades.map((trade) => (
-                      <TableRow key={trade.trade_id} hover>
-                        <TableCell>{trade.trade_id}</TableCell>
+                    {filteredTrades.map((trade, idx) => (
+                      <TableRow key={trade.trade_id || idx} hover>
+                        <TableCell><Typography variant="body2" sx={{ fontWeight: 600, color: theme.palette.text.secondary }}>{idx + 1}</Typography></TableCell>
                         <TableCell><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{trade.entry_time || '—'}</Typography></TableCell>
                         <TableCell><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{trade.exit_time || '—'}</Typography></TableCell>
                         <TableCell><StatusChip status={trade.side || trade.direction} /></TableCell>

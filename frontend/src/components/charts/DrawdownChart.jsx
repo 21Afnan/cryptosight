@@ -72,8 +72,26 @@ export default function DrawdownChart({ data = [], height = 220 }) {
 
       seriesRef.current = series;
 
-      if (data.length > 0) {
-        series.setData(data);
+      // Deduplicate by time and keep last value per day, then sort strictly ascending
+      const cleanData = [];
+      const map = new Map();
+      (data || []).forEach((item) => {
+        if (!item || item.time == null) return;
+        const timeStr = String(item.time).split(' ')[0].split('T')[0];
+        const val = Number(item.value ?? 0);
+        if (timeStr && !isNaN(val)) {
+          map.set(timeStr, val);
+        }
+      });
+
+      map.forEach((val, timeStr) => {
+        cleanData.push({ time: timeStr, value: val });
+      });
+
+      cleanData.sort((a, b) => (a.time > b.time ? 1 : a.time < b.time ? -1 : 0));
+
+      if (cleanData.length > 0) {
+        series.setData(cleanData);
         chart.timeScale().fitContent();
       }
 

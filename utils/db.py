@@ -782,6 +782,7 @@ def create_simulation_stats_table(conn):
         win_rate        NUMERIC(18,8),
         net_pnl         NUMERIC(18,8),
         final_balance   NUMERIC(18,8),
+        charts          JSONB,
         updated_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
     """
@@ -789,6 +790,8 @@ def create_simulation_stats_table(conn):
         with conn.cursor() as cursor:
             cursor.execute(create_schema_sql)
             cursor.execute(create_table_sql)
+            # Defensive alter table to add the charts column if the table already existed
+            cursor.execute("ALTER TABLE simulations.stats ADD COLUMN IF NOT EXISTS charts JSONB;")
             conn.commit()
             logger.info("Table 'simulations.stats' verified/created successfully.")
     except Exception as error:
@@ -834,20 +837,34 @@ def upsert_simulation_stats(
         "win_rate": win_rate,
         "net_pnl": net_pnl,
         "final_balance": final_balance,
+        "charts": None,
     }
 
     if has_trades:
         # Dynamically compute all QuantStats metrics
+        import json
         try:
             from cryptosight.stats.metrices import compute_all_metrics, to_json_safe
             if "perc_pnl" in ledger_df.columns and not ledger_df["perc_pnl"].empty:
-                raw_metrics = compute_all_metrics(ledger_df["perc_pnl"], is_percentage=False)
+                # QuantStats explicitly requires a DatetimeIndex to calculate metrics and plots!
+                returns_series = ledger_df.set_index("exit_time")["perc_pnl"]
+                returns_series.index = pd.to_datetime(returns_series.index)
+                
+                raw_metrics = compute_all_metrics(returns_series, is_percentage=False)
                 clean_metrics = to_json_safe(raw_metrics)
                 for metric_name, val in clean_metrics.items():
                     if isinstance(val, (dict, list)):
                         continue
                     col_key = re.sub(r'[^a-zA-Z0-9_]', '_', metric_name.lower())
                     data_map[col_key] = val
+                
+                # Generate Charts!
+                try:
+                    from cryptosight.stats.plots import generate_all_plots
+                    plots, master_json_data = generate_all_plots(returns_series, is_percentage=False)
+                    data_map["charts"] = json.dumps(master_json_data)
+                except Exception as chart_err:
+                    logger.warning(f"Could not compute chart plots for strategy '{strategy_name}': {chart_err}")
         except Exception as e:
             logger.warning(f"Could not compute tabular stats metrics for strategy '{strategy_name}': {e}")
 
@@ -855,7 +872,7 @@ def upsert_simulation_stats(
         with conn.cursor() as cursor:
             # Dynamically alter table to add any missing metric columns
             for col, val in data_map.items():
-                if col in ("strategy_id", "strategy_name", "exchange", "symbol", "timeframe"):
+                if col in ("strategy_id", "strategy_name", "exchange", "symbol", "timeframe", "charts"):
                     continue
                 col_type = "NUMERIC(18,8)" if isinstance(val, (int, float)) or val is None else "VARCHAR(255)"
                 cursor.execute(f"ALTER TABLE simulations.stats ADD COLUMN IF NOT EXISTS {col} {col_type};")
@@ -1034,7 +1051,7 @@ def upsert_execution_active_position(
     mark_price: float = None,
     liq_price: float = None,
     unrealized_pnl: float = 0.0,
-    status: str = "OPEN"
+    status: str="OPEN"
 ):
     """
     Inserts or updates an active open position row in `execution.active_positions`.
@@ -1112,12 +1129,14 @@ def create_execution_stats_table(conn):
         exchange        VARCHAR(32) NOT NULL,
         symbol          VARCHAR(32) NOT NULL,
         timeframe       VARCHAR(16) NOT NULL,
-        total_trades    INT DEFAULT 0,
-        winning_trades  INT DEFAULT 0,
-        losing_trades   INT DEFAULT 0,
-        win_rate        NUMERIC(18,8) DEFAULT 0.0,
+        total_trades    INTEGER DEFAULT 0,
+        winning_trades  INTEGER DEFAULT 0,
+        losing_trades   INTEGER DEFAULT 0,
+        win_rate        NUMERIC(5,2) DEFAULT 0.0,
         net_pnl         NUMERIC(18,8) DEFAULT 0.0,
-        final_balance   NUMERIC(18,8) DEFAULT 10000.0,
+        final_balance   NUMERIC(18,8) NOT NULL,
+        metrics         JSONB,
+        charts          JSONB,
         updated_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
     """
@@ -1125,6 +1144,11 @@ def create_execution_stats_table(conn):
         with conn.cursor() as cursor:
             cursor.execute(create_schema_sql)
             cursor.execute(create_table_sql)
+            
+            # Defensive alter table to add columns in case the table already existed before the JSONB update
+            cursor.execute("ALTER TABLE execution.stats ADD COLUMN IF NOT EXISTS metrics JSONB;")
+            cursor.execute("ALTER TABLE execution.stats ADD COLUMN IF NOT EXISTS charts JSONB;")
+            
             conn.commit()
             logger.info("Table 'execution.stats' verified/created successfully.")
     except Exception as error:
@@ -1214,8 +1238,8 @@ def upsert_execution_stats(
 ):
     """
     Inserts or updates live execution performance statistics and dynamic tabular metrics in `execution.stats`.
-    Dynamically creates PostgreSQL columns for all QuantStats performance metrics in execution.stats.
     """
+    import json
     import re
     create_execution_stats_table(conn)
 
@@ -1239,6 +1263,8 @@ def upsert_execution_stats(
         "win_rate": win_rate,
         "net_pnl": net_pnl,
         "final_balance": final_balance,
+        "metrics": None,
+        "charts": None,
     }
 
     if has_trades:
@@ -1246,24 +1272,27 @@ def upsert_execution_stats(
             from cryptosight.stats.metrices import compute_all_metrics, to_json_safe
             pnl_col = "net_pnl" if "net_pnl" in ledger_df.columns else "gross_pnl"
             if pnl_col in ledger_df.columns and not ledger_df[pnl_col].empty:
-                raw_metrics = compute_all_metrics(ledger_df[pnl_col], is_percentage=False)
+                # IMPORTANT: QuantStats explicitly requires the dates to be the INDEX of the series!
+                # We must set the 'exit_time' column as the index before passing it.
+                returns_series = ledger_df.set_index("exit_time")[pnl_col]
+                returns_series.index = pd.to_datetime(returns_series.index)
+                
+                raw_metrics = compute_all_metrics(returns_series, is_percentage=False)
                 clean_metrics = to_json_safe(raw_metrics)
-                for metric_name, val in clean_metrics.items():
-                    if isinstance(val, (dict, list)):
-                        continue
-                    col_key = re.sub(r'[^a-zA-Z0-9_]', '_', metric_name.lower())
-                    data_map[col_key] = val
+                data_map["metrics"] = json.dumps(clean_metrics)
+                
+                try:
+                    from cryptosight.stats.plots import generate_all_plots
+                    plots, master_json_data = generate_all_plots(returns_series, is_percentage=False)
+                    data_map["charts"] = json.dumps(master_json_data)
+                except Exception as chart_err:
+                    logger.warning(f"Could not compute chart metrics for strategy '{strategy_name}': {chart_err}")
+
         except Exception as e:
             logger.warning(f"Could not compute live execution metrics for strategy '{strategy_name}': {e}")
 
     try:
         with conn.cursor() as cursor:
-            for col, val in data_map.items():
-                if col in ("strategy_id", "strategy_name", "exchange", "symbol", "timeframe"):
-                    continue
-                col_type = "NUMERIC(18,8)" if isinstance(val, (int, float)) or val is None else "VARCHAR(255)"
-                cursor.execute(f"ALTER TABLE execution.stats ADD COLUMN IF NOT EXISTS {col} {col_type};")
-
             columns = list(data_map.keys())
             values = [data_map[col] for col in columns]
 
@@ -1293,13 +1322,17 @@ def calculate_and_store_stats(conn, strategy_id: int, schema_name: str, table_na
     Queries ledger history from `{schema_name}.{table_name}`, computes QuantStats metrics,
     and updates `{target_schema}.stats` table in PostgreSQL.
     """
-    from cryptosight.utils.metadata import fetch_simulator_config
+    from cryptosight.utils.metadata import fetch_simulator_config, fetch_execution_config
     query_sql = f"SELECT * FROM {schema_name}.{table_name};"
     try:
         df_ledger = pd.read_sql_query(query_sql, conn)
         if df_ledger is not None and not df_ledger.empty:
-            sim_cfg = fetch_simulator_config(conn)
-            initial_balance = float(sim_cfg["initial_balance"])
+            if target_schema.lower() == "execution":
+                exec_cfg = fetch_execution_config(conn)
+                initial_balance = float(exec_cfg["reference_balance"])
+            else:
+                sim_cfg = fetch_simulator_config(conn)
+                initial_balance = float(sim_cfg["initial_balance"])
 
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -1386,7 +1419,7 @@ def upsert_account_history_records(conn, table_name: str, records: list, pkey_co
                 if isinstance(sample_val, bool):
                     col_type = "BOOLEAN"
                 elif isinstance(sample_val, (int, float)):
-                    col_type = "NUMERIC(18,8)"
+                    col_type = "NUMERIC(32,8)"
                 elif isinstance(sample_val, (dict, list)):
                     col_type = "JSONB"
                 else:
@@ -1434,6 +1467,77 @@ def ingest_account_closed_pnl(conn, closed_pnl_list: list):
 
 def ingest_account_transaction_log(conn, tx_log_list: list):
     """Stores raw Bybit transaction log into account_history.transaction_log."""
-    upsert_account_history_records(conn, "transaction_log", tx_log_list, pkey_col="id")
+    upsert_account_history_records(conn, "transaction_log", tx_log_list, pkey_col="transactionId")
 
 
+def create_ingestion_state_table(conn):
+    """
+    Creates the 'account_history.ingestion_state' table to track last ingested timestamps.
+    """
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS account_history;"
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS account_history.ingestion_state (
+        id SMALLINT PRIMARY KEY,
+        last_executions_time TIMESTAMP WITH TIME ZONE DEFAULT to_timestamp(0),
+        last_closed_pnl_time TIMESTAMP WITH TIME ZONE DEFAULT to_timestamp(0),
+        last_tx_log_time TIMESTAMP WITH TIME ZONE DEFAULT to_timestamp(0),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_schema_sql)
+            try:
+                cursor.execute("ALTER TABLE account_history.ingestion_state ALTER COLUMN last_executions_time TYPE TIMESTAMP WITH TIME ZONE USING to_timestamp(last_executions_time / 1000.0);")
+                cursor.execute("ALTER TABLE account_history.ingestion_state ALTER COLUMN last_closed_pnl_time TYPE TIMESTAMP WITH TIME ZONE USING to_timestamp(last_closed_pnl_time / 1000.0);")
+                cursor.execute("ALTER TABLE account_history.ingestion_state ALTER COLUMN last_tx_log_time TYPE TIMESTAMP WITH TIME ZONE USING to_timestamp(last_tx_log_time / 1000.0);")
+            except Exception:
+                conn.rollback() 
+            
+            cursor.execute(create_table_sql)
+            cursor.execute("INSERT INTO account_history.ingestion_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;")
+            conn.commit()
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating account_history.ingestion_state: {error}")
+        raise
+
+def get_ingestion_state(conn) -> dict:
+    """Returns the last ingested timestamps as a dict."""
+    create_ingestion_state_table(conn)
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT extract(epoch from last_executions_time)*1000, extract(epoch from last_closed_pnl_time)*1000, extract(epoch from last_tx_log_time)*1000 FROM account_history.ingestion_state WHERE id = 1;")
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "last_executions_time": int(row[0]) if row[0] is not None else 0,
+                    "last_closed_pnl_time": int(row[1]) if row[1] is not None else 0,
+                    "last_tx_log_time": int(row[2]) if row[2] is not None else 0
+                }
+    except Exception as error:
+        logger.error(f"Error fetching ingestion state: {error}")
+    return {}
+
+def update_ingestion_state(conn, **kwargs):
+    """Updates specific last_*_time fields."""
+    updates = []
+    values = []
+    for k, v in kwargs.items():
+        if k in ("last_executions_time", "last_closed_pnl_time", "last_tx_log_time") and v is not None:
+            updates.append(f"{k} = %s")
+            values.append(v)
+            
+    if not updates:
+        return
+        
+    updates.append("updated_at = CURRENT_TIMESTAMP")
+    sql = f"UPDATE account_history.ingestion_state SET {', '.join(updates)} WHERE id = 1;"
+    
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(sql, tuple(values))
+            conn.commit()
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error updating ingestion state: {error}")

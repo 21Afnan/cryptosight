@@ -604,13 +604,7 @@ def fetch_simulator_config(conn) -> dict:
         conn.rollback()
         logger.error(f"Error fetching simulator config: {error}")
 
-    return {
-        "initial_balance": 1000.0,
-        "position_size_type": "percent",
-        "position_size_value": 10.0,
-        "commission": 0.0006,
-        "slippage": 0.0001,
-    }
+    raise RuntimeError("metadata.simulator_config could not be fetched and no config exists — cannot proceed without real config")
 
 
 def create_simulation_data(conn):
@@ -709,6 +703,9 @@ def create_execution_config(conn):
         config_id         INT PRIMARY KEY DEFAULT 1,
         category          VARCHAR(32) NOT NULL DEFAULT 'linear',
         order_type        VARCHAR(32) NOT NULL DEFAULT 'Market',
+        position_size_type VARCHAR(50) NOT NULL,
+        position_size_value NUMERIC(10,4) NOT NULL,
+        reference_balance NUMERIC(18,2) NOT NULL,
         updated_at        TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
     """
@@ -716,6 +713,10 @@ def create_execution_config(conn):
         with conn.cursor() as cursor:
             cursor.execute(create_schema_sql)
             cursor.execute(create_table_sql)
+            # Add columns for existing tables
+            cursor.execute("ALTER TABLE metadata.execution_config ADD COLUMN IF NOT EXISTS position_size_type VARCHAR(50);")
+            cursor.execute("ALTER TABLE metadata.execution_config ADD COLUMN IF NOT EXISTS position_size_value NUMERIC(10,4);")
+            cursor.execute("ALTER TABLE metadata.execution_config ADD COLUMN IF NOT EXISTS reference_balance NUMERIC(18,2);")
             conn.commit()
             logger.info("Table 'metadata.execution_config' verified/created successfully.")
     except Exception as error:
@@ -726,6 +727,9 @@ def create_execution_config(conn):
 
 def upsert_execution_config(
     conn,
+    position_size_type: str,
+    position_size_value: float,
+    reference_balance: float,
     category: str = "linear",
     order_type: str = "Market",
 ) -> dict:
@@ -737,20 +741,35 @@ def upsert_execution_config(
 
     upsert_sql = """
     INSERT INTO metadata.execution_config (
-        config_id, category, order_type, updated_at
+        config_id, category, order_type, position_size_type, position_size_value, reference_balance, updated_at
     )
-    VALUES (1, %s, %s, CURRENT_TIMESTAMP)
+    VALUES (1, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
     ON CONFLICT (config_id) DO UPDATE SET
         category   = EXCLUDED.category,
         order_type = EXCLUDED.order_type,
+        position_size_type = EXCLUDED.position_size_type,
+        position_size_value = EXCLUDED.position_size_value,
+        reference_balance = EXCLUDED.reference_balance,
         updated_at = CURRENT_TIMESTAMP;
     """
     try:
         with conn.cursor() as cursor:
-            cursor.execute(upsert_sql, (category.lower().strip(), order_type.strip()))
+            cursor.execute(upsert_sql, (
+                category.lower().strip(), 
+                order_type.strip(),
+                position_size_type.strip(),
+                float(position_size_value),
+                float(reference_balance)
+            ))
             conn.commit()
             logger.info(f"Execution config saved to 'metadata.execution_config' (category='{category}', order_type='{order_type}').")
-            return {"category": category, "order_type": order_type}
+            return {
+                "category": category, 
+                "order_type": order_type,
+                "position_size_type": position_size_type,
+                "position_size_value": position_size_value,
+                "reference_balance": reference_balance
+            }
     except Exception as error:
         conn.rollback()
         logger.error(f"Error upserting execution config: {error}")
@@ -764,14 +783,24 @@ def fetch_execution_config(conn) -> dict:
     create_execution_config(conn)
     try:
         with conn.cursor() as cursor:
-            cursor.execute("SELECT category, order_type FROM metadata.execution_config LIMIT 1;")
+            cursor.execute("SELECT category, order_type, position_size_type, position_size_value, reference_balance FROM metadata.execution_config LIMIT 1;")
             row = cursor.fetchone()
             if row:
-                return {"category": str(row[0]), "order_type": str(row[1])}
+                if row[2] is None or row[3] is None or row[4] is None:
+                    raise RuntimeError("metadata.execution_config has missing required fields (position_size_type, position_size_value, reference_balance) — cannot proceed without real config")
+                return {
+                    "category": str(row[0]), 
+                    "order_type": str(row[1]),
+                    "position_size_type": str(row[2]),
+                    "position_size_value": float(row[3]),
+                    "reference_balance": float(row[4])
+                }
     except Exception as error:
         conn.rollback()
         logger.error(f"Error fetching metadata.execution_config: {error}")
-    return {"category": "linear", "order_type": "Market"}
+        raise RuntimeError(f"metadata.execution_config could not be fetched and no config exists — cannot proceed without real config: {error}")
+    
+    raise RuntimeError("metadata.execution_config could not be fetched and no config exists — cannot proceed without real config")
 
 
 

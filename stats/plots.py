@@ -328,7 +328,8 @@ def generate_all_plots(returns: pd.Series, is_percentage: bool = False, output_d
                 raw_records = []
                 if raw_s is not None and not raw_s.empty:
                     for t, v in raw_s.items():
-                        raw_records.append({"time": str(t), "value": round(float(v), 6) if pd.notnull(v) else None})
+                        time_str = str(t).split(" ")[0].split("T")[0] if pd.notnull(t) else ""
+                        raw_records.append({"time": time_str, "value": round(float(v), 6) if pd.notnull(v) else None})
                 
                 master_json_data[name] = {
                     "plotly_figure": json.loads(fig.to_json()),
@@ -341,4 +342,4 @@ def generate_all_plots(returns: pd.Series, is_percentage: bool = False, output_d
     except Exception as e:
         logger.warning(f"Could not export master charts JSON report: {e}")
 
-    return plots
+    return plots, master_json_data

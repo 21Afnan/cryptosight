@@ -5,6 +5,7 @@ Queries strategy definitions from metadata.strategy_data joined with simulations
 and trade ledgers from simulation_ledgers schema.
 """
 import json
+import pandas as pd
 from cryptosight.utils.db import get_connection
 
 def get_all_strategies():
@@ -31,7 +32,8 @@ def get_all_strategies():
                     COALESCE(sim.win_rate, 0.0) AS win_rate,
                     COALESCE(sim.net_pnl, 0.0) AS net_pnl,
                     sim.final_balance AS final_balance,
-                    sim.sharpe AS sharpe
+                    sim.sharpe AS sharpe,
+                    sim.charts AS charts
                 FROM metadata.strategy_data s
                 LEFT JOIN simulations.stats sim ON s.strategy_id = sim.strategy_id
                 ORDER BY s.strategy_id ASC;
@@ -53,6 +55,17 @@ def get_all_strategies():
                 raw_sharpe = r[9]
                 sharpe_val = round(float(raw_sharpe), 2) if raw_sharpe is not None else None
 
+                raw_charts = r[10]
+                charts_val = None
+                if raw_charts is not None:
+                    if isinstance(raw_charts, (dict, list)):
+                        charts_val = raw_charts
+                    elif isinstance(raw_charts, str):
+                        try:
+                            charts_val = json.loads(raw_charts)
+                        except Exception:
+                            charts_val = None
+
                 strategies.append({
                     "id": r[0],
                     "strategy_id": r[0],
@@ -68,6 +81,7 @@ def get_all_strategies():
                     "net_pnl": net_pnl,
                     "latest_return": round(calc_return, 4),
                     "sharpe": sharpe_val,
+                    "charts": charts_val,
                 })
             return strategies
     finally:
@@ -165,6 +179,10 @@ def get_strategy_by_id(identifier):
                 t_rows = cursor.fetchall()
                 balance = init_bal
                 peak = init_bal
+                
+                m_returns = {}
+                pnl_counts = {"loss_large": 0, "loss_small": 0, "win_small": 0, "win_large": 0}
+                
                 for tr in t_rows:
                     pnl = float(tr[1] or 0)
                     balance += pnl
@@ -172,11 +190,48 @@ def get_strategy_by_id(identifier):
                         peak = balance
                     dd = (balance - peak) / peak if peak else 0.0
                     time_str = str(tr[0])[:10] if tr[0] else ""
+                    
+                    if tr[0]:
+                        try:
+                            m_key = pd.to_datetime(tr[0]).strftime("%b %y")
+                            m_returns[m_key] = m_returns.get(m_key, 0.0) + pnl
+                        except Exception:
+                            pass
+                    
+                    if pnl < -50:
+                        pnl_counts["loss_large"] += 1
+                    elif pnl < 0:
+                        pnl_counts["loss_small"] += 1
+                    elif pnl < 50:
+                        pnl_counts["win_small"] += 1
+                    else:
+                        pnl_counts["win_large"] += 1
+                        
                     equity_curve.append({"time": time_str, "value": round(balance, 2)})
                     drawdown_curve.append({"time": time_str, "value": round(dd, 4)})
-                    trade_distribution.append({"pnl": round(pnl, 2)})
+
+                for m, val in m_returns.items():
+                    monthly_returns.append({"month": m, "value": round(val / init_bal, 4) if init_bal else 0.0})
+                    
+                trade_distribution = [
+                    {"range": "< -$50", "count": pnl_counts["loss_large"], "positive": False},
+                    {"range": "-$50 to $0", "count": pnl_counts["loss_small"], "positive": False},
+                    {"range": "$0 to $50", "count": pnl_counts["win_small"], "positive": True},
+                    {"range": "> $50", "count": pnl_counts["win_large"], "positive": True},
+                ]
             except Exception:
                 pass
+
+            raw_charts = sim_dict.get("charts")
+            charts_val = None
+            if raw_charts is not None:
+                if isinstance(raw_charts, (dict, list)):
+                    charts_val = raw_charts
+                elif isinstance(raw_charts, str):
+                    try:
+                        charts_val = json.loads(raw_charts)
+                    except Exception:
+                        charts_val = None
 
             return {
                 "strategy_id": strat_id,
@@ -220,6 +275,7 @@ def get_strategy_by_id(identifier):
                 "drawdown_curve": drawdown_curve,
                 "monthly_returns": monthly_returns,
                 "trade_distribution": trade_distribution,
+                "charts": charts_val,
             }
     finally:
         conn.close()
