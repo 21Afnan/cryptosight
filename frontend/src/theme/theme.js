@@ -133,7 +133,7 @@ const buildComponents = (mode) => {
   const isDark = mode === 'dark';
   const cardShadow = isDark
     ? '0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04)'
-    : '0 4px 24px rgba(15,40,25,0.06)';
+    : '0 6px 22px rgba(14, 203, 129, 0.25)';
 
   return {
     MuiCssBaseline: {
@@ -158,7 +158,7 @@ const buildComponents = (mode) => {
       styleOverrides: {
         root: {
           borderRadius: '20px',
-          border: 'none',  // Separation comes from shadow, not borders
+          border: 'none',
           backgroundImage: 'none',
           boxShadow: cardShadow,
           transition: 'transform 200ms ease, box-shadow 200ms ease',
@@ -166,7 +166,7 @@ const buildComponents = (mode) => {
             transform: 'translateY(-2px)',
             boxShadow: isDark
               ? '0 8px 36px rgba(0,0,0,0.5), 0 0 0 1px rgba(94,139,110,0.12)'
-              : '0 8px 36px rgba(15,40,25,0.1), 0 0 0 1px rgba(94,139,110,0.08)',
+              : '0 14px 36px rgba(14, 203, 129, 0.38)',
           },
         },
       },

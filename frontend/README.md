@@ -1,7 +1,7 @@
 # CryptoSight Frontend
 
 A production-grade quantitative crypto trading dashboard built with **React 18 + Vite + MUI**.  
-Design philosophy: Bloomberg Terminal aesthetics — data-dense, dark-first, unmistakably a trading terminal.
+Design philosophy: Bloomberg Terminal aesthetics — data-dense, dark-first, unmistakably a trading terminal with soft fintech crystal glass styling.
 
 ---
 
@@ -13,7 +13,7 @@ Design philosophy: Bloomberg Terminal aesthetics — data-dense, dark-first, unm
 | UI Library | MUI v5 (Material-UI) |
 | Charts | `lightweight-charts` (OHLC/equity/drawdown) + `recharts` (bars/distributions/sparklines) |
 | Routing | react-router-dom v6 |
-| State | React Context (theme only) + page-local `useMockFetch` hook |
+| State | React Context (theme & sidebar) + page-local `useMockFetch` hook |
 | Styling | MUI `sx` prop + custom theme overrides (no TailwindCSS) |
 | Fonts | Inter (Google Fonts, loaded via index.html) |
 
@@ -38,8 +38,8 @@ npm run build     # production bundle check
 |---|---|---|
 | Scaffold & Config | `index.html`, `vite.config.js`, `package.json` | ✅ |
 | Theme | `src/theme/theme.js` | ✅ |
-| Hook | `src/hooks/useMockFetch.js` | ✅ |
-| UI primitives | `StatusChip`, `StatCard`, `EmptyState`, `LoadingSkeleton`, `ConfirmDialog`, `SearchBar` | ✅ |
+| Hooks & Context | `src/hooks/useMockFetch.js`, `SidebarContext.jsx`, `SearchContext.jsx` | ✅ |
+| UI primitives | `StatusChip`, `StatCard`, `EmptyState`, `LoadingSkeleton`, `ConfirmDialog`, `SearchBar`, `LedgerFilterBar` | ✅ |
 | Layout | `Sidebar`, `Topbar`, `PageContainer` | ✅ |
 | Charts (14) | `PriceChart`, `EquityCurveChart`, `DrawdownChart`, `SparklineChart`, `DistributionChart`, `MonthlyReturnsChart`, `PositionSizeChart`, `DailyReturnsChart`, `TradeHistoryChart`, `RollingMetricsChart`, `SentimentGauge`, `SentimentTimelineChart`, `NewsVolumeChart`, `NewsSentimentChart` | ✅ |
 | Mock Data (7) | `dashboardMock`, `strategiesMock`, `walletsMock`, `deploymentMock`, `backtestsMock`, `mlMock`, `sentimentMock` | ✅ |
@@ -49,11 +49,19 @@ npm run build     # production bundle check
 
 ---
 
+## Recent Highlights
+
+- 🟩 **Dynamic Profit/Loss Color Engine**: Cards dynamically render in Green (`#0ECB81`) for profit/healthy metrics (PnL `> $0`, Win Rate `≥ 50%`, Sharpe `≥ 1.0`, Sortino `≥ 1.0`, Calmar `≥ 1.0`) and Red (`#F6465D`) for loss/unhealthy metrics.
+- 📐 **Equal-Sized Cards Grid**: All metric flashcards have fixed `minHeight: 110px`, equal flexbox alignment, and uniform border radius across both light and dark modes.
+- 📈 **100% Full-Width Charts**: Equity Curve & Drawdown charts dynamically compute parent bounding box width, filling 100% of available card space.
+
+---
+
 ## Folder Structure
 
 ```
 frontend/src/
-├── api/                  # Async API functions (swap body for real FastAPI later)
+├── api/                  # Async API functions (ready for FastAPI integration)
 │   ├── dashboardApi.js
 │   ├── strategiesApi.js
 │   ├── walletsApi.js
@@ -62,20 +70,11 @@ frontend/src/
 │   ├── mlApi.js
 │   └── sentimentApi.js
 ├── mock/                 # Raw mock data — field names mirror PostgreSQL schema
-│   ├── dashboardMock.js
-│   ├── strategiesMock.js
-│   ├── walletsMock.js
-│   ├── deploymentMock.js
-│   ├── backtestsMock.js
-│   ├── mlMock.js
-│   └── sentimentMock.js
-├── theme/
-│   └── theme.js          # darkTheme, lightTheme, COLORS, GRADIENTS
-├── hooks/
-│   └── useMockFetch.js   # { data, loading, error, refetch }
+├── theme/                # darkTheme, lightTheme, COLORS, GRADIENTS
+├── hooks/                # useMockFetch ({ data, loading, error, refetch })
 ├── components/
 │   ├── layout/           # Sidebar, Topbar, PageContainer
-│   ├── ui/               # StatusChip, StatCard, EmptyState, LoadingSkeleton, ConfirmDialog, SearchBar
+│   ├── ui/               # StatusChip, StatCard, EmptyState, LoadingSkeleton, ConfirmDialog, SearchBar, LedgerFilterBar
 │   └── charts/           # 14 chart components
 └── pages/
     ├── Dashboard/
@@ -102,52 +101,11 @@ frontend/src/
 | `/wallets` | Wallet Management | CRUD + drawer with 4 sections |
 | `/deployment` | Deployment | Active executions table |
 | `/deployment/:id` | Execution Details | Position + 4 charts + signal history |
-| `/backtests` | Backtest Requests | Config form + 5-tab status list |
-| `/backtests/:id` | Backtest Details | Full stats + 4 charts + trade list |
+| `/backtests` | Backtest Requests | Presets + Config form + status catalog |
+| `/backtests/:id` | Backtest Details | 8 equal dynamic cards + full-width charts + ledger |
 | `/ml` | Machine Learning | Models table |
-| `/ml/:id` | Model Details | Dataset info + training + feature importance |
+| `/ml/:id` | Model Details | Dataset info + training + evaluation metrics |
 | `/sentiment` | Sentiment | Fear & Greed + 6 charts + symbol table |
-
----
-
-## Design System
-
-### Colors (`COLORS` export from theme.js)
-
-| Token | Value | Use |
-|---|---|---|
-| `accent` | `#38BDF8` | Brand, active states, links |
-| `pnlGreen` | `#16C784` | Profit, long, bullish |
-| `pnlRed` | `#EA3943` | Loss, short, bearish |
-| `warning` | `#F0B90B` | Pending, paused, neutral sentiment |
-| `darkBg` | `#0A0B0F` | Page background (dark) |
-| `lightBg` | `#F8F9FB` | Page background (light) |
-
-### Theme Toggle
-- Stored in `localStorage` key `cryptosight_theme`
-- Toggle button in Topbar (top-right)
-- ThemeContext wraps the entire app via `App.jsx`
-
----
-
-## Security Notes
-
-- ✅ No `dangerouslySetInnerHTML` used anywhere  
-- ✅ API keys always masked (`****...XXXX`) — never stored/displayed in full  
-- ✅ No `console.log` of financial data  
-- ✅ No real network calls — all data is in-memory mock  
-- ✅ React JSX auto-escaping enforced throughout  
-- `TODO(security)` markers in: `walletsApi.js`, `backtestsApi.js`, `useMockFetch.js`  
-
----
-
-## Connecting to Real FastAPI Backend
-
-When the backend is ready:  
-1. Replace the `import` + `delay()` body in each `src/api/*.js` file with `axios.get('/api/...')` calls  
-2. Ensure all responses match the same paginated shape: `{ data: [...], total, page, pageSize }`  
-3. The mock files in `src/mock/` can be kept as test fixtures  
-4. Add HTTPS enforcement, CSRF tokens, and auth headers as noted in TODO(security) markers  
 
 ---
 
@@ -167,4 +125,4 @@ When the backend is ready:
 
 ---
 
-*Last updated: 2025-07-24 — All 10 pages and full data layer complete.*
+*Last updated: July 2026 — All 10 pages, equal-sized dynamic cards, 100% chart scaling, and full data layer complete.*

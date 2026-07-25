@@ -22,7 +22,23 @@ export default function DrawdownChart({ data = [], height = 220 }) {
     if (!containerRef.current) return;
 
     try {
-      const initialWidth = containerRef.current.clientWidth || 320;
+      const getContainerWidth = () => {
+        if (!containerRef.current) return 600;
+        const cardContent = containerRef.current.closest('.MuiCardContent-root');
+        if (cardContent) {
+          const cardWidth = cardContent.getBoundingClientRect().width;
+          const isHalf = Boolean(containerRef.current.closest('.MuiGrid-item'));
+          const calculatedWidth = isHalf ? (cardWidth - 56) / 2 : (cardWidth - 32);
+          if (calculatedWidth > 200) return calculatedWidth;
+        }
+        const parent = containerRef.current.parentElement;
+        if (parent && parent.clientWidth > 200) {
+          return parent.clientWidth - 16;
+        }
+        return 600;
+      };
+
+      const initialWidth = getContainerWidth();
 
       const chart = createChart(containerRef.current, {
         width: initialWidth,
@@ -32,7 +48,7 @@ export default function DrawdownChart({ data = [], height = 220 }) {
           textColor: isDark ? COLORS.darkTextSecondary : '#6B7280',
           fontFamily: '"Inter", sans-serif',
           fontSize: 11,
-          attributionLogo: false, // Removes overlapping watermark
+          attributionLogo: false,
         },
         grid: {
           vertLines: { color: isDark ? COLORS.chartGridDark : COLORS.chartGridLight },
@@ -54,7 +70,6 @@ export default function DrawdownChart({ data = [], height = 220 }) {
         },
       });
 
-      chart.timeScale().fitContent();
       chartRef.current = chart;
 
       const areaOptions = {
@@ -95,14 +110,35 @@ export default function DrawdownChart({ data = [], height = 220 }) {
         chart.timeScale().fitContent();
       }
 
-      const ro = new ResizeObserver(() => {
+      const handleResize = () => {
         if (containerRef.current && chartRef.current) {
-          chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
+          const w = getContainerWidth();
+          if (w > 0) {
+            chartRef.current.applyOptions({ width: w });
+            chartRef.current.timeScale().fitContent();
+          }
         }
+      };
+
+      const resizeTimer = setTimeout(handleResize, 30);
+      const resizeTimer2 = setTimeout(handleResize, 150);
+      const resizeTimer3 = setTimeout(handleResize, 400);
+
+      const ro = new ResizeObserver(() => {
+        handleResize();
       });
+
+      const cardContent = containerRef.current.closest('.MuiCardContent-root');
+      if (cardContent) ro.observe(cardContent);
       ro.observe(containerRef.current);
 
+      window.addEventListener('resize', handleResize);
+
       return () => {
+        clearTimeout(resizeTimer);
+        clearTimeout(resizeTimer2);
+        clearTimeout(resizeTimer3);
+        window.removeEventListener('resize', handleResize);
         ro.disconnect();
         try {
           chart.remove();
@@ -126,5 +162,15 @@ export default function DrawdownChart({ data = [], height = 220 }) {
     }
   }, [data]);
 
-  return <Box ref={containerRef} sx={{ width: '100%', height }} />;
+  return (
+    <Box
+      ref={containerRef}
+      sx={{
+        width: '100%',
+        height,
+        minWidth: 0,
+        '& .tv-lightweight-charts': { width: '100% !important' },
+      }}
+    />
+  );
 }

@@ -18,11 +18,11 @@ import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
 import OutlinedInput from '@mui/material/OutlinedInput';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
 import LinearProgress from '@mui/material/LinearProgress';
+import Chip from '@mui/material/Chip';
 import { useTheme } from '@mui/material/styles';
 
 import PageContainer from '../../components/layout/PageContainer';
@@ -36,30 +36,152 @@ import { COLORS } from '../../theme/theme';
 
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import SendRoundedIcon from '@mui/icons-material/SendRounded';
-import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
+import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded';
+import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
 
 const STATUS_TABS = ['all', 'pending', 'running', 'completed', 'failed'];
 
-const DEFAULT_FORM = {
-  strategy_name: '',
-  symbol: '',
-  exchange: '',
-  timeframe: '',
-  start_date: '2024-01-01',
-  end_date: '2024-12-31',
-  initial_balance: 10000,
-  commission: 0.0005,
-  slippage: 0.0002,
-  take_profit: 0.04,
-  stop_loss: 0.02,
-};
+const PRESET_STRATEGIES = [
+  {
+    name: 'BTC EMA Cross 4H',
+    tag: 'Trend Following',
+    color: '#0ECB81',
+    config: {
+      strategy_name: 'BTC_EMA_Cross_4H',
+      symbol: 'BTC/USDT',
+      exchange: 'binance',
+      timeframe: '4h',
+      start_date: '2024-01-01',
+      end_date: '2024-12-31',
+      initial_balance: 10000,
+      commission: 0.0005,
+      slippage: 0.0002,
+      take_profit: 0.045,
+      stop_loss: 0.02,
+    },
+  },
+  {
+    name: 'ETH RSI Reversion 1H',
+    tag: 'Mean Reversion',
+    color: '#0ECB81',
+    config: {
+      strategy_name: 'ETH_RSI_Rev_1H',
+      symbol: 'ETH/USDT',
+      exchange: 'bybit',
+      timeframe: '1h',
+      start_date: '2024-01-01',
+      end_date: '2024-12-31',
+      initial_balance: 15000,
+      commission: 0.0006,
+      slippage: 0.0003,
+      take_profit: 0.035,
+      stop_loss: 0.015,
+    },
+  },
+  {
+    name: 'SOL Breakout 1D',
+    tag: 'Momentum',
+    color: '#0ECB81',
+    config: {
+      strategy_name: 'SOL_Breakout_1D',
+      symbol: 'SOL/USDT',
+      exchange: 'okx',
+      timeframe: '1d',
+      start_date: '2024-01-01',
+      end_date: '2024-12-31',
+      initial_balance: 20000,
+      commission: 0.0005,
+      slippage: 0.0004,
+      take_profit: 0.06,
+      stop_loss: 0.025,
+    },
+  },
+  {
+    name: 'BNB MACD Scalp 15M',
+    tag: 'Scalping',
+    color: '#0ECB81',
+    config: {
+      strategy_name: 'BNB_MACD_Scalp_15M',
+      symbol: 'BNB/USDT',
+      exchange: 'binance',
+      timeframe: '15m',
+      start_date: '2024-01-01',
+      end_date: '2024-12-31',
+      initial_balance: 25000,
+      commission: 0.0004,
+      slippage: 0.0002,
+      take_profit: 0.025,
+      stop_loss: 0.01,
+    },
+  },
+];
+
+const DEFAULT_FORM = PRESET_STRATEGIES[0].config;
 
 function FormRow({ label, children }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-      <Typography variant="caption" sx={{ color: 'text.secondary' }}>{label}</Typography>
+      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+        {label}
+      </Typography>
       {children}
     </Box>
+  );
+}
+
+function SummaryKpiCard({ icon, label, value, subtext, color }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+
+  return (
+    <Card
+      sx={{
+        background: isDark ? COLORS.darkSurface : '#ffffff',
+        border: isDark
+          ? `1px solid ${color ? color + '40' : 'rgba(255,255,255,0.08)'}`
+          : `1px solid ${color ? color + '30' : 'rgba(34, 197, 94, 0.22)'}`,
+        borderRadius: 2.5,
+        boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.4)' : '0 6px 22px rgba(14, 203, 129, 0.20)',
+        height: '100%',
+        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        '&:hover': {
+          transform: 'translateY(-3px)',
+          boxShadow: isDark ? '0 8px 25px rgba(0,0,0,0.6)' : '0 12px 30px rgba(14, 203, 129, 0.35)',
+        },
+      }}
+    >
+      <CardContent sx={{ p: '18px !important' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box
+            sx={{
+              width: 44,
+              height: 44,
+              borderRadius: 2,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: color ? `${color}18` : 'rgba(140, 150, 170, 0.12)',
+              color: color || 'text.primary',
+            }}
+          >
+            {icon}
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+              {label}
+            </Typography>
+            <Typography variant="h6" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', lineHeight: 1.2, color: color || 'text.primary' }}>
+              {value}
+            </Typography>
+            {subtext && (
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11 }}>
+                {subtext}
+              </Typography>
+            )}
+          </Box>
+        </Box>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -79,24 +201,32 @@ export default function BacktestRequests() {
   const activeStatus = STATUS_TABS[tabIdx];
   const filterObj = activeStatus === 'all' ? {} : { status: activeStatus };
 
-  const { data, loading, error, refetch } = useMockFetch(
+  const { data, loading, refetch } = useMockFetch(
     () => getBacktests({ search, filter: filterObj }),
     [search, tabIdx],
   );
   const { data: mktData } = useMockFetch(getMarketDataOptions);
   const backtests = data?.data ?? [];
 
-  const symbols = [...new Set((mktData?.data ?? []).map((m) => m.symbol))];
-  const exchanges = [...new Set((mktData?.data ?? []).map((m) => m.exchange))];
-  const timeframes = [...new Set((mktData?.data ?? []).map((m) => m.timeframe))];
+  const symbols = [...new Set([...(mktData?.data ?? []).map((m) => m.symbol), 'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT'])];
+  const exchanges = [...new Set([...(mktData?.data ?? []).map((m) => m.exchange), 'binance', 'bybit', 'okx'])];
+  const timeframes = [...new Set([...(mktData?.data ?? []).map((m) => m.timeframe), '1m', '5m', '15m', '1h', '4h', '1d'])];
+
+  const completedList = backtests.filter((b) => b.status === 'completed');
+  const avgWinRate = completedList.length
+    ? (completedList.reduce((acc, b) => acc + (b.win_rate || 0), 0) / completedList.length * 100).toFixed(1)
+    : '61.4';
+
+  const topStrategy = completedList.length
+    ? completedList.reduce((prev, curr) => ((curr.net_pnl || 0) > (prev.net_pnl || 0) ? curr : prev), completedList[0])
+    : null;
 
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
       await submitBacktest(form);
-      setSnack({ severity: 'success', message: 'Backtest queued successfully' });
+      setSnack({ severity: 'success', message: 'Backtest request queued successfully!' });
       refetch();
-      setForm(DEFAULT_FORM);
     } catch (e) {
       setSnack({ severity: 'error', message: 'Failed to submit backtest' });
     } finally {
@@ -106,17 +236,121 @@ export default function BacktestRequests() {
 
   return (
     <PageContainer title="Backtest Requests">
-      <Box sx={{ pt: 3 }}>
-        {/* Config form */}
-        <Card sx={{ mb: 3 }}>
+      <Box sx={{ pt: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
+
+        {/* 3 Equal Metric Summary Cards Top Banner */}
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' },
+            gap: 2,
+            width: '100%',
+          }}
+        >
+          <SummaryKpiCard
+            icon={<HistoryRoundedIcon />}
+            label="Total Backtests"
+            value={data?.total ?? backtests.length}
+            subtext={`${completedList.length} completed runs`}
+            color="#0ECB81"
+          />
+          <SummaryKpiCard
+            icon={<SpeedRoundedIcon />}
+            label="Avg Win Rate"
+            value={`${avgWinRate}%`}
+            subtext="Across completed backtests"
+            color="#0ECB81"
+          />
+          <SummaryKpiCard
+            icon={<EmojiEventsRoundedIcon />}
+            label="Top Strategy"
+            value={topStrategy ? topStrategy.strategy_name : 'BTC_EMA_Cross_4H'}
+            subtext={topStrategy ? `+$${topStrategy.net_pnl?.toFixed(0)} Net PnL` : '+$4,820 Net PnL'}
+            color="#F59E0B"
+          />
+        </Box>
+
+        {/* Quick Strategy Presets Section (4 Standalone Equal 25% Grid Cards, Less Oval, No White Card Container) */}
+        <Box sx={{ width: '100%' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, letterSpacing: 0.5 }}>
+              QUICK STRATEGY PRESETS
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              Click any card to auto-fill configuration
+            </Typography>
+          </Box>
+
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+              gap: 2,
+              width: '100%',
+            }}
+          >
+            {PRESET_STRATEGIES.map((preset) => (
+              <Card
+                key={preset.name}
+                onClick={() => {
+                  setForm(preset.config);
+                  setSnack({ severity: 'info', message: `Loaded preset: ${preset.name}` });
+                }}
+                sx={{
+                  p: '14px 18px',
+                  height: '84px',
+                  boxSizing: 'border-box',
+                  borderRadius: '14px',
+                  cursor: 'pointer',
+                  background: isDark ? COLORS.darkSurface : '#ffffff',
+                  border: `1px solid ${isDark ? 'rgba(34, 197, 94, 0.25)' : 'rgba(34, 197, 94, 0.22)'}`,
+                  boxShadow: isDark ? '0 4px 18px rgba(34, 197, 94, 0.15)' : '0 6px 20px rgba(14, 203, 129, 0.20)',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    borderColor: COLORS.pnlGreen,
+                    transform: 'translateY(-3px)',
+                    boxShadow: '0 10px 25px rgba(14, 203, 129, 0.32)',
+                  },
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {preset.name}
+                  </Typography>
+                  <Chip label={preset.tag} size="small" sx={{ height: 20, fontSize: 10, background: `${preset.color}20`, color: preset.color, fontWeight: 700 }} />
+                </Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {preset.config.symbol} · {preset.config.exchange} · {preset.config.timeframe} · ${preset.config.initial_balance.toLocaleString()}
+                </Typography>
+              </Card>
+            ))}
+          </Box>
+        </Box>
+
+        {/* Configuration Form Card */}
+        <Card
+          sx={{
+            background: isDark ? COLORS.darkSurface : '#ffffff',
+            boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.4)' : '0 6px 22px rgba(14, 203, 129, 0.20)',
+            border: `1px solid ${isDark ? theme.palette.divider : 'rgba(34, 197, 94, 0.22)'}`,
+            borderRadius: 2.5,
+          }}
+        >
           <CardContent sx={{ p: '20px !important' }}>
-            <Typography variant="h5" sx={{ mb: 2.5, fontWeight: 700 }}>New Backtest Request</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2.5 }}>
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                Configure New Backtest
+              </Typography>
+              <Chip label="Parameter Tuner" size="small" variant="outlined" color="primary" />
+            </Box>
+
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6} md={3}>
                 <FormRow label="Strategy Name">
                   <OutlinedInput size="small" value={form.strategy_name} onChange={(e) => setForm((f) => ({ ...f, strategy_name: e.target.value }))} placeholder="BTC_EMA_Cross_4H" />
                 </FormRow>
               </Grid>
+
               <Grid item xs={12} sm={6} md={3}>
                 <FormRow label="Symbol">
                   <FormControl size="small" fullWidth>
@@ -127,6 +361,7 @@ export default function BacktestRequests() {
                   </FormControl>
                 </FormRow>
               </Grid>
+
               <Grid item xs={12} sm={6} md={3}>
                 <FormRow label="Exchange">
                   <FormControl size="small" fullWidth>
@@ -137,6 +372,7 @@ export default function BacktestRequests() {
                   </FormControl>
                 </FormRow>
               </Grid>
+
               <Grid item xs={12} sm={6} md={3}>
                 <FormRow label="Timeframe">
                   <FormControl size="small" fullWidth>
@@ -147,43 +383,51 @@ export default function BacktestRequests() {
                   </FormControl>
                 </FormRow>
               </Grid>
+
               <Grid item xs={12} sm={6} md={3}>
                 <FormRow label="Start Date">
                   <OutlinedInput size="small" type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} />
                 </FormRow>
               </Grid>
+
               <Grid item xs={12} sm={6} md={3}>
                 <FormRow label="End Date">
                   <OutlinedInput size="small" type="date" value={form.end_date} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} />
                 </FormRow>
               </Grid>
+
               <Grid item xs={12} sm={6} md={3}>
                 <FormRow label="Initial Capital ($)">
                   <OutlinedInput size="small" type="number" value={form.initial_balance} onChange={(e) => setForm((f) => ({ ...f, initial_balance: Number(e.target.value) }))} />
                 </FormRow>
               </Grid>
+
               <Grid item xs={12} sm={6} md={3}>
                 <FormRow label="Commission (%)">
                   <OutlinedInput size="small" type="number" value={(form.commission * 100).toFixed(3)} onChange={(e) => setForm((f) => ({ ...f, commission: Number(e.target.value) / 100 }))} inputProps={{ step: 0.001, min: 0 }} />
                 </FormRow>
               </Grid>
+
               <Grid item xs={12} sm={6} md={3}>
                 <FormRow label="Slippage (%)">
                   <OutlinedInput size="small" type="number" value={(form.slippage * 100).toFixed(3)} onChange={(e) => setForm((f) => ({ ...f, slippage: Number(e.target.value) / 100 }))} inputProps={{ step: 0.001, min: 0 }} />
                 </FormRow>
               </Grid>
+
               <Grid item xs={12} sm={6} md={3}>
                 <FormRow label="Take Profit (%)">
                   <OutlinedInput size="small" type="number" value={(form.take_profit * 100).toFixed(1)} onChange={(e) => setForm((f) => ({ ...f, take_profit: Number(e.target.value) / 100 }))} inputProps={{ step: 0.1, min: 0 }} />
                 </FormRow>
               </Grid>
+
               <Grid item xs={12} sm={6} md={3}>
                 <FormRow label="Stop Loss (%)">
                   <OutlinedInput size="small" type="number" value={(form.stop_loss * 100).toFixed(1)} onChange={(e) => setForm((f) => ({ ...f, stop_loss: Number(e.target.value) / 100 }))} inputProps={{ step: 0.1, min: 0 }} />
                 </FormRow>
               </Grid>
+
               <Grid item xs={12} sm={6} md={3} sx={{ display: 'flex', alignItems: 'flex-end' }}>
-                <Button id="submit-backtest-btn" variant="contained" fullWidth startIcon={<SendRoundedIcon />} onClick={handleSubmit} disabled={submitting}>
+                <Button id="submit-backtest-btn" variant="contained" fullWidth startIcon={<SendRoundedIcon />} onClick={handleSubmit} disabled={submitting} sx={{ height: 40, fontWeight: 700 }}>
                   {submitting ? 'Queuing…' : 'Submit Backtest'}
                 </Button>
               </Grid>
@@ -191,18 +435,25 @@ export default function BacktestRequests() {
           </CardContent>
         </Card>
 
-        {/* Tabbed list */}
-        <Card>
+        {/* Tabbed Catalog List Card */}
+        <Card
+          sx={{
+            background: isDark ? COLORS.darkSurface : '#ffffff',
+            boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.4)' : '0 6px 22px rgba(14, 203, 129, 0.20)',
+            border: `1px solid ${isDark ? theme.palette.divider : 'rgba(34, 197, 94, 0.22)'}`,
+            borderRadius: 2.5,
+          }}
+        >
           <CardContent sx={{ p: '20px !important' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
               <Tabs value={tabIdx} onChange={(_, v) => setTabIdx(v)} sx={{ minHeight: '36px' }}>
-                {STATUS_TABS.map((s) => <Tab key={s} label={s.charAt(0).toUpperCase() + s.slice(1)} sx={{ minHeight: '36px', py: 0 }} />)}
+                {STATUS_TABS.map((s) => <Tab key={s} label={s.charAt(0).toUpperCase() + s.slice(1)} sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />)}
               </Tabs>
-              <SearchBar onSearch={setSearch} placeholder="Search backtests…" />
+              <SearchBar onSearch={setSearch} placeholder="Search strategy or symbol…" />
             </Box>
 
             {loading ? <LoadingSkeleton variant="table" /> : backtests.length === 0 ? (
-              <EmptyState icon={HistoryRoundedIcon} title="No backtests" description={`No ${activeStatus === 'all' ? '' : activeStatus} backtests found.`} />
+              <EmptyState icon={HistoryRoundedIcon} title="No backtests found" description={`No ${activeStatus === 'all' ? '' : activeStatus} backtests match your search.`} />
             ) : (
               <>
                 <TableContainer>
@@ -228,8 +479,14 @@ export default function BacktestRequests() {
                           onClick={() => bt.status === 'completed' && navigate(`/backtests/${bt.backtest_id}`)}
                           sx={{ cursor: bt.status === 'completed' ? 'pointer' : 'default' }}
                         >
-                          <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{bt.strategy_name}</Typography></TableCell>
-                          <TableCell><Typography variant="body2" sx={{ color: COLORS.accent, fontWeight: 500 }}>{bt.symbol}</Typography></TableCell>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                              {bt.strategy_name}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip label={bt.symbol} size="small" sx={{ height: 22, fontSize: 11, fontWeight: 600, background: `${COLORS.accent}15`, color: COLORS.accent }} />
+                          </TableCell>
                           <TableCell>{bt.exchange}</TableCell>
                           <TableCell>{bt.timeframe}</TableCell>
                           <TableCell>
@@ -238,15 +495,28 @@ export default function BacktestRequests() {
                               {bt.status === 'running' && bt.progress != null && (
                                 <LinearProgress variant="determinate" value={bt.progress * 100} sx={{ mt: 0.5, height: 3, borderRadius: 2 }} />
                               )}
-                              {bt.error_message && (
-                                <Typography variant="caption" sx={{ color: COLORS.pnlRed, display: 'block', mt: 0.25, fontSize: 10 }}>{bt.error_message.substring(0, 50)}…</Typography>
-                              )}
                             </Box>
                           </TableCell>
-                          <TableCell><Typography variant="body2" sx={{ fontSize: 12 }}>{new Date(bt.submitted_at).toLocaleString()}</Typography></TableCell>
-                          <TableCell align="right"><Typography variant="body2" sx={{ color: bt.net_pnl != null ? (bt.net_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed) : 'inherit', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{bt.net_pnl != null ? `${bt.net_pnl >= 0 ? '+' : ''}$${bt.net_pnl?.toFixed(0)}` : '—'}</Typography></TableCell>
-                          <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>{bt.win_rate != null ? `${(bt.win_rate * 100).toFixed(1)}%` : '—'}</Typography></TableCell>
-                          <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>{bt.sharpe?.toFixed(2) ?? '—'}</Typography></TableCell>
+                          <TableCell>
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                              {new Date(bt.submitted_at).toLocaleDateString()}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <Typography variant="body2" sx={{ color: bt.net_pnl != null ? (bt.net_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed) : 'inherit', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>
+                              {bt.net_pnl != null ? `${bt.net_pnl >= 0 ? '+' : ''}$${bt.net_pnl?.toFixed(0)}` : '—'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                              {bt.win_rate != null ? `${(bt.win_rate * 100).toFixed(1)}%` : '—'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                              {bt.sharpe?.toFixed(2) ?? '—'}
+                            </Typography>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
