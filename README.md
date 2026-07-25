@@ -1,16 +1,17 @@
 <div id="top"></div>
 <div align="center">
 
-# 🚀 CryptoSight: Enterprise Quantitative Data & Technical Analysis Engine
+# 🚀 CryptoSight: Enterprise Quantitative Data, Algorithmic Engine & Trading Terminal
 
 [![Built by Afnan Shoukat](https://img.shields.io/badge/Built%20by-Afnan%20Shoukat-00E676?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/afnanshoukat)
 [![GitHub Profile](https://img.shields.io/badge/GitHub-21Afnan-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/21Afnan)
 [![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-REST%20API-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-18%2B%20Dashboard-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Enterprise%20Storage-316192?style=for-the-badge&logo=postgresql&logoColor=white)](https://postgresql.org)
 [![TA-Lib](https://img.shields.io/badge/TA--Lib-158%20Indicators-FF6F00?style=for-the-badge)](https://ta-lib.org)
-[![Plotly Charts](https://img.shields.io/badge/Plotly-Interactive%20Quant%20Visuals-3F4F75?style=for-the-badge&logo=plotly&logoColor=white)](https://plotly.com)
 
-**An institutional, production-grade cryptocurrency data ingestion, dynamic technical analysis, NLP sentiment classification, ML feature engineering, vectorized backtesting, and quantitative analytics framework built for quantitative analysts and financial engineers.**
+**An institutional, production-grade cryptocurrency data ingestion, dynamic technical analysis, NLP sentiment classification, ML feature engineering, vectorized backtesting, FastAPI REST backend services, and interactive React trading dashboard.**
 
 [🌟 Key Features](#features) • [🏗️ System Flowchart](#flowchart) • [🗄️ Database Architecture](#database) • [🔬 Module Deep Dive](#modules) • [⚡ Quick Start Guide](#quickstart) • [📁 Repository Structure](#structure) • [👨‍💻 Author](#author)
 
@@ -20,9 +21,9 @@
 
 <div id="features"></div>
 
-## 🌟 Executive Summary & 7 Quantitative Pillars
+## 🌟 Executive Summary & 9 Quantitative Pillars
 
-**CryptoSight** bridges the gap between raw exchange data feeds and institutional quantitative strategies. It eliminates boilerplate data cleaning, API pagination headaches, and indicator mapping complexities by providing an end-to-end automated framework organized into **7 Quantitative Pillars**:
+**CryptoSight** bridges the gap between raw exchange data feeds and institutional quantitative strategies. It eliminates boilerplate data cleaning, API pagination headaches, and indicator mapping complexities by providing an end-to-end automated framework organized into **9 Quantitative Pillars**:
 
 | Status | Pillar | Module | High-Level Institutional Functionality |
 | :---: | :--- | :--- | :--- |
@@ -34,6 +35,7 @@
 | 🧠 **NLP** | **6. Sentiment** | `cryptosight.sentiment` | **Reddit NLP Pipeline** with PRAW scraping, text cleaning, and **Hugging Face FinBERT** chunk-averaged classification. |
 | 🛡️ **CLEAN** | **7. ML Ecosystem** | `cryptosight.ml` | **Quant ML Engine** with lag-free feature extraction (`.shift(1)`), stationarity scaling, XGBoost/LightGBM/LSTM models, and out-of-sample forward inference. |
 | 📊 **STATS** | **8. Analytics** | `cryptosight.stats` | **Institutional QuantStats Suite** computing 59+ financial performance ratios (`CAGR, Sharpe, Sortino, Calmar`) embedded as dynamic PostgreSQL tabular columns. |
+| 🌐 **API & UI** | **9. Terminal Platform** | `cryptosight.backend` & `frontend` | **FastAPI REST API & React Dashboard** with live PostgreSQL trade ledger chart generation (`generate_charts_from_trades`), topbar health polling (`● DB Active`), interactive Up/Down table header sorting, and soft eye-friendly red design system. |
 
 
 > [!IMPORTANT]
@@ -45,7 +47,7 @@
 
 <div id="flowchart"></div>
 
-## 🏗️ System Architecture & Pipeline Flowchart
+## 🏗️ System Architecture & Full-Stack Pipeline Flowchart
 
 ```mermaid
 graph TD
@@ -87,9 +89,17 @@ graph TD
         Backtester -->|"Update Summary Stats"| SQL_BacktestData["metadata.backtest_data Table"]
     end
 
-    subgraph Machine_Learning_Layer["ML Ecosystem"]
-        SQL_Check -->|"Load Clean Features"| ML_Engine["Quant ML Ecosystem XGBoost/LightGBM/LSTM"]
-        ML_Engine -->|"Run Forward Inference"| ML_Predictions["csv_files Exports & Predictions"]
+    subgraph Backend_Services_Layer["FastAPI REST API Services Layer"]
+        SQL_Check -->|"Query Strategies & Stats"| FastAPI["FastAPI Service Layer (backtest_service.py)"]
+        SQL_Backtests -->|"Fetch Real Trade Ledgers"| FastAPI
+        FastAPI -->|"Dynamic Chart Calculations (generate_charts_from_trades)"| API_Routes["REST Router (/api/v1/backtests)"]
+    end
+
+    subgraph Frontend_Dashboard_Layer["React 18 Trading Dashboard"]
+        API_Routes -->|"Stream JSON Payloads"| ReactApp["Vite + React 18 Dashboard"]
+        ReactApp -->|"Render Equity & Drawdown Curves"| LightweightCharts["Lightweight Charts v5 & Recharts"]
+        ReactApp -->|"Interactive Up/Down Sorting"| TradeLedgerTable["Trade Execution Ledger Table"]
+        ReactApp -->|"Poll DB Health (15s)"| DBStatusChip["● DB Active Topbar Pill"]
     end
 ```
 
@@ -97,135 +107,54 @@ graph TD
 
 ---
 
-<div id="database"></div>
-
-## 🗄️ Database Architecture & Schemas
-
-CryptoSight utilizes a highly structured, enterprise **PostgreSQL Database** organized into schemas with strict duplicate prevention and upsert logic:
-
-```text
-PostgreSQL Database ('postgres')
-├── metadata/                          # System Configuration & Registries
-│   ├── market_data                    # Index of downloaded OHLCV candle ranges
-│   ├── sentiment_data                 # Index of Reddit sentiment datasets & post counts
-│   ├── strategy_data                  # Strategy configurations, indicators, & signal stats
-│   ├── simulator_config               # Global simulation parameters (initial balance, fee rates)
-│   ├── simulation_data                # Strategy-specific simulation configuration settings
-│   └── backtest_data                  # Backtest performance metrics & run configurations
-├── signals/                           # Pre-Computed Signal Tables
-│   └── <exchange>_<symbol>_<timeframe># Standardized signal data tables per market
-├── simulations/                       # Real-Time Simulation State & Analytics
-│   ├── active_positions               # Active open trade positions with entry price, TP, SL & unrealized PnL
-│   └── stats                          # Dynamic tabular performance metrics table (59+ QuantStats ratios)
-├── simulation_ledgers/                # Real-Time Trade Ledgers
-│   └── <strategy_name>                # Completed trade logs per strategy (gross PnL, net PnL, fees)
-└── backtests/                         # Historical Backtest Ledgers
-    └── <strategy_name>                # Strategy-specific backtest trade ledger tables
-```
-
-### Key Database Design Principles:
-1. **High-Performance Binary Streams (`COPY TO/FROM STDOUT`)**:
-   - Market candle ingestion and OHLCV queries leverage PostgreSQL C-speed `COPY` streaming, bypassing ORM overhead for ultra-fast multi-gigabyte data loading.
-2. **Duplicate Prevention & Conflict Resolution (`DO UPDATE SET`)**:
-   - Every signal and backtest ledger table enforces strict primary key constraints on `timestamp` and `entry_time`.
-   - Insertion queries utilize `ON CONFLICT DO UPDATE SET ...` to safely overwrite and update existing rows without creating duplicate records.
-
-<div align="right"><a href="#top">⬆️ Back to Top</a></div>
-
----
-
-<div id="modules"></div>
-
-## 🔬 Module Deep Dive
-
-### 1️⃣ **Exchange Data Ingestion (`cryptosight.data`)**
-- **Gap-Filling Algorithm**: Queries PostgreSQL for the latest downloaded candle timestamp (`SELECT MAX(timestamp)`). Only missing candles are fetched via paginated API requests.
-- **Unclosed Bar Protection**: Strips the current live/unclosed candle before database insertion to prevent storing incomplete OHLCV bars.
-- **Bulk COPY Insertion**: Utilizes PostgreSQL binary `COPY` streams for high-speed multi-year OHLCV storage.
-
-### 2️⃣ **Technical Analysis Engine (`cryptosight.tal_Indicators`)**
-- **Dynamic Interception**: Uses Python `__getattr__` dynamic method dispatch to wrap all **158 TA-Lib indicators** seamlessly.
-- **Category Coverage**: Overlap Studies, Momentum Indicators, Volume Indicators, Volatility Indicators, Price Transform, Cycle Indicators, and Pattern Recognition.
-
-### 3️⃣ **Trading Signals Engine (`cryptosight.signals`)**
-- **Multi-Strategy YAML Engine**: Configures single or multi-strategy definitions (up to 20 calibrated strategies) in `strategy_config.yaml`.
-- **Dynamic Market Overrides**: Seamlessly matches and extracts target market parameters (`exchange`, `symbol`, `timeframe`, `target_timeframe`) when invoked by external backtesting runners.
-- **Look-Ahead Bias Prevention**: Enforces `.shift(1)` across indicator matrices before evaluating signal conditions.
-- **Persistence Windows**: Supports multi-bar persistence windows to confirm breakouts across timeframes.
-
-### 4️⃣ **Real-Time Simulation Engine (`cryptosight.simulator`)**
-- **Sequential Candle-by-Candle Simulation**: Event-driven execution processing historical market data candle-by-candle (1-to-1 time basis) with zero look-ahead bias.
-- **Active Position State Management**: Maintains real-time open trade state in `simulations.active_positions` (using `strategy_id PRIMARY KEY` for single-position enforcement and run resumption).
-- **Trade Ledger Streaming**: Streams closed trade logs into `simulation_ledgers.<strategy_name>` tables.
-- **Dynamic QuantStats Tabular Analytics**: Automatically computes 59+ institutional performance ratios (Sharpe, Sortino, Calmar, Max Drawdown, CAGR, Win Rate) saved into PostgreSQL as **dynamic tabular columns** in `simulations.stats`.
-
-### 5️⃣ **Vectorized Backtesting Engine (`cryptosight.backtesting`)**
-- **10-Step Execution Simulation**: Models entry fill, commissions (`0.05%`), slippage (`0.02%`), take-profit percentage, stop-loss percentage, and trailing stops.
-- **Ledger Generation**: Exports trade logs into CSV and database tables with exact PnL and return percentages.
-
-### 6️⃣ **NLP Sentiment Engine (`cryptosight.sentiment`)**
-- **Reddit PRAW Scraper**: Automated scraper pulling posts and top comments from target cryptocurrency subreddits.
-- **Text Cleaning Engine**: Strips HTML tags, contracts, URLs, and bot-generated boilerplate text.
-- **FinBERT Classification**: Uses Hugging Face **FinBERT** (`yiyanghkust/finbert-tone`) with chunk-averaging to calculate Bullish, Bearish, and Neutral probabilities.
-
-### 7️⃣ **Machine Learning Ecosystem (`cryptosight.ml`)**
-- **Feature Builder**: Generates stationarity-transformed features, log returns (`np.log`), and 3-class target matrices (`Long`, `Short`, `Hold`).
-- **Chronological Splitter**: Enforces chronological train/validation/test splits to avoid temporal leakage.
-- **Multi-Model Suite**: Trains XGBoost, LightGBM, Random Forest, and PyTorch LSTM models.
-- **Out-of-Sample Inference**: Standalone forward-inference engine (`inference_pipeline.py`) running real-time signal predictions.
-
-### 8️⃣ **Preprocessing & Quant Analytics (`cryptosight.preprocessing` & `cryptosight.stats`)**
-- **Stationarity Testing**: Automated Augmented Dickey-Fuller (ADF) and KPSS stationarity tests.
-- **6-Scaler Benchmark**: Benchmarks signals across `RobustScaler`, `MinMaxScaler`, `Fractional Differentiation (FracDiff)`, `Winsorization`, `Log Transformation`, and `Gaussian Normalization`.
-- **QuantStats Integration**: Calculates 59+ institutional performance ratios (Sharpe, Sortino, Calmar, Max Drawdown, CAGR, Win Rate).
-- **Plotly Visuals**: Exports dark-mode interactive HTML/JSON charts for web dashboard rendering.
-
-<div align="right"><a href="#top">⬆️ Back to Top</a></div>
-
----
-
 <div id="quickstart"></div>
 
-## ⚡ Quick Start Guide & Running Pipelines
+## ⚡ Quick Start Guide
 
 ### 1️⃣ **Environment Setup**
-Clone the repository and set up your Python environment:
 ```bash
-# Clone repository
+# Clone the repository
 git clone https://github.com/21Afnan/cryptosight.git
 cd cryptosight
 
-# Create and activate virtual environment
+# Create and activate Python virtual environment
 python -m venv venv
 venv\Scripts\activate.bat
 
-# Install dependencies
+# Install Python backend dependencies
 pip install -r requirements.txt
+
+# Install React frontend dependencies
+cd frontend
+npm install
+cd ..
 ```
 
-### 2️⃣ **Running Data Ingestion & Market Downloads**
+### 2️⃣ **Running FastAPI Backend Server**
 ```bash
-# Download Binance Market Data
+# Launch FastAPI server on port 8000 with auto-reload
+python -m uvicorn cryptosight.backend.main:app --reload --port 8000
+```
+- **Interactive Swagger Docs**: [`http://localhost:8000/docs`](http://localhost:8000/docs)
+- **Health Check Endpoint**: [`http://localhost:8000/api/v1/backtests/health`](http://localhost:8000/api/v1/backtests/health)
+
+### 3️⃣ **Running React Frontend Trading Dashboard**
+```bash
+# Launch Vite development server on port 5173
+cd frontend
+npm run dev
+```
+- **Trading Dashboard UI**: [`http://localhost:5173`](http://localhost:5173)
+
+### 4️⃣ **Running Ingestion, Backtesting & ML Pipelines**
+```bash
+# Download Binance & Bybit Market Data
 python -m cryptosight.data.binance.main
-
-# Download Bybit Market Data
 python -m cryptosight.data.bybit.main
-```
-
-### 3️⃣ **Running Signal Generation & Simulation Engine**
-```bash
-# Run Signals Pipeline
-python -m cryptosight.signals.main
-
-# Run Real-Time Sequential Simulation Engine
-python -m cryptosight.simulator.main
 
 # Run Vectorized Backtest Engine
 python -m cryptosight.backtesting.backtest
-```
 
-### 4️⃣ **Running ML Training & Inference**
-```bash
 # Run Machine Learning Pipeline
 python -m cryptosight.ml.main
 ```
@@ -240,6 +169,10 @@ python -m cryptosight.ml.main
 
 ```text
 cryptosight/
+├── backend/                       # FastAPI REST API backend services & routers
+│   ├── main.py                    # FastAPI application setup, CORS middleware & route registration
+│   ├── routers/                   # APIRouters (/api/v1/backtests endpoints)
+│   └── services/                  # Business logic (backtest_service.py DB queries & chart calculation)
 ├── data/                          # Exchange downloaders with smart SQL gap fill & live bar protection
 │   ├── downloader.py              # Master Downloader class with SQL COPY stream & resampling
 │   ├── binance/                   # Binance API fetcher, config.yaml, main.py & run_binance.bat
@@ -247,26 +180,18 @@ cryptosight/
 ├── tal_Indicators/                # Dynamic __getattr__ wrapper for all 158 TA-Lib technical indicators
 ├── signals/                       # YAML/DB-driven quant signal generator & multi-crossover rule engine
 ├── simulator/                     # Real-time event-driven simulation engine with active position tracking
-│   ├── main.py                    # Entry point for sequential multi-strategy simulations
-│   ├── simulation.py              # SimulatorEngine maintaining active positions & ledger streaming
-│   └── config.yaml                # Global execution config (initial balance, position sizing, fees)
 ├── backtesting/                   # Vectorized 10-step backtester modeling commissions, slippage & SQL ledger
 ├── sentiment/                     # PRAW Reddit scraper, text cleaning engine & Hugging Face FinBERT classifier
 ├── ml/                            # Comprehensive end-to-end Machine Learning ecosystem
-│   ├── main.py                    # Master orchestrator for feature generation, chron-splitting & inference
-│   ├── ml_config.yaml             # Centralized YAML spec for features, models, splits & signal thresholds
-│   ├── preprocessing/             # Robust in-memory QuantPreprocessors and MLFeatureBuilders
-│   ├── models/                    # Modular training pipelines (XGBoost, LightGBM, Random Forest, PyTorch LSTM)
-│   ├── inference/                 # Standalone out-of-sample forward-inference engine (inference_pipeline.py)
-│   └── evaluation/                # Master JSON report builders linking hyperparameters to evaluation metrics
-├── preprocessing/                 # Preprocessing benchmark suite & multi-model evaluation leaderboard
 ├── stats/                         # Institutional statistical analytics & frontend charts suite (QuantStats + Plotly)
-├── frontend/                      # React / Vite quantitative dashboard interface
+├── frontend/                      # React 18 / Vite quantitative trading dashboard interface
+│   ├── src/                       # React components, charts, pages, theme design system & contexts
+│   └── PROGRESS.md                # Detailed frontend & full-stack development log
 ├── csv_files/                     # Automated export directory for predictions, reports & master tables
 ├── logs/                          # Rotating execution logs with SafeRotatingFileHandler
 ├── utils/                         # Shared utilities (db.py PostgreSQL pool, metadata.py schema managers, logger.py)
 ├── .env                           # Database & API credentials (git-ignored)
-├── README.md                      # Comprehensive enterprise documentation
+├── README.md                      # Enterprise system documentation
 └── requirements.txt               # Python package dependencies
 ```
 
