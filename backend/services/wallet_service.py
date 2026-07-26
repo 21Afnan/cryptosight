@@ -38,7 +38,7 @@ def get_wallets_data(search: str = "", filter_status: str = "") -> dict:
             df_exec, df_pnl, df_tx = fetch_account_history_data(conn)
             computed_stats = compute_account_metrics(conn, df_exec, df_pnl, df_tx)
         except Exception as e:
-            logger.debug(f"compute_account_metrics calculation skipped: {e}")
+            logger.warning(f"compute_account_metrics calculation skipped: {e}")
 
         # 3. Fetch active positions from execution.active_positions
         active_positions = []
@@ -57,7 +57,7 @@ def get_wallets_data(search: str = "", filter_status: str = "") -> dict:
                         "status": str(r.get("status", "OPEN")),
                     })
         except Exception as e:
-            logger.debug(f"execution.active_positions read skipped: {e}")
+            logger.warning(f"execution.active_positions read skipped: {e}")
 
         # 4. Fetch assigned enabled strategies from metadata.strategy_data
         assigned_strategies = []
@@ -76,38 +76,57 @@ def get_wallets_data(search: str = "", filter_status: str = "") -> dict:
                         "exchange": str(r.get("exchange")).capitalize(),
                     })
         except Exception as e:
-            logger.debug(f"metadata.strategy_data read skipped: {e}")
+            logger.warning(f"metadata.strategy_data read skipped: {e}")
 
         # Try live Bybit balance fetch if BybitExecutor is available
-        total_equity = float(computed_stats.get("net_pnl", 0.0)) + 150000.0 if computed_stats.get("net_pnl") else 165865.91
-        avail_bal = 49911.19
+        total_equity = None
+        avail_bal = None
+        balance_unavailable = False
+        bybit_fetch_success = False
+
         try:
             from cryptosight.execution.bybit_executor import BybitExecutor
             executor = BybitExecutor(conn)
             bal = executor.get_wallet_balance("USDT")
             if bal.get("fetch_ok"):
-                total_equity = bal["total_equity"]
-                avail_bal = bal["available_balance"]
+                total_equity = float(bal["total_equity"])
+                avail_bal = float(bal["available_balance"])
+                bybit_fetch_success = True
+            else:
+                logger.warning("Bybit live balance fetch returned fetch_ok=False.")
         except Exception as err:
-            logger.debug(f"Bybit live balance fetch fallback: {err}")
+            logger.warning(f"Bybit live balance fetch failed: {err}")
 
-        # Calculate Total Realized PnL (never 0.0 if total_equity exceeds baseline $150,000 reference)
-        raw_net_pnl = float(computed_stats.get("net_pnl", 0.0))
-        if raw_net_pnl != 0.0:
-            total_realized_pnl = raw_net_pnl
+        if not bybit_fetch_success:
+            logger.warning("Live balance fetch unavailable for exchange account; balance set to None.")
+            balance_unavailable = True
+
+        # Calculate Total Realized PnL from computed account stats
+        pnl_unavailable = False
+        if "net_pnl" in computed_stats and computed_stats["net_pnl"] is not None:
+            total_realized_pnl = float(computed_stats["net_pnl"])
         else:
-            total_realized_pnl = round(total_equity - 150000.0, 2) if total_equity > 150000.0 else 15865.91
+            total_realized_pnl = None
+            pnl_unavailable = True
+            logger.warning("Account stats net_pnl is unavailable; total_realized_pnl set to None.")
 
-        # Extract or compute equity growth curve
+        # Extract or compute equity growth curve from closed PnL
         equity_curve = []
+        equity_curve_unavailable = False
         try:
             df_pnl = pd.read_sql_query(
                 "SELECT closed_pnl, created_time, updated_time FROM account_history.closed_pnl ORDER BY created_time ASC;",
                 conn
             )
             if not df_pnl.empty:
-                curr_bal = 150000.0
-                pts = [{"time": "2026-07-01", "value": curr_bal}]
+                net_pnl_sum = float(df_pnl["closed_pnl"].sum())
+                baseline_bal = (total_equity - net_pnl_sum) if total_equity is not None else 100000.0
+                curr_bal = baseline_bal
+
+                first_ts = df_pnl.iloc[0].get("created_time")
+                start_dt_str = pd.to_datetime(first_ts, unit="ms").strftime("%Y-%m-%d") if (first_ts and isinstance(first_ts, (int, float)) and first_ts > 1e11) else pd.Timestamp.now().strftime("%Y-%m-%d")
+                pts = [{"time": start_dt_str, "value": round(curr_bal, 2)}]
+
                 for _, row in df_pnl.iterrows():
                     pnl_val = float(row.get("closed_pnl", 0.0))
                     ts = row.get("updated_time") or row.get("created_time")
@@ -120,24 +139,23 @@ def get_wallets_data(search: str = "", filter_status: str = "") -> dict:
                     curr_bal += pnl_val
                     pts.append({"time": dt_str, "value": round(curr_bal, 2)})
                 
-                today_str = pd.Timestamp.now().strftime("%Y-%m-%d")
-                pts.append({"time": today_str, "value": round(total_equity, 2)})
+                if total_equity is not None and pts:
+                    today_str = pd.Timestamp.now().strftime("%Y-%m-%d")
+                    pts.append({"time": today_str, "value": round(total_equity, 2)})
+
                 equity_curve = pts
+            else:
+                equity_curve_unavailable = True
+                logger.warning("No closed PnL history exists in account_history.closed_pnl for equity curve generation.")
         except Exception as err:
-            logger.debug(f"Closed PnL curve calculation error: {err}")
+            equity_curve_unavailable = True
+            logger.warning(f"Closed PnL curve calculation error: {err}")
 
         if not equity_curve:
-            equity_curve = [
-                {"time": "2026-07-01", "value": 150000.00},
-                {"time": "2026-07-08", "value": 154200.50},
-                {"time": "2026-07-15", "value": 159800.20},
-                {"time": "2026-07-22", "value": 162400.00},
-                {"time": "2026-07-25", "value": round(total_equity, 2)},
-            ]
+            equity_curve = []
+            equity_curve_unavailable = True
 
         # Prepare rich account_stats metrics dictionary
-        per_symbol_breakdown = computed_stats.get("per_symbol")
-        # Prepare pure account_stats metrics dictionary without hardcoded fallbacks
         per_symbol_breakdown = computed_stats.get("per_symbol") if isinstance(computed_stats.get("per_symbol"), dict) else {}
         
         # If per_symbol is empty, build from active positions
@@ -180,7 +198,7 @@ def get_wallets_data(search: str = "", filter_status: str = "") -> dict:
                 ex_name = str(r["exchange"]).capitalize()
                 raw_key = str(r["api_key"])
                 is_demo = bool(r.get("demo", True))
-                status = "connected" if is_demo or len(raw_key) > 5 else "disabled"
+                status = "connected" if (is_demo or bybit_fetch_success or len(raw_key) > 5) else "unknown"
 
                 w_item = {
                     "id": f"wallet-{ex_name.lower()}-{idx + 1}",
@@ -188,14 +206,17 @@ def get_wallets_data(search: str = "", filter_status: str = "") -> dict:
                     "account_type": "Unified Margin (Demo)" if is_demo else "Unified Margin",
                     "api_key": _mask_api_key(raw_key),
                     "status": status,
-                    "balance": round(total_equity, 2),
-                    "available_balance": round(avail_bal, 2),
+                    "balance": round(total_equity, 2) if total_equity is not None else None,
+                    "available_balance": round(avail_bal, 2) if avail_bal is not None else None,
+                    "balance_unavailable": balance_unavailable,
                     "unrealized_pnl": round(sum(p["unrealized_pnl"] for p in active_positions), 2),
-                    "total_pnl": round(total_realized_pnl, 2),
+                    "total_pnl": round(total_realized_pnl, 2) if total_realized_pnl is not None else None,
+                    "pnl_unavailable": pnl_unavailable,
                     "assigned_strategies": assigned_strategies,
                     "active_positions": active_positions,
                     "open_orders": [],
                     "equity_curve": equity_curve,
+                    "equity_curve_unavailable": equity_curve_unavailable,
                     "account_stats": account_stats_payload,
                 }
                 wallets.append(w_item)
@@ -206,14 +227,17 @@ def get_wallets_data(search: str = "", filter_status: str = "") -> dict:
                 "account_type": "Unified Margin (Demo)",
                 "api_key": "••••••••••••4a82",
                 "status": "connected",
-                "balance": round(total_equity, 2),
-                "available_balance": round(avail_bal, 2),
+                "balance": round(total_equity, 2) if total_equity is not None else None,
+                "available_balance": round(avail_bal, 2) if avail_bal is not None else None,
+                "balance_unavailable": balance_unavailable,
                 "unrealized_pnl": round(sum(p["unrealized_pnl"] for p in active_positions), 2),
-                "total_pnl": round(total_realized_pnl, 2),
+                "total_pnl": round(total_realized_pnl, 2) if total_realized_pnl is not None else None,
+                "pnl_unavailable": pnl_unavailable,
                 "assigned_strategies": assigned_strategies,
                 "active_positions": active_positions,
                 "open_orders": [],
                 "equity_curve": equity_curve,
+                "equity_curve_unavailable": equity_curve_unavailable,
                 "account_stats": account_stats_payload,
             }
             wallets.append(default_wallet)
