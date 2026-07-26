@@ -42,6 +42,9 @@
 > [!IMPORTANT]
 > **Zero Data Leakage Guarantee (`.shift(1)`)**: Every single technical indicator, moving average, and pattern calculated inside CryptoSight is explicitly shifted forward by 1 period (`Bar T -> Bar T+1`) before generating target labels or execution signals. This mathematically prevents future look-ahead bias during historical backtests and ML cross-validation.
 
+> [!NOTE]
+> **Strict Financial Data Governance & Zero Fake Data Policy**: All backend services (including `wallet_service.py`) operate under a strict zero-fabricated-data policy. If live exchange APIs or database analytics are unavailable, financial endpoints issue explicit `*_unavailable` boolean flags (`balance_unavailable`, `pnl_unavailable`, `equity_curve_unavailable`) and structured warning logs rather than returning hardcoded fallbacks.
+
 <div align="right"><a href="#top">⬆️ Back to Top</a></div>
 
 ---
