@@ -23,7 +23,7 @@ def create_account_stats_table(conn):
     create_schema_sql = "CREATE SCHEMA IF NOT EXISTS account;"
     create_table_sql = """
     CREATE TABLE IF NOT EXISTS account.stats (
-        account_id      VARCHAR(64) PRIMARY KEY DEFAULT 'default_account',
+        account_id      VARCHAR(64) PRIMARY KEY,
         total_trades    INT DEFAULT 0,
         net_pnl         NUMERIC(18,8) DEFAULT 0.0,
         win_rate        NUMERIC(18,8) DEFAULT 0.0,
@@ -74,6 +74,7 @@ def compute_account_metrics(conn, df_exec: pd.DataFrame, df_pnl: pd.DataFrame, d
     """
     Computes ~105 comprehensive account metrics and per-symbol breakdowns.
     """
+    logger.warning("No explicit account_id provided; using fallback account_id 'default_account'.")
     metrics = {
         "account_id": "default_account",
         "total_trades": 0,
@@ -128,6 +129,8 @@ def compute_account_metrics(conn, df_exec: pd.DataFrame, df_pnl: pd.DataFrame, d
     try:
         exec_cfg = fetch_execution_config(conn)
         initial_balance = float(exec_cfg.get("reference_balance", 0.0))
+        if initial_balance <= 0.0:
+            logger.warning("Reference balance in execution config is missing or 0.0; percentage return metrics cannot be computed accurately.")
     except Exception as e:
         logger.warning(f"Failed to fetch execution config reference_balance: {e}")
         initial_balance = 0.0

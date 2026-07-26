@@ -21,9 +21,9 @@
 
 <div id="features"></div>
 
-## 🌟 Executive Summary & 9 Quantitative Pillars
+## 🌟 Executive Summary & 10 Quantitative Pillars
 
-**CryptoSight** bridges the gap between raw exchange data feeds and institutional quantitative strategies. It eliminates boilerplate data cleaning, API pagination headaches, and indicator mapping complexities by providing an end-to-end automated framework organized into **9 Quantitative Pillars**:
+**CryptoSight** bridges the gap between raw exchange data feeds and institutional quantitative strategies. It eliminates boilerplate data cleaning, API pagination headaches, and indicator mapping complexities by providing an end-to-end automated framework organized into **10 Quantitative Pillars**:
 
 | Status | Pillar | Module | High-Level Institutional Functionality |
 | :---: | :--- | :--- | :--- |
@@ -36,6 +36,7 @@
 | 🛡️ **CLEAN** | **7. ML Ecosystem** | `cryptosight.ml` | **Quant ML Engine** with lag-free feature extraction (`.shift(1)`), stationarity scaling, XGBoost/LightGBM/LSTM models, and out-of-sample forward inference. |
 | 📊 **STATS** | **8. Analytics** | `cryptosight.stats` | **Institutional QuantStats Suite** computing 59+ financial performance ratios (`CAGR, Sharpe, Sortino, Calmar`) embedded as dynamic PostgreSQL tabular columns. |
 | 🌐 **API & UI** | **9. Terminal Platform** | `cryptosight.backend` & `frontend` | **FastAPI REST API & React Dashboard** with live PostgreSQL trade ledger chart generation (`generate_charts_from_trades`), topbar health polling (`● DB Active`), interactive Up/Down table header sorting, and soft eye-friendly red design system. |
+| 🤖 **BOT** | **10. Live Execution** | `cryptosight.execution` | **Automated Bybit Live Execution Engine** managing live positions (`execution.active_positions`), strategy ledgers (`execution_ledgers`), exchange history sync (`account_history.*`), TP/SL/Reversal reconciliation, and real-time execution stats (`execution.stats` & `account.stats`). |
 
 
 > [!IMPORTANT]
@@ -89,8 +90,17 @@ graph TD
         Backtester -->|"Update Summary Stats"| SQL_BacktestData["metadata.backtest_data Table"]
     end
 
+    subgraph Execution_Engine_Layer["Bybit Automated Live Execution Engine"]
+        Signals -->|"Poll Strategy Signals"| ExecEngine["Live Execution Engine (engine.py)"]
+        ExecEngine -->|"Place Orders / Manage Positions"| BybitAPI["Bybit UTA V5 REST API"]
+        BybitAPI -->|"Track Open Trades"| LivePos["execution.active_positions"]
+        BybitAPI -->|"Sync History"| AccHist["account_history Schema (executions, closed_pnl, transaction_log)"]
+        ExecEngine -->|"Reconcile & Log Completed Trades"| ExecLedgers["execution_ledgers Schema"]
+        ExecEngine -->|"Compute Live Performance Metrics"| ExecStats["execution.stats & account.stats"]
+    end
+
     subgraph Backend_Services_Layer["FastAPI REST API Services Layer"]
-        SQL_Check -->|"Query Strategies & Stats"| FastAPI["FastAPI Service Layer (backtest_service.py)"]
+        SQL_Check -->|"Query Strategies & Stats"| FastAPI["FastAPI Service Layer (backtest_service.py DB queries & chart calculation)"]
         SQL_Backtests -->|"Fetch Real Trade Ledgers"| FastAPI
         FastAPI -->|"Dynamic Chart Calculations (generate_charts_from_trades)"| API_Routes["REST Router (/api/v1/backtests)"]
     end
@@ -146,11 +156,14 @@ npm run dev
 ```
 - **Trading Dashboard UI**: [`http://localhost:5173`](http://localhost:5173)
 
-### 4️⃣ **Running Ingestion, Backtesting & ML Pipelines**
+### 4️⃣ **Running Ingestion, Execution, Backtesting & ML Pipelines**
 ```bash
 # Download Binance & Bybit Market Data
 python -m cryptosight.data.binance.main
 python -m cryptosight.data.bybit.main
+
+# Run Live Bybit Automated Execution Engine
+python -m cryptosight.execution.main
 
 # Run Vectorized Backtest Engine
 python -m cryptosight.backtesting.backtest
@@ -177,6 +190,13 @@ cryptosight/
 │   ├── downloader.py              # Master Downloader class with SQL COPY stream & resampling
 │   ├── binance/                   # Binance API fetcher, config.yaml, main.py & run_binance.bat
 │   └── bybit/                     # Bybit API fetcher, config.yaml, main.py & run_bybit.bat
+├── execution/                     # Live Bybit Automated Execution Engine & Reconciliation Pipeline
+│   ├── engine.py                  # Master execution loop, position tracking & auto-reconciliation
+│   ├── bybit_executor.py          # Bybit V5 REST API executor, order placement & PnL/fee fetcher
+│   ├── account_stats.py           # Account-level performance statistics engine & PostgreSQL upsert
+│   ├── selector.py                # Top performing strategy selector from metadata
+│   ├── main.py                    # Master execution entry point
+│   └── run_execution.bat          # Windows batch runner for execution cycles
 ├── tal_Indicators/                # Dynamic __getattr__ wrapper for all 158 TA-Lib technical indicators
 ├── signals/                       # YAML/DB-driven quant signal generator & multi-crossover rule engine
 ├── simulator/                     # Real-time event-driven simulation engine with active position tracking

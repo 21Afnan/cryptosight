@@ -296,14 +296,17 @@ def run_execution_cycle():
                             entry_time=stored_position["entry_time"],
                             exit_time=matched_record.get("updated_time") or matched_record.get("created_time"),
                         )
+                        delete_execution_active_position(conn, strategy_id)
                     else:
                         logger.warning(
                             f"No matching closed PnL record found for strategy #{strategy_id} "
                             f"(entry_price={stored_position['entry_price']}, entry_time={stored_position['entry_time']})."
                         )
-                    delete_execution_active_position(conn, strategy_id)
                 else:
-                    logger.debug(f"No stored active position in DB for strategy #{strategy_id}.")
+                    logger.warning(
+                        f"Strategy #{strategy_id} ({symbol}): No open position on Bybit and no stored active_position record in DB. "
+                        f"A position may have closed on Bybit without a corresponding stored active_position record."
+                    )
 
             # 2. Get latest candle signal and price
             signal, current_price = get_latest_signal_and_price(strategy)
@@ -479,21 +482,33 @@ def run_execution_cycle():
 
             if acc_execs:
                 ingest_account_executions(conn, acc_execs)
-                max_exec = max([int(item.get("execTime", 0)) for item in acc_execs if item.get("execTime")])
-                if max_exec > (last_exec or 0):
-                    update_ingestion_state(conn, last_executions_time=max_exec)
+                exec_times = [int(item.get("execTime", 0)) for item in acc_execs if item.get("execTime")]
+                if exec_times:
+                    max_exec = max(exec_times)
+                    if max_exec > (last_exec or 0):
+                        update_ingestion_state(conn, last_executions_time=max_exec)
+                else:
+                    logger.warning(f"No 'execTime' field found in execution records; sample keys: {list(acc_execs[0].keys()) if acc_execs else 'N/A'}")
 
             if acc_pnl:
                 ingest_account_closed_pnl(conn, acc_pnl)
-                max_pnl = max([int(item.get("updatedTime", 0)) for item in acc_pnl if item.get("updatedTime")])
-                if max_pnl > (last_pnl or 0):
-                    update_ingestion_state(conn, last_closed_pnl_time=max_pnl)
+                pnl_times = [int(item.get("updatedTime", 0)) for item in acc_pnl if item.get("updatedTime")]
+                if pnl_times:
+                    max_pnl = max(pnl_times)
+                    if max_pnl > (last_pnl or 0):
+                        update_ingestion_state(conn, last_closed_pnl_time=max_pnl)
+                else:
+                    logger.warning(f"No 'updatedTime' field found in closed PnL records; sample keys: {list(acc_pnl[0].keys()) if acc_pnl else 'N/A'}")
 
             if acc_tx:
                 ingest_account_transaction_log(conn, acc_tx)
-                max_tx = max([int(item.get("transactionTime", 0)) for item in acc_tx if item.get("transactionTime")])
-                if max_tx > (last_tx or 0):
-                    update_ingestion_state(conn, last_tx_log_time=max_tx)
+                tx_times = [int(item.get("transactionTime", 0)) for item in acc_tx if item.get("transactionTime")]
+                if tx_times:
+                    max_tx = max(tx_times)
+                    if max_tx > (last_tx or 0):
+                        update_ingestion_state(conn, last_tx_log_time=max_tx)
+                else:
+                    logger.warning(f"No 'transactionTime' field found in transaction log records; sample keys: {list(acc_tx[0].keys()) if acc_tx else 'N/A'}")
                     
         except Exception as e:
             logger.warning(f"Failed to ingest account history: {e}")

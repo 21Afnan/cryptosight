@@ -336,12 +336,23 @@ class BybitExecutor:
                 records = []
                 for item in pnl_list:
                     stop_order_type = str(item.get("stopOrderType", "")).strip()
+                    exec_type = str(item.get("execType", "")).strip()
+                    order_type = str(item.get("orderType", "")).strip()
+
                     if stop_order_type in ("TakeProfit", "PartialTakeProfit"):
                         exit_reason = "TAKE_PROFIT"
                     elif stop_order_type in ("StopLoss", "PartialStopLoss"):
                         exit_reason = "STOP_LOSS"
+                    elif stop_order_type == "TrailingStop":
+                        exit_reason = "TRAILING_STOP"
+                    elif exec_type == "BustTrade":
+                        exit_reason = "LIQUIDATION"
+                    elif order_type == "Market":
+                        exit_reason = "MARKET_EXIT"
+                    elif order_type == "Limit":
+                        exit_reason = "LIMIT_EXIT"
                     else:
-                        exit_reason = None
+                        exit_reason = "MARKET_CLOSE"
 
                     created_time = int(item.get("createdTime", 0)) if item.get("createdTime") else 0
                     updated_time = int(item.get("updatedTime", 0)) if item.get("updatedTime") else 0

@@ -1460,23 +1460,90 @@ def create_account_history_schema(conn):
         raise
 
 
+def camel_to_snake(name: str) -> str:
+    """Converts camelCase or PascalCase strings to snake_case."""
+    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+
+
+def migrate_account_history_columns(conn):
+    """
+    Renames existing wrongly-cased columns (e.g. 'closedpnl' -> 'closed_pnl')
+    in account_history tables to snake_case using ALTER TABLE ... RENAME COLUMN.
+    """
+    tables = ["closed_pnl", "executions", "transaction_log"]
+    known_folds = {
+        "closedpnl": "closed_pnl",
+        "avgexitprice": "avg_exit_price",
+        "updatedtime": "updated_time",
+        "createdtime": "created_time",
+        "cumentryvalue": "cum_entry_value",
+        "ordertype": "order_type",
+        "exectype": "exec_type",
+        "closefee": "close_fee",
+        "orderid": "order_id",
+        "execid": "exec_id",
+        "execprice": "exec_price",
+        "indexprice": "index_price",
+        "execqty": "exec_qty",
+        "execvalue": "exec_value",
+        "execfee": "exec_fee",
+        "feerate": "fee_rate",
+        "extrafees": "extra_fees",
+        "tradeprice": "trade_price",
+        "transactiontime": "transaction_time",
+        "ismaker": "is_maker",
+    }
+    try:
+        with conn.cursor() as cursor:
+            for tbl in tables:
+                cursor.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_schema = 'account_history' AND table_name = %s;
+                """, (tbl,))
+                rows = cursor.fetchall()
+                if not rows:
+                    continue
+                existing_cols = [row[0] for row in rows]
+                for col in existing_cols:
+                    if col == "ingested_at":
+                        continue
+                    snake_col = camel_to_snake(col)
+                    if snake_col == col and "_" not in col:
+                        snake_col = known_folds.get(col, col)
+
+                    if snake_col != col and snake_col not in existing_cols:
+                        cursor.execute(f'ALTER TABLE account_history.{tbl} RENAME COLUMN "{col}" TO "{snake_col}";')
+                        existing_cols.append(snake_col)
+            conn.commit()
+    except Exception as error:
+        conn.rollback()
+        logger.warning(f"Failed to migrate account_history columns: {error}")
+
+
 def upsert_account_history_records(conn, table_name: str, records: list, pkey_col: str = "id"):
     """
     Dynamically creates/alters table `account_history.<table_name>` based on keys in `records`,
-    and upserts all records using `pkey_col` as the conflict target.
+    normalizing all column names to snake_case, and upserts all records using `pkey_col` as the conflict target.
     """
     if not records:
         return
 
     create_account_history_schema(conn)
+    migrate_account_history_columns(conn)
     full_table = f"account_history.{table_name}"
 
+    pkey_snake = camel_to_snake(pkey_col)
+    normalized_records = []
     all_keys = set()
     for r in records:
-        all_keys.update(r.keys())
+        norm_r = {camel_to_snake(k): v for k, v in r.items()}
+        normalized_records.append(norm_r)
+        all_keys.update(norm_r.keys())
 
-    if pkey_col not in all_keys and records:
-        all_keys.add(pkey_col)
+    if pkey_snake not in all_keys and normalized_records:
+        all_keys.add(pkey_snake)
 
     columns = list(all_keys)
 
@@ -1484,16 +1551,16 @@ def upsert_account_history_records(conn, table_name: str, records: list, pkey_co
         with conn.cursor() as cursor:
             create_sql = f"""
             CREATE TABLE IF NOT EXISTS {full_table} (
-                {pkey_col} VARCHAR(255) PRIMARY KEY,
+                {pkey_snake} VARCHAR(255) PRIMARY KEY,
                 ingested_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
             """
             cursor.execute(create_sql)
 
             for col in columns:
-                if col == pkey_col or col == "ingested_at":
+                if col == pkey_snake or col == "ingested_at":
                     continue
-                sample_val = next((r[col] for r in records if r.get(col) is not None), None)
+                sample_val = next((r[col] for r in normalized_records if r.get(col) is not None), None)
                 if isinstance(sample_val, bool):
                     col_type = "BOOLEAN"
                 elif isinstance(sample_val, (int, float)):
@@ -1506,17 +1573,17 @@ def upsert_account_history_records(conn, table_name: str, records: list, pkey_co
 
             col_names_str = ", ".join(columns)
             placeholders_str = ", ".join(["%s"] * len(columns))
-            update_assignments = [f"{col} = EXCLUDED.{col}" for col in columns if col != pkey_col]
-            update_str = ", ".join(update_assignments) if update_assignments else f"{pkey_col} = EXCLUDED.{pkey_col}"
+            update_assignments = [f"{col} = EXCLUDED.{col}" for col in columns if col != pkey_snake]
+            update_str = ", ".join(update_assignments) if update_assignments else f"{pkey_snake} = EXCLUDED.{pkey_snake}"
 
             upsert_sql = f"""
             INSERT INTO {full_table} ({col_names_str}, ingested_at)
             VALUES ({placeholders_str}, CURRENT_TIMESTAMP)
-            ON CONFLICT ({pkey_col}) DO UPDATE SET
+            ON CONFLICT ({pkey_snake}) DO UPDATE SET
                 {update_str},
                 ingested_at = CURRENT_TIMESTAMP;
             """
-            for r in records:
+            for r in normalized_records:
                 vals = []
                 for c in columns:
                     v = r.get(c)
@@ -1526,7 +1593,7 @@ def upsert_account_history_records(conn, table_name: str, records: list, pkey_co
                 cursor.execute(upsert_sql, tuple(vals))
 
             conn.commit()
-            logger.info(f"Ingested {len(records)} records into '{full_table}'.")
+            logger.info(f"Ingested {len(normalized_records)} records into '{full_table}'.")
     except Exception as error:
         conn.rollback()
         logger.error(f"Error ingesting into '{full_table}': {error}")
@@ -1603,7 +1670,8 @@ def update_ingestion_state(conn, **kwargs):
     values = []
     for k, v in kwargs.items():
         if k in ("last_executions_time", "last_closed_pnl_time", "last_tx_log_time") and v is not None:
-            updates.append(f"{k} = %s")
+            # Convert epoch-ms integer to PostgreSQL timestamptz (prevents NULL / type-mismatch error)
+            updates.append(f"{k} = to_timestamp(%s / 1000.0)")
             values.append(v)
             
     if not updates:
