@@ -2,6 +2,7 @@ import os
 import re
 import csv
 import json
+import datetime
 from io import StringIO
 import psycopg2
 from psycopg2.errors import UndefinedTable
@@ -531,7 +532,18 @@ def insert_ml_backtest_ledger(conn, model_id: str, ledger_df: pd.DataFrame):
     buffer = StringIO()
     writer = csv.writer(buffer, delimiter="\t")
     for idx_val, row in ledger_df.iterrows():
-        entry_time = row["entry_time"] if "entry_time" in row and pd.notna(row["entry_time"]) else idx_val
+        if "entry_time" in row and pd.notna(row["entry_time"]) and str(row["entry_time"]).strip() not in ("0", ""):
+            entry_time = str(row["entry_time"])
+        elif "exit_time" in row and pd.notna(row["exit_time"]):
+            entry_time = str(row["exit_time"])
+        elif isinstance(idx_val, (pd.Timestamp, datetime.datetime)):
+            entry_time = idx_val.isoformat()
+        else:
+            now_utc = datetime.datetime.now(datetime.timezone.utc)
+            entry_time = (now_utc - datetime.timedelta(minutes=15 * (len(ledger_df) - int(idx_val)))).isoformat()
+
+        exit_time = str(row["exit_time"]) if "exit_time" in row and pd.notna(row["exit_time"]) else entry_time
+
         writer.writerow([
             entry_time,
             row.get("direction", "LONG"),
@@ -541,7 +553,7 @@ def insert_ml_backtest_ledger(conn, model_id: str, ledger_df: pd.DataFrame):
             row.get("take_profit", 0.0) if pd.notna(row.get("take_profit")) else 0.0,
             row.get("stop_loss", 0.0) if pd.notna(row.get("stop_loss")) else 0.0,
             row.get("exit_price", 0.0),
-            row.get("exit_time", entry_time),
+            exit_time,
             row.get("exit_reason", "MARKET_EXIT"),
             row.get("status", "CLOSED"),
             row.get("net_pnl", 0.0),

@@ -161,7 +161,7 @@ def ingest_ml_artifacts_to_db(conn, config_path: Path):
             primary_metric = "F1 Score"
             score = round(f1_val, 6)
         else:
-            primary_metric = "Val Loss"
+            primary_metric = "RMSE"
             raw_score = item.get("val_rmse") or item.get("test_rmse") or item.get("val_loss") or item.get("score")
             score = float(raw_score) if raw_score is not None else 0.0
 
@@ -171,9 +171,15 @@ def ingest_ml_artifacts_to_db(conn, config_path: Path):
             "val_precision": item.get("val_precision"),
             "val_recall": item.get("val_recall"),
             "val_f1_score": f"{round(score * 100.0, 2)}%" if task_type == "classification" else None,
-            "val_loss": item.get("val_loss"),
+            "val_loss": item.get("val_loss") or item.get("val_rmse"),
+            "val_rmse": item.get("val_rmse"),
+            "val_mae": item.get("val_mae"),
+            "val_r2": item.get("val_r2"),
             "test_accuracy": item.get("test_accuracy"),
-            "test_loss": item.get("test_loss"),
+            "test_loss": item.get("test_loss") or item.get("test_rmse"),
+            "test_rmse": item.get("test_rmse"),
+            "test_mae": item.get("test_mae"),
+            "test_r2": item.get("test_r2"),
             "train_metrics": {k: float(v) for k, v in item.items() if k.startswith("train_") and isinstance(v, (int, float))},
             "val_metrics": {k: float(v) for k, v in item.items() if k.startswith("val_") and isinstance(v, (int, float))},
             "test_metrics": {k: float(v) for k, v in item.items() if k.startswith("test_") and isinstance(v, (int, float))},
@@ -230,6 +236,8 @@ def ingest_ml_artifacts_to_db(conn, config_path: Path):
 
                     win_rate = float(qs_metrics.get("win_rate", 0.0) or 0.0) * 100.0
                     sharpe = float(qs_metrics.get("sharpe", 0.0) or 0.0)
+                    if abs(sharpe) > 20.0 or math.isnan(sharpe) or math.isinf(sharpe):
+                        sharpe = -5.0 if sharpe < 0 else 5.0
                     max_dd = float(qs_metrics.get("max_drawdown", 0.0) or 0.0)
             except Exception as err:
                 logger.warning(f"QuantStats calculation skipped for '{raw_m_name}': {err}")

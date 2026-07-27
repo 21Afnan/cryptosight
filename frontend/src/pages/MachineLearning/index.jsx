@@ -92,23 +92,28 @@ export default function MachineLearning() {
     [search],
   );
   const allModels = data?.data ?? [];
+  const kpis = data?.kpis ?? {};
 
   // Filtered models
   const filteredModels = allModels.filter((m) => {
-    if (taskFilter === 'CLASSIFICATION' && m.dataset_info?.target?.toLowerCase().includes('regression')) return false;
-    if (taskFilter === 'REGRESSION' && !m.dataset_info?.target?.toLowerCase().includes('regression')) return false;
+    if (taskFilter === 'CLASSIFICATION' && m.type?.toLowerCase() !== 'classification') return false;
+    if (taskFilter === 'REGRESSION' && m.type?.toLowerCase() !== 'regression') return false;
     if (algoFilter !== 'ALL' && m.type?.toLowerCase() !== algoFilter.toLowerCase()) return false;
     return true;
   });
 
-  const totalModelsCount = allModels.length;
-  const classificationCount = allModels.filter(m => !m.dataset_info?.target?.toLowerCase().includes('regression')).length;
-  const regressionCount = allModels.filter(m => m.dataset_info?.target?.toLowerCase().includes('regression')).length;
-  const topModel = allModels.reduce((max, m) => (m.score > (max?.score ?? 0) ? m : max), null);
+  const totalModelsCount = kpis.total_models ?? allModels.length;
+  const classificationCount = kpis.classification_models ?? allModels.filter(m => m.type?.toLowerCase() === 'classification').length;
+  const regressionCount = kpis.regression_models ?? allModels.filter(m => m.type?.toLowerCase() === 'regression').length;
+  const topModelName = kpis.top_performer ?? (allModels[0]?.name || 'N/A');
 
   const formatScore = (m) => {
-    if (m.primary_metric === 'Val Loss') return m.score?.toFixed(5);
-    return `${(m.score * 100).toFixed(1)}%`;
+    if (!m || m.score == null) return '—';
+    if (m.primary_metric === 'R2 Score' || m.primary_metric === 'R² Score' || m.type?.toLowerCase() === 'regression') {
+      return Number(m.score).toFixed(4);
+    }
+    const scoreNum = Number(m.score);
+    return `${(scoreNum <= 1.0 ? scoreNum * 100 : scoreNum).toFixed(1)}%`;
   };
 
   return (
@@ -140,8 +145,8 @@ export default function MachineLearning() {
           />
           <ExecutiveKpiCard
             title="Top Performer"
-            value={topModel ? `${(topModel.score * 100).toFixed(1)}%` : '—'}
-            subtitle={topModel ? topModel.name : 'Leaderboard Head'}
+            value={allModels[0] ? (allModels[0].primary_metric === 'Val Loss' ? allModels[0].score?.toFixed(4) : `${(allModels[0].score * 100).toFixed(1)}%`) : '—'}
+            subtitle={topModelName}
             icon={AutoAwesomeRoundedIcon}
             color={COLORS.warning}
           />
@@ -174,8 +179,6 @@ export default function MachineLearning() {
           </Stack>
         </Box>
 
-        {error && <EmptyState icon={ErrorOutlineRoundedIcon} title="Failed to load models" description={error} />}
-
         {loading ? (
           <LoadingSkeleton variant="table" />
         ) : filteredModels.length === 0 ? (
@@ -196,7 +199,6 @@ export default function MachineLearning() {
                       <TableCell align="right">Score</TableCell>
                       <TableCell align="right">Sharpe</TableCell>
                       <TableCell align="right">Win Rate</TableCell>
-                      <TableCell align="right">Max DD</TableCell>
                       <TableCell>Training Date</TableCell>
                     </TableRow>
                   </TableHead>
@@ -250,28 +252,41 @@ export default function MachineLearning() {
                         </TableCell>
                         <TableCell>{m.primary_metric}</TableCell>
                         <TableCell align="right">
-                          <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: COLORS.accent }}>
-                            {formatScore(m)}
-                          </Typography>
+                          {(() => {
+                            const val = m.score;
+                            if (val == null) return <Typography variant="body2">—</Typography>;
+                            const num = Number(val);
+                            const isReg = m.primary_metric === 'R2 Score' || m.primary_metric === 'R² Score' || m.type?.toLowerCase() === 'regression';
+                            const formattedText = isReg ? num.toFixed(4) : `${(num <= 1.0 ? num * 100 : num).toFixed(1)}%`;
+                            const color = num < 0 ? COLORS.pnlRed : COLORS.accent;
+                            return (
+                              <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color }}>
+                                {formattedText}
+                              </Typography>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell align="right">
-                          <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: (m.backtest_metrics?.sharpe ?? 0) >= 1.5 ? COLORS.pnlGreen : theme.palette.text.primary }}>
-                            {m.backtest_metrics?.sharpe?.toFixed(2) ?? '—'}
-                          </Typography>
+                          {(() => {
+                            const val = m.sharpe ?? m.metrics?.quant_stats?.sharpe;
+                            if (val == null) return <Typography variant="body2">—</Typography>;
+                            const num = Number(val);
+                            const color = num < 0 ? COLORS.pnlRed : (num >= 1.0 ? COLORS.pnlGreen : theme.palette.text.primary);
+                            return (
+                              <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color }}>
+                                {num.toFixed(2)}
+                              </Typography>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell align="right">
                           <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: COLORS.pnlGreen }}>
-                            {m.backtest_metrics?.win_rate != null ? `${(m.backtest_metrics.win_rate * 100).toFixed(1)}%` : '—'}
-                          </Typography>
-                        </TableCell>
-                        <TableCell align="right">
-                          <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', color: COLORS.pnlRed }}>
-                            {m.backtest_metrics?.max_drawdown != null ? `${(m.backtest_metrics.max_drawdown * 100).toFixed(1)}%` : '—'}
+                            {(m.win_rate ?? m.metrics?.quant_stats?.win_rate) != null ? `${Number(m.win_rate ?? m.metrics?.quant_stats?.win_rate).toFixed(1)}%` : '—'}
                           </Typography>
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2" sx={{ fontSize: 12, color: theme.palette.text.secondary }}>
-                            {new Date(m.training_date).toLocaleDateString()}
+                            {m.updated_at ? new Date(m.updated_at).toISOString().split('T')[0] : (m.training_date ? new Date(m.training_date).toISOString().split('T')[0] : 'Today')}
                           </Typography>
                         </TableCell>
                       </TableRow>

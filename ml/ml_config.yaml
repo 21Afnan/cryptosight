@@ -1,7 +1,7 @@
 # ==============================================================================
 # CRYPTOSIGHT ML MODULE — DATASET CONFIGURATION
 
-model_type: classification  # Options: classification | regression | timeseries
+model_type: regression  # Options: classification | regression | timeseries
 
 # --- 1. MARKET DATA (Base OHLCV Dataset) ---
 data:
@@ -124,16 +124,16 @@ regression:
   signal_threshold: 0.002
 
   models:
-    #- name: xgboost_regressor
-    #  parameters:
-    #    n_estimators: 100
-    #    max_depth: 5
-    #    learning_rate: 0.05
+    - name: xgboost_regressor
+      parameters:
+       n_estimators: 100
+       max_depth: 5
+       learning_rate: 0.05
 
-    #- name: random_forest_regressor
-    #  parameters:
-    #    n_estimators: 100
-    #    max_depth: 5
+    - name: random_forest_regressor
+      parameters:
+        n_estimators: 100
+        max_depth: 5
 
     - name: lightgbm_regressor
       parameters:
@@ -144,15 +144,15 @@ regression:
     - name: linear_regression
       parameters: {}          # no hyperparameters (baseline)
 
-   # - name: lstm_regressor        # Deep Learning LSTM tailored for regression (% return)
-   #   parameters:
-   #     hidden_size: 64           # Balanced size to prevent major overfitting while preserving model capacity
-   #     num_layers: 1             # Reduced from 2
-   #     dropout: 0.0
-   #     epochs: 15
-   #     batch_size: 128
-   #     learning_rate: 0.0005
-   #     lookback_window: 15       # 15 periods sequence window (less memory/lag)
+    - name: lstm_regressor        # Deep Learning LSTM tailored for regression (% return)
+      parameters:
+        hidden_size: 64           # Balanced size to prevent major overfitting while preserving model capacity
+        num_layers: 1             # Reduced from 2
+        dropout: 0.0
+        epochs: 15
+        batch_size: 128
+        learning_rate: 0.0005
+        lookback_window: 15       # 15 periods sequence window (less memory/lag)
 
 
 # --- 9. INFERENCE CONFIGURATION ---

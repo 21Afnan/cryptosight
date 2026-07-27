@@ -99,13 +99,17 @@ function SpecTileCard({ icon: Icon, title, value, color = COLORS.accent }) {
   );
 }
 
-function MlPipelineCircularDiagram({ ds, ti, hp, modelName, algorithm }) {
+function MlPipelineCircularDiagram({ ds = {}, ti = {}, hp = {}, modelName = '', algorithm = '' }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
+  const todayStr = new Date().toISOString().split('T')[0];
+  const cleanDataset = ds?.dataset ? String(ds.dataset).replace(/\bto now\b/gi, `to ${todayStr}`).replace(/\bnow\b/gi, todayStr) : `BYBIT BTC 15m 2026-01-01 to ${todayStr}`;
+  const cleanDateRange = ds?.date_range ? String(ds.date_range).replace(/\bnow\b/gi, todayStr) : `2026-01-01 → ${todayStr}`;
+
   return (
-    <Card sx={{ p: 3, width: '100%', borderRadius: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3, flexWrap: 'wrap', gap: 1 }}>
+    <Card sx={{ p: 3, mb: 3, width: '100%' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 1 }}>
         <Box>
           <Typography variant="h5" sx={{ fontWeight: 800, color: theme.palette.text.primary }}>
             Model Pipeline & System Architecture
@@ -120,117 +124,97 @@ function MlPipelineCircularDiagram({ ds, ti, hp, modelName, algorithm }) {
         />
       </Box>
 
-      {/* 2-Column Spacious Stepped Process Cards */}
-      <Grid container spacing={2.5} sx={{ mb: 2.5 }}>
+      {/* 2-Column Spacious Equal 50/50 Grid Cards */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2.5, width: '100%', mb: 1 }}>
 
         {/* Stage 1: Data Ingestion */}
-        <Grid item xs={12} md={6}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2.5,
-              height: '100%',
-              borderRadius: 2.5,
-              background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)',
-              border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}`,
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-              <Box sx={{ width: 32, height: 32, borderRadius: 2, background: `${COLORS.accent}15`, color: COLORS.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <StorageRoundedIcon fontSize="small" />
-              </Box>
-              <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11, color: COLORS.accent }}>
-                1. Dataset Specifications
-              </Typography>
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2.5,
+            width: '100%',
+            borderRadius: 2.5,
+            background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)',
+            border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}`,
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+            <Box sx={{ width: 32, height: 32, borderRadius: 2, background: `${COLORS.accent}15`, color: COLORS.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <StorageRoundedIcon fontSize="small" />
             </Box>
-            <Stack spacing={1.25}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Source Dataset</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>{ds?.dataset || 'Binance BTCUSDT 4H'}</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Date Range</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>{ds?.date_range || '2023-01-01 → 2025-06-01'}</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Total Sample Bars</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>{ds?.total_samples?.toLocaleString() || '5,490'} Bars</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Target Objective</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>{ds?.target || '3-Class Direction'}</Typography>
-              </Box>
-            </Stack>
-          </Paper>
-        </Grid>
-
-        {/* Stage 2: Feature Engineering & Preprocessing */}
-        <Grid item xs={12} md={6}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2.5,
-              height: '100%',
-              borderRadius: 2.5,
-              background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)',
-              border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}`,
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-              <Box sx={{ width: 32, height: 32, borderRadius: 2, background: `${COLORS.pnlGreen}15`, color: COLORS.pnlGreen, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <TuneRoundedIcon fontSize="small" />
-              </Box>
-              <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11, color: COLORS.pnlGreen }}>
-                2. Preprocessing & Features
-              </Typography>
+            <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11, color: COLORS.accent }}>
+              1. Dataset Specifications
+            </Typography>
+          </Box>
+          <Stack spacing={1.25}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+              <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Source Dataset</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>{cleanDataset}</Typography>
             </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+              <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Date Range</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>{cleanDateRange}</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+              <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Total Sample Bars</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>{ds?.total_samples?.toLocaleString() || '19,854'} Bars</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+              <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Target Objective</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>{ds?.target || 'Direction (Long/Short/Hold)'}</Typography>
+            </Box>
+          </Stack>
+        </Paper>
+
+        {/* Stage 2: Trained Model Hyperparameters & Configuration */}
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2.5,
+            width: '100%',
+            borderRadius: 2.5,
+            background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)',
+            border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}`,
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+            <Box sx={{ width: 32, height: 32, borderRadius: 2, background: `${COLORS.warning}15`, color: COLORS.warning, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <TuneRoundedIcon fontSize="small" />
+            </Box>
+            <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11, color: COLORS.warning }}>
+              2. Trained Model Hyperparameters
+            </Typography>
+          </Box>
+
+          {Object.keys(hp ?? {}).length === 0 ? (
+            <Typography variant="body2" sx={{ color: theme.palette.text.secondary, fontStyle: 'italic', fontSize: 12, mt: 2 }}>
+              Baseline model configuration (default parameters applied)
+            </Typography>
+          ) : (
             <Stack spacing={1.25}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Scaling Method</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>{ti?.scaling || 'RobustScaler + Winsorization'}</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Feature Count</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>{ds?.features || 42} Technical Indicators</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Stationarity Test</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>{ti?.stationarity || 'ADF + KPSS Confirmed'}</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Feature Engineering</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>{ti?.feature_engineering || 'Lag-1, Log Returns, Rolling Z-Scores'}</Typography>
-              </Box>
+              {Object.entries(hp ?? {}).map(([k, v]) => (
+                <Box key={k} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, pb: 0.75, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}` }}>
+                  <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, fontFamily: 'monospace' }}>{k}</Typography>
+                  <Chip
+                    label={String(v)}
+                    size="small"
+                    sx={{
+                      height: 20,
+                      fontWeight: 800,
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                      color: COLORS.accent,
+                      background: `${COLORS.accent}15`,
+                      border: `1px solid ${COLORS.accent}30`,
+                    }}
+                  />
+                </Box>
+              ))}
             </Stack>
-          </Paper>
-        </Grid>
+          )}
+        </Paper>
 
-      </Grid>
-
-      {/* Trained Model Hyperparameters Code Badges Bar */}
-      <Box sx={{ p: 2.5, borderRadius: 2.5, background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
-        <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11, color: COLORS.warning, mb: 1.5 }}>
-          3. Hyperparameters & Model Configuration
-        </Typography>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          {Object.entries(hp ?? {}).map(([k, v]) => (
-            <Chip
-              key={k}
-              label={`${k}: ${v}`}
-              size="small"
-              sx={{
-                fontWeight: 700,
-                fontSize: 11,
-                fontFamily: 'monospace',
-                color: isDark ? '#E5E7EB' : '#374151',
-                background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
-                border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}`,
-              }}
-            />
-          ))}
-        </Box>
       </Box>
-
     </Card>
   );
 }
@@ -320,13 +304,16 @@ export default function ModelDetails() {
         </Box>
 
         {/* Top Executive Stats Cards — Distinct Deep Model Metrics */}
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(6, 1fr)' }, gap: 2, mb: 3, width: '100%' }}>
-          <Card sx={{ p: 1.5, height: 95, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <RadialScoreCircle value={model.score ?? 0} label={`Score (${model.primary_metric})`} color={COLORS.accent} />
-          </Card>
-
-          <Card sx={{ p: 1.5, height: 95, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <RadialScoreCircle value={pred?.confidence ?? 0.712} label="Prediction Confidence" color={COLORS.pnlGreen} />
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(5, 1fr)' }, gap: 2, mb: 3, width: '100%' }}>
+          <Card sx={{ textAlign: 'center', p: 1.5, height: 95, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+            <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>
+              Primary Score ({model.primary_metric === 'Val Loss' ? 'R2 Score' : (model.primary_metric || 'Score')})
+            </Typography>
+            <Typography variant="h5" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: (model.score ?? 0) < 0 ? COLORS.pnlRed : COLORS.accent, fontSize: '1.2rem', mt: 0.5 }}>
+              {model.type?.toLowerCase() === 'regression' || model.primary_metric?.includes('R2')
+                ? Number(model.score ?? 0).toFixed(4)
+                : `${((model.score ?? 0) * 100).toFixed(1)}%`}
+            </Typography>
           </Card>
 
           <Card sx={{ textAlign: 'center', p: 1.5, height: 95, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
@@ -344,25 +331,24 @@ export default function ModelDetails() {
               }}
             />
           </Card>
-
           <Card sx={{ textAlign: 'center', p: 1.5, height: 95, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
             <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Total Trades</Typography>
             <Typography variant="h5" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: theme.palette.text.primary, fontSize: '1.1rem', mt: 0.5 }}>
-              {bk?.acted_signals ?? bk?.total_signals ?? ledger.length ?? 287} Executed
+              {bk?.total_trades ?? bk?.acted_signals ?? ledger.length} Executed
             </Typography>
           </Card>
 
           <Card sx={{ textAlign: 'center', p: 1.5, height: 95, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
             <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Profit Factor</Typography>
-            <Typography variant="h5" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: COLORS.pnlGreen, fontSize: '1.1rem', mt: 0.5 }}>
-              {bk?.profit_factor ? `${bk.profit_factor.toFixed(2)}x` : '1.85x'}
+            <Typography variant="h5" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: (bk?.profit_factor ?? 1) >= 1 ? COLORS.pnlGreen : COLORS.pnlRed, fontSize: '1.1rem', mt: 0.5 }}>
+              {bk?.profit_factor != null ? `${Number(bk.profit_factor).toFixed(2)}x` : '—'}
             </Typography>
           </Card>
 
           <Card sx={{ textAlign: 'center', p: 1.5, height: 95, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
             <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Net Dollar PnL</Typography>
-            <Typography variant="h5" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: COLORS.pnlGreen, fontSize: '1.1rem', mt: 0.5 }}>
-              +${bk?.net_pnl?.toLocaleString() ?? '2,830.40'}
+            <Typography variant="h5" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: (bk?.net_pnl ?? 0) >= 0 ? COLORS.pnlGreen : COLORS.pnlRed, fontSize: '1.1rem', mt: 0.5 }}>
+              {(bk?.net_pnl ?? 0) >= 0 ? `+$${Number(bk?.net_pnl ?? 0).toFixed(2)}` : `-$${Math.abs(Number(bk?.net_pnl ?? 0)).toFixed(2)}`}
             </Typography>
           </Card>
         </Box>
@@ -380,27 +366,41 @@ export default function ModelDetails() {
         {tabIndex === 0 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mb: 3, width: '100%' }}>
 
-            {/* Visual Donut Pie Charts Section */}
+            {/* Stage 1: Dataset & Split Breakdown Donut Pie Charts */}
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
-                <Card sx={{ p: 2.5, height: '100%' }}>
-                  <Typography variant="h5" sx={{ mb: 1, fontWeight: 700 }}>Dataset Chronological Split</Typography>
-                  <Typography variant="caption" sx={{ color: theme.palette.text.secondary, mb: 2, display: 'block' }}>
-                    Proportional breakdown of Train (70%), Validation (15%), and Test (15%) splits
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2.5,
+                    height: 280,
+                    borderRadius: 2.5,
+                    background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)',
+                    border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}
+                >
+                  <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 12, color: theme.palette.text.primary }}>
+                    Dataset Chronological Split
                   </Typography>
-                  <Box sx={{ height: 210, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Typography variant="caption" sx={{ color: theme.palette.text.secondary, mb: 1 }}>
+                    PROPORTIONAL BREAKDOWN OF TRAIN (70%), VALIDATION (15%), AND TEST (15%) SPLITS
+                  </Typography>
+
+                  <Box sx={{ flexGrow: 1, height: 190, width: '100%' }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
+                      <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                         <Pie
                           data={[
-                            { name: 'Train Split (70%)', value: ds?.train_samples ?? 3843, fill: COLORS.accent },
-                            { name: 'Val Split (15%)', value: ds?.val_samples ?? 823, fill: COLORS.warning },
-                            { name: 'Test Split (15%)', value: ds?.test_samples ?? 824, fill: '#8B5CF6' },
+                            { name: 'Train Split (70%)', value: ds?.train_samples ?? 13897, fill: COLORS.accent },
+                            { name: 'Val Split (15%)', value: ds?.val_samples ?? 2978, fill: COLORS.warning },
+                            { name: 'Test Split (15%)', value: ds?.test_samples ?? 2979, fill: '#8B5CF6' },
                           ]}
                           cx="50%"
                           cy="50%"
-                          innerRadius={55}
-                          outerRadius={80}
+                          innerRadius={50}
+                          outerRadius={75}
                           paddingAngle={4}
                           dataKey="value"
                         >
@@ -408,44 +408,58 @@ export default function ModelDetails() {
                           <Cell fill={COLORS.warning} />
                           <Cell fill="#8B5CF6" />
                         </Pie>
-                        <Tooltip formatter={(v) => [`${v?.toLocaleString()} samples`, 'Count']} />
-                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                        <Tooltip formatter={(val) => [`${val.toLocaleString()} Bars`, 'Sample Split']} />
+                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
                       </PieChart>
                     </ResponsiveContainer>
                   </Box>
-                </Card>
+                </Paper>
               </Grid>
 
               <Grid item xs={12} md={6}>
-                <Card sx={{ p: 2.5, height: '100%' }}>
-                  <Typography variant="h5" sx={{ mb: 1, fontWeight: 700 }}>Trade Win / Loss Breakdown</Typography>
-                  <Typography variant="caption" sx={{ color: theme.palette.text.secondary, mb: 2, display: 'block' }}>
-                    Ratio of winning trades vs losing trades generated during backtest
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2.5,
+                    height: 280,
+                    borderRadius: 2.5,
+                    background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)',
+                    border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}
+                >
+                  <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 12, color: theme.palette.text.primary }}>
+                    Trade Win / Loss Breakdown
                   </Typography>
-                  <Box sx={{ height: 210, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Typography variant="caption" sx={{ color: theme.palette.text.secondary, mb: 1 }}>
+                    RATIO OF WINNING TRADES VS LOSING TRADES GENERATED DURING BACKTEST
+                  </Typography>
+
+                  <Box sx={{ flexGrow: 1, height: 190, width: '100%' }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
+                      <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                         <Pie
                           data={[
-                            { name: `Winning Trades (${((bk?.win_rate ?? 0.614) * 100).toFixed(1)}%)`, value: Math.round((bk?.acted_signals ?? 287) * (bk?.win_rate ?? 0.614)), fill: COLORS.pnlGreen },
-                            { name: `Losing Trades (${((1 - (bk?.win_rate ?? 0.614)) * 100).toFixed(1)}%)`, value: Math.round((bk?.acted_signals ?? 287) * (1 - (bk?.win_rate ?? 0.614))), fill: COLORS.pnlRed },
+                            { name: `Winning Trades (${((bk?.win_rate ?? 0.614) * 100).toFixed(1)}%)`, value: bk?.win_rate ? Math.round(bk.win_rate * (bk.total_trades || 100)) : 61, fill: COLORS.pnlGreen },
+                            { name: `Losing Trades (${((1 - (bk?.win_rate ?? 0.614)) * 100).toFixed(1)}%)`, value: bk?.win_rate ? Math.round((1 - bk.win_rate) * (bk.total_trades || 100)) : 39, fill: COLORS.pnlRed },
                           ]}
                           cx="50%"
                           cy="50%"
-                          innerRadius={55}
-                          outerRadius={80}
+                          innerRadius={50}
+                          outerRadius={75}
                           paddingAngle={4}
                           dataKey="value"
                         >
                           <Cell fill={COLORS.pnlGreen} />
                           <Cell fill={COLORS.pnlRed} />
                         </Pie>
-                        <Tooltip formatter={(v) => [`${v} trades`, 'Trades']} />
-                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                        <Tooltip formatter={(val) => [`${val} Trades`, 'Executions']} />
+                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
                       </PieChart>
                     </ResponsiveContainer>
                   </Box>
-                </Card>
+                </Paper>
               </Grid>
             </Grid>
 
@@ -471,8 +485,8 @@ export default function ModelDetails() {
                   </Typography>
                 </Box>
                 <Chip
-                  label={`Primary Accuracy: ${((ev?.accuracy ?? 0.7736) * 100).toFixed(1)}%`}
-                  sx={{ fontWeight: 800, color: COLORS.accent, background: `${COLORS.accent}15`, border: `1px solid ${COLORS.accent}30` }}
+                  label={`Primary Metric Score (${model.primary_metric === 'Val Loss' ? 'R2 Score' : (model.primary_metric || 'Score')}): ${model.type?.toLowerCase() === 'regression' || model.primary_metric?.includes('R2') ? Number(model.score ?? 0).toFixed(4) : `${((model.score ?? 0) * 100).toFixed(1)}%`}`}
+                  sx={{ fontWeight: 800, color: (model.score ?? 0) < 0 ? COLORS.pnlRed : COLORS.accent, background: (model.score ?? 0) < 0 ? `${COLORS.pnlRed}15` : `${COLORS.accent}15`, border: `1px solid ${(model.score ?? 0) < 0 ? COLORS.pnlRed : COLORS.accent}30` }}
                 />
               </Box>
 
@@ -480,7 +494,7 @@ export default function ModelDetails() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={[
-                      { metric: 'Accuracy', value: parseFloat(((ev?.accuracy ?? 0.7736) * 100).toFixed(1)), fill: COLORS.accent },
+                      { metric: 'Accuracy', value: parseFloat(((ev?.accuracy ?? model.score ?? 0.7736) * 100).toFixed(1)), fill: COLORS.accent },
                       { metric: 'Precision', value: parseFloat(((ev?.precision ?? 0.712) * 100).toFixed(1)), fill: COLORS.pnlRed },
                       { metric: 'Recall', value: parseFloat(((ev?.recall ?? 0.685) * 100).toFixed(1)), fill: '#F87171' },
                       { metric: 'F1-Score', value: parseFloat(((ev?.f1_score ?? ev?.f1 ?? 0.698) * 100).toFixed(1)), fill: '#DC2626' },
@@ -508,56 +522,125 @@ export default function ModelDetails() {
               </Box>
             </Card>
 
-            {/* Radial Score Rings & Detailed Metrics Grid */}
+            {/* Score Gauges & Detailed Metrics Grid */}
             <Grid container spacing={3}>
               <Grid item xs={12} md={8}>
                 <Card sx={{ p: 2.5, height: '100%' }}>
-                  <Typography variant="h5" sx={{ mb: 2, fontWeight: 700 }}>Classification Score Gauges</Typography>
-                  <Grid container spacing={2}>
-                    <Grid item xs={6} sm={3}>
-                      <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
-                        <RadialScoreCircle value={ev?.accuracy ?? 0.7736} label="Accuracy" color={COLORS.accent} />
-                      </Paper>
+                  <Typography variant="h5" sx={{ mb: 2, fontWeight: 700 }}>
+                    {model.type?.toLowerCase() === 'regression' ? 'Regression R² & Split Metrics' : 'Classification Score Gauges'}
+                  </Typography>
+
+                  {model.type?.toLowerCase() === 'regression' ? (
+                    <Grid container spacing={2}>
+                      <Grid item xs={6} sm={3}>
+                        <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
+                          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, display: 'block', mb: 0.5 }}>Validation R²</Typography>
+                          <Typography variant="h5" sx={{ fontWeight: 800, fontFamily: 'monospace', color: (ev?.val_r2 ?? model.score ?? 0) < 0 ? COLORS.pnlRed : COLORS.accent }}>
+                            {ev?.val_r2 != null ? Number(ev.val_r2).toFixed(4) : Number(model.score ?? 0).toFixed(4)}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={6} sm={3}>
+                        <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
+                          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, display: 'block', mb: 0.5 }}>Validation RMSE</Typography>
+                          <Typography variant="h5" sx={{ fontWeight: 800, fontFamily: 'monospace', color: COLORS.accent }}>
+                            {ev?.val_rmse != null ? Number(ev.val_rmse).toFixed(5) : '—'}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={6} sm={3}>
+                        <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
+                          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, display: 'block', mb: 0.5 }}>Validation MAE</Typography>
+                          <Typography variant="h5" sx={{ fontWeight: 800, fontFamily: 'monospace', color: COLORS.pnlGreen }}>
+                            {ev?.val_mae != null ? Number(ev.val_mae).toFixed(5) : '—'}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={6} sm={3}>
+                        <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
+                          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, display: 'block', mb: 0.5 }}>Test R² Score</Typography>
+                          <Typography variant="h5" sx={{ fontWeight: 800, fontFamily: 'monospace', color: (ev?.test_r2 ?? 0) < 0 ? COLORS.pnlRed : COLORS.accent }}>
+                            {ev?.test_r2 != null ? Number(ev.test_r2).toFixed(4) : '—'}
+                          </Typography>
+                        </Paper>
+                      </Grid>
                     </Grid>
-                    <Grid item xs={6} sm={3}>
-                      <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
-                        <RadialScoreCircle value={ev?.precision ?? 0.712} label="Precision" color={COLORS.pnlRed} />
-                      </Paper>
+                  ) : (
+                    <Grid container spacing={2}>
+                      <Grid item xs={6} sm={3}>
+                        <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
+                          <RadialScoreCircle value={ev?.val_accuracy ?? ev?.accuracy ?? model.score ?? 0.7736} label="Accuracy" color={COLORS.accent} />
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={6} sm={3}>
+                        <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
+                          <RadialScoreCircle value={ev?.val_precision ?? ev?.precision ?? 0.712} label="Precision" color={COLORS.pnlRed} />
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={6} sm={3}>
+                        <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
+                          <RadialScoreCircle value={ev?.val_recall ?? ev?.recall ?? 0.685} label="Recall" color="#F87171" />
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={6} sm={3}>
+                        <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
+                          <RadialScoreCircle value={ev?.val_f1_score ?? ev?.f1_score ?? ev?.f1 ?? 0.698} label="F1-Score" color="#DC2626" />
+                        </Paper>
+                      </Grid>
                     </Grid>
-                    <Grid item xs={6} sm={3}>
-                      <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
-                        <RadialScoreCircle value={ev?.recall ?? 0.685} label="Recall" color="#F87171" />
-                      </Paper>
-                    </Grid>
-                    <Grid item xs={6} sm={3}>
-                      <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
-                        <RadialScoreCircle value={ev?.f1_score ?? ev?.f1 ?? 0.698} label="F1-Score" color="#DC2626" />
-                      </Paper>
-                    </Grid>
-                  </Grid>
+                  )}
                 </Card>
               </Grid>
 
               <Grid item xs={12} md={4}>
                 <Card sx={{ p: 2.5, height: '100%' }}>
-                  <Typography variant="h5" sx={{ mb: 2, fontWeight: 700 }}>Loss & Variance Metrics</Typography>
+                  <Typography variant="h5" sx={{ mb: 2, fontWeight: 700 }}>
+                    {model.type?.toLowerCase() === 'regression' ? 'Regression Loss Metrics' : 'Model Accuracy Metrics'}
+                  </Typography>
                   <Stack spacing={1.5}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
-                      <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Validation Loss</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>{ev?.val_loss?.toFixed(5) ?? '0.00182'}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
-                      <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Test Loss</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>{ev?.test_loss?.toFixed(5) ?? '0.00214'}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
-                      <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Mean Absolute Error (MAE)</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>{ev?.mae?.toFixed(2) ?? '312.40'}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Root Mean Sq Error (RMSE)</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>{ev?.rmse?.toFixed(2) ?? '487.20'}</Typography>
-                    </Box>
+                    {model.type?.toLowerCase() === 'regression' ? (
+                      <>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
+                          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Validation RMSE</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace', color: COLORS.accent }}>{ev?.val_rmse != null ? Number(ev.val_rmse).toFixed(5) : '—'}</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
+                          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Validation MAE</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace', color: COLORS.pnlGreen }}>{ev?.val_mae != null ? Number(ev.val_mae).toFixed(5) : '—'}</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
+                          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Validation R² Score</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>{ev?.val_r2 != null ? Number(ev.val_r2).toFixed(4) : '—'}</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
+                          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Test RMSE</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>{ev?.test_rmse != null ? Number(ev.test_rmse).toFixed(5) : '—'}</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Test MAE</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>{ev?.test_mae != null ? Number(ev.test_mae).toFixed(5) : '—'}</Typography>
+                        </Box>
+                      </>
+                    ) : (
+                      <>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
+                          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Train Accuracy</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace', color: COLORS.accent }}>{ev?.train_accuracy != null ? (String(ev.train_accuracy).includes('%') ? ev.train_accuracy : `${(parseFloat(ev.train_accuracy) <= 1 ? parseFloat(ev.train_accuracy) * 100 : parseFloat(ev.train_accuracy)).toFixed(1)}%`) : '—'}</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
+                          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Validation Accuracy</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace', color: COLORS.pnlGreen }}>{ev?.val_accuracy != null ? (String(ev.val_accuracy).includes('%') ? ev.val_accuracy : `${(parseFloat(ev.val_accuracy) <= 1 ? parseFloat(ev.val_accuracy) * 100 : parseFloat(ev.val_accuracy)).toFixed(1)}%`) : '—'}</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
+                          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Test Accuracy</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace', color: COLORS.pnlGreen }}>{ev?.test_accuracy != null ? (String(ev.test_accuracy).includes('%') ? ev.test_accuracy : `${(parseFloat(ev.test_accuracy) <= 1 ? parseFloat(ev.test_accuracy) * 100 : parseFloat(ev.test_accuracy)).toFixed(1)}%`) : '—'}</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Validation Loss</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>{ev?.val_loss != null ? Number(ev.val_loss).toFixed(5) : '—'}</Typography>
+                        </Box>
+                      </>
+                    )}
                   </Stack>
                 </Card>
               </Grid>
@@ -582,50 +665,57 @@ export default function ModelDetails() {
                       <TableRow>
                         <TableCell>Exit Time</TableCell>
                         <TableCell>Direction</TableCell>
-                        <TableCell>Signal</TableCell>
                         <TableCell align="right">Entry Price</TableCell>
                         <TableCell align="right">Exit Price</TableCell>
                         <TableCell align="right">Quantity</TableCell>
                         <TableCell align="right">Net PnL ($)</TableCell>
                         <TableCell align="right">Return (%)</TableCell>
                         <TableCell>Exit Reason</TableCell>
-                        <TableCell>Status</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {ledger.map((t, idx) => (
-                        <TableRow key={t.trade_id || idx} hover>
-                          <TableCell sx={{ fontSize: 12 }}>{t.exit_time}</TableCell>
-                          <TableCell>
-                            <Chip
-                              label={t.direction}
-                              size="small"
-                              icon={t.direction === 'LONG' ? <TrendingUpRoundedIcon /> : <TrendingDownRoundedIcon />}
-                              sx={{
-                                height: 20, fontSize: 10, fontWeight: 700,
-                                color: t.direction === 'LONG' ? COLORS.pnlGreen : COLORS.pnlRed,
-                                background: t.direction === 'LONG' ? `${COLORS.pnlGreen}15` : `${COLORS.pnlRed}15`,
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell>{t.signal}</TableCell>
-                          <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>${t.entry_price?.toLocaleString()}</TableCell>
-                          <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>${t.exit_price?.toLocaleString()}</TableCell>
-                          <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>{t.quantity}</TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: t.net_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed }}>
-                            {t.net_pnl >= 0 ? `+$${t.net_pnl?.toFixed(2)}` : `-$${Math.abs(t.net_pnl)?.toFixed(2)}`}
-                          </TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: t.perc_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed }}>
-                            {t.perc_pnl >= 0 ? `+${t.perc_pnl}%` : `${t.perc_pnl}%`}
-                          </TableCell>
-                          <TableCell>
-                            <Chip label={t.exit_reason} size="small" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
-                          </TableCell>
-                          <TableCell>
-                            <Chip label={t.status} size="small" sx={{ height: 20, fontSize: 10, background: 'rgba(255,255,255,0.05)' }} />
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {ledger.map((t, idx) => {
+                        const cleanTime = t.exit_time ? String(t.exit_time).replace('T', ' ').replace('+00:00', '').replace('Z', '').split('.')[0] : (t.entry_time ? String(t.entry_time).replace('T', ' ').replace('+00:00', '').replace('Z', '').split('.')[0] : '—');
+                        const isLong = String(t.direction).toUpperCase() === 'LONG';
+                        const netPnl = Number(t.net_pnl ?? 0);
+                        const percPnl = Number(t.perc_pnl ?? 0);
+
+                        return (
+                          <TableRow key={t.trade_id || idx} hover>
+                            <TableCell sx={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 600 }}>{cleanTime}</TableCell>
+                            <TableCell>
+                              <Chip
+                                label={isLong ? 'Long' : 'Short'}
+                                size="small"
+                                icon={isLong ? <TrendingUpRoundedIcon /> : <TrendingDownRoundedIcon />}
+                                sx={{
+                                  height: 20, fontSize: 10, fontWeight: 700,
+                                  color: isLong ? COLORS.pnlGreen : COLORS.pnlRed,
+                                  background: isLong ? `${COLORS.pnlGreen}15` : `${COLORS.pnlRed}15`,
+                                }}
+                              />
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace' }}>
+                              ${Number(t.entry_price ?? 0).toFixed(4)}
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace' }}>
+                              ${Number(t.exit_price ?? 0).toFixed(4)}
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace' }}>
+                              {Number(t.quantity ?? 0).toFixed(4)}
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace', color: netPnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed }}>
+                              {netPnl >= 0 ? `+$${netPnl.toFixed(4)}` : `-$${Math.abs(netPnl).toFixed(4)}`}
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace', color: percPnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed }}>
+                              {percPnl >= 0 ? `+${percPnl.toFixed(4)}%` : `${percPnl.toFixed(4)}%`}
+                            </TableCell>
+                            <TableCell>
+                              <Chip label={t.exit_reason || 'market_exit'} size="small" variant="outlined" sx={{ height: 20, fontSize: 10, fontWeight: 600 }} />
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </TableContainer>
