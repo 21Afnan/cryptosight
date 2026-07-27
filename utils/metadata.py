@@ -800,7 +800,71 @@ def fetch_execution_config(conn) -> dict:
         logger.error(f"Error fetching metadata.execution_config: {error}")
         raise RuntimeError(f"metadata.execution_config could not be fetched and no config exists — cannot proceed without real config: {error}")
     
-    raise RuntimeError("metadata.execution_config could not be fetched and no config exists — cannot proceed without real config")
+def create_ml_configs_table(conn):
+    """
+    Creates the `metadata.ml_configs` table to store regression & classification JSON configs.
+    """
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS metadata;"
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS metadata.ml_configs (
+        config_id            SERIAL PRIMARY KEY,
+        config_name          VARCHAR(255) UNIQUE NOT NULL,
+        task_type            VARCHAR(50) NOT NULL,
+        symbol               VARCHAR(50) NOT NULL,
+        exchange             VARCHAR(50) NOT NULL,
+        timeframe            VARCHAR(20) NOT NULL,
+        config_json          JSONB NOT NULL,
+        created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_table_sql)
+            conn.commit()
+            logger.info("Table 'metadata.ml_configs' verified/created successfully.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating table 'metadata.ml_configs': {error}")
+        raise
+
+
+def create_ml_stats_table(conn):
+    """
+    Creates the `metadata.ml_stats` table to store ML model performance metrics, Sharpe, Win Rate, and JSONB charts.
+    """
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS metadata;"
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS metadata.ml_stats (
+        model_id             VARCHAR(255) PRIMARY KEY,
+        model_name           VARCHAR(255) NOT NULL,
+        task_type            VARCHAR(50) NOT NULL,
+        symbol               VARCHAR(50) NOT NULL,
+        exchange             VARCHAR(50) NOT NULL,
+        timeframe            VARCHAR(20) NOT NULL,
+        status               VARCHAR(50) DEFAULT 'trained',
+        primary_metric       VARCHAR(50) NOT NULL,
+        score                NUMERIC(18,6),
+        win_rate             NUMERIC(10,4),
+        sharpe               NUMERIC(10,4),
+        max_drawdown         NUMERIC(10,4),
+        metrics              JSONB,
+        charts               JSONB,
+        updated_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_table_sql)
+            conn.commit()
+            logger.info("Table 'metadata.ml_stats' verified/created successfully.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating table 'metadata.ml_stats': {error}")
+        raise
+
 
 
 
