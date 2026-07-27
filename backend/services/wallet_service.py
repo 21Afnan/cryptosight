@@ -119,29 +119,52 @@ def get_wallets_data(search: str = "", filter_status: str = "") -> dict:
                 conn
             )
             if not df_pnl.empty:
+                df_pnl["closed_pnl"] = pd.to_numeric(df_pnl["closed_pnl"], errors="coerce").fillna(0.0)
                 net_pnl_sum = float(df_pnl["closed_pnl"].sum())
                 baseline_bal = (total_equity - net_pnl_sum) if total_equity is not None else 100000.0
                 curr_bal = baseline_bal
 
-                first_ts = df_pnl.iloc[0].get("created_time")
-                start_dt_str = pd.to_datetime(first_ts, unit="ms").strftime("%Y-%m-%d") if (first_ts and isinstance(first_ts, (int, float)) and first_ts > 1e11) else pd.Timestamp.now().strftime("%Y-%m-%d")
-                pts = [{"time": start_dt_str, "value": round(curr_bal, 2)}]
+                def _to_unix_sec(raw_ts) -> int:
+                    if not raw_ts:
+                        return int(pd.Timestamp.now().timestamp())
+                    try:
+                        num = float(raw_ts)
+                        if num > 1e11:  # Epoch ms
+                            return int(num / 1000)
+                        elif num > 1e8: # Epoch s
+                            return int(num)
+                    except Exception:
+                        pass
+                    try:
+                        dt = pd.to_datetime(str(raw_ts).replace("T", " ").split("+")[0])
+                        return int(dt.timestamp())
+                    except Exception:
+                        return int(pd.Timestamp.now().timestamp())
+
+                first_raw_ts = df_pnl.iloc[0].get("created_time")
+                start_ts_sec = _to_unix_sec(first_raw_ts) - 60  # Start 1 minute before first trade
+                pts = [{"time": start_ts_sec, "value": round(curr_bal, 2)}]
 
                 for _, row in df_pnl.iterrows():
                     pnl_val = float(row.get("closed_pnl", 0.0))
-                    ts = row.get("updated_time") or row.get("created_time")
-                    if ts and isinstance(ts, (int, float)) and ts > 1e11:
-                        dt_str = pd.to_datetime(ts, unit="ms").strftime("%Y-%m-%d")
-                    elif ts:
-                        dt_str = str(ts)[:10]
-                    else:
-                        dt_str = pd.Timestamp.now().strftime("%Y-%m-%d")
+                    raw_ts = row.get("updated_time") or row.get("created_time")
+                    ts_sec = _to_unix_sec(raw_ts)
+
                     curr_bal += pnl_val
-                    pts.append({"time": dt_str, "value": round(curr_bal, 2)})
-                
+                    pts.append({"time": ts_sec, "value": round(curr_bal, 2)})
+
                 if total_equity is not None and pts:
-                    today_str = pd.Timestamp.now().strftime("%Y-%m-%d")
-                    pts.append({"time": today_str, "value": round(total_equity, 2)})
+                    now_sec = int(pd.Timestamp.now().timestamp())
+                    last_sec = pts[-1]["time"]
+                    final_sec = max(now_sec, last_sec + 60)
+                    pts.append({"time": final_sec, "value": round(total_equity, 2)})
+
+                # Ensure strict ascending timestamps for lightweight-charts
+                pts.sort(key=lambda p: p["time"])
+                # Deduplicate exact duplicate timestamps by incrementing 1 second
+                for i in range(1, len(pts)):
+                    if pts[i]["time"] <= pts[i-1]["time"]:
+                        pts[i]["time"] = pts[i-1]["time"] + 1
 
                 equity_curve = pts
             else:

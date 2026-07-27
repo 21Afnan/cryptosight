@@ -5,13 +5,63 @@ import { createChart, CrosshairMode, AreaSeries } from 'lightweight-charts';
 import { COLORS } from '../../theme/theme';
 
 /**
- * EquityCurveChart — lightweight-charts area chart for equity curves (v4 & v5 compatible).
- * Used on Strategy Details, Execution Details, Backtest Details, Account Overview.
- *
- * @param {Array}  data     - [{ time: 'YYYY-MM-DD', value: number }]
- * @param {number} height
- * @param {string} label    - Legend label
+ * Robust data cleaner that converts raw points into strictly ascending, 
+ * unique time points (unix timestamps in seconds or YYYY-MM-DD strings) 
+ * suitable for lightweight-charts area series.
  */
+function prepareEquityData(data) {
+  const rawList = Array.isArray(data) ? data : (data?.raw_values || data?.values || data?.data || []);
+  if (!rawList.length) return [];
+
+  const points = [];
+  rawList.forEach((item) => {
+    if (!item || item.time == null) return;
+    let t = item.time;
+    // Check if unix timestamp (int/float) or YYYY-MM-DD string
+    if (typeof t === 'string' && t.includes('-')) {
+      t = t.split(' ')[0].split('T')[0];
+    } else {
+      t = Number(t);
+    }
+    const val = Number(item.value ?? 0);
+    if (!isNaN(val)) {
+      points.push({ time: t, value: val });
+    }
+  });
+
+  if (!points.length) return [];
+
+  // Sort ascending by time
+  points.sort((a, b) => (a.time > b.time ? 1 : a.time < b.time ? -1 : 0));
+
+  // Deduplicate exact duplicate timestamps by adding 1 second or preserving order
+  const clean = [];
+  let lastTime = null;
+  points.forEach((p) => {
+    let t = p.time;
+    if (typeof t === 'number' && typeof lastTime === 'number' && t <= lastTime) {
+      t = lastTime + 1;
+    }
+    clean.push({ time: t, value: p.value });
+    lastTime = t;
+  });
+
+  // If only 1 point, add a baseline point 1 minute prior with identical value
+  if (clean.length === 1) {
+    let prevTime;
+    if (typeof clean[0].time === 'number') {
+      prevTime = clean[0].time - 60;
+    } else {
+      const d = new Date(clean[0].time);
+      d.setDate(d.getDate() - 1);
+      prevTime = d.toISOString().split('T')[0];
+    }
+    clean.unshift({ time: prevTime, value: clean[0].value });
+  }
+
+  return clean;
+}
+
 export default function EquityCurveChart({ data = [], height = 300, label = 'Portfolio Value' }) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
@@ -23,26 +73,8 @@ export default function EquityCurveChart({ data = [], height = 300, label = 'Por
     if (!containerRef.current) return;
 
     try {
-      const getContainerWidth = () => {
-        if (!containerRef.current) return 600;
-        const cardContent = containerRef.current.closest('.MuiCardContent-root');
-        if (cardContent) {
-          const cardWidth = cardContent.getBoundingClientRect().width;
-          const isHalf = Boolean(containerRef.current.closest('.MuiGrid-item'));
-          const calculatedWidth = isHalf ? (cardWidth - 56) / 2 : (cardWidth - 32);
-          if (calculatedWidth > 200) return calculatedWidth;
-        }
-        const parent = containerRef.current.parentElement;
-        if (parent && parent.clientWidth > 200) {
-          return parent.clientWidth - 16;
-        }
-        return 600;
-      };
-
-      const initialWidth = getContainerWidth();
-
       const chart = createChart(containerRef.current, {
-        width: initialWidth,
+        autoSize: true,
         height,
         layout: {
           background: { color: 'transparent' },
@@ -92,22 +124,7 @@ export default function EquityCurveChart({ data = [], height = 300, label = 'Por
         crosshairMarkerRadius: 5,
         crosshairMarkerBorderColor: COLORS.pnlGreen,
         crosshairMarkerBackgroundColor: isDark ? COLORS.darkSurface : COLORS.lightSurface,
-        priceFormat: { type: 'price', precision: 0, minMove: 1 },
-        autoscaleInfoProvider: (original) => {
-          const res = original();
-          if (res && res.priceRange) {
-            const { minValue, maxValue } = res.priceRange;
-            if (minValue === maxValue) {
-              return {
-                priceRange: {
-                  minValue: minValue * 0.95,
-                  maxValue: maxValue * 1.05,
-                },
-              };
-            }
-          }
-          return res;
-        },
+        priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
       };
 
       const series = typeof chart.addAreaSeries === 'function'
@@ -116,69 +133,13 @@ export default function EquityCurveChart({ data = [], height = 300, label = 'Por
 
       seriesRef.current = series;
 
-      // Deduplicate by time and keep last value per day, then sort strictly ascending
-      const cleanData = [];
-      const map = new Map();
-      const rawList = Array.isArray(data) ? data : (data?.raw_values || data?.values || data?.data || []);
-      rawList.forEach((item) => {
-        if (!item || item.time == null) return;
-        const timeStr = String(item.time).split(' ')[0].split('T')[0];
-        const val = Number(item.value ?? 0);
-        if (timeStr && !isNaN(val)) {
-          map.set(timeStr, val);
-        }
-      });
-
-      map.forEach((val, timeStr) => {
-        cleanData.push({ time: timeStr, value: val });
-      });
-
-      cleanData.sort((a, b) => (a.time > b.time ? 1 : a.time < b.time ? -1 : 0));
-
-      // Guarantee at least 2 points for lightweight-charts area series rendering
-      if (cleanData.length === 1) {
-        const dt = new Date(cleanData[0].time);
-        dt.setDate(dt.getDate() - 1);
-        const prevStr = dt.toISOString().split('T')[0];
-        cleanData.unshift({ time: prevStr, value: 10000.0 });
-      }
-
+      const cleanData = prepareEquityData(data);
       if (cleanData.length > 0) {
         series.setData(cleanData);
         chart.timeScale().fitContent();
       }
 
-      // Force resize pass right after mount to fill full parent container width
-      const handleResize = () => {
-        if (containerRef.current && chartRef.current) {
-          const w = getContainerWidth();
-          if (w > 0) {
-            chartRef.current.applyOptions({ width: w });
-            chartRef.current.timeScale().fitContent();
-          }
-        }
-      };
-
-      const resizeTimer = setTimeout(handleResize, 30);
-      const resizeTimer2 = setTimeout(handleResize, 150);
-      const resizeTimer3 = setTimeout(handleResize, 400);
-
-      const ro = new ResizeObserver(() => {
-        handleResize();
-      });
-
-      const cardContent = containerRef.current.closest('.MuiCardContent-root');
-      if (cardContent) ro.observe(cardContent);
-      ro.observe(containerRef.current);
-
-      window.addEventListener('resize', handleResize);
-
       return () => {
-        clearTimeout(resizeTimer);
-        clearTimeout(resizeTimer2);
-        clearTimeout(resizeTimer3);
-        window.removeEventListener('resize', handleResize);
-        ro.disconnect();
         try {
           chart.remove();
         } catch {
@@ -194,28 +155,9 @@ export default function EquityCurveChart({ data = [], height = 300, label = 'Por
   useEffect(() => {
     if (seriesRef.current && data) {
       try {
-        const clean = [];
-        const map = new Map();
-        const rawList = Array.isArray(data) ? data : (data?.raw_values || data?.values || data?.data || []);
-        rawList.forEach((item) => {
-          if (!item || item.time == null) return;
-          const timeStr = String(item.time).split(' ')[0].split('T')[0];
-          const val = Number(item.value ?? 0);
-          if (timeStr && !isNaN(val)) {
-            map.set(timeStr, val);
-          }
-        });
-        map.forEach((val, timeStr) => clean.push({ time: timeStr, value: val }));
-        clean.sort((a, b) => (a.time > b.time ? 1 : a.time < b.time ? -1 : 0));
-
-        if (clean.length === 1) {
-          const dt = new Date(clean[0].time);
-          dt.setDate(dt.getDate() - 1);
-          clean.unshift({ time: dt.toISOString().split('T')[0], value: 10000.0 });
-        }
-
-        if (clean.length > 0) {
-          seriesRef.current.setData(clean);
+        const cleanData = prepareEquityData(data);
+        if (cleanData.length > 0) {
+          seriesRef.current.setData(cleanData);
           chartRef.current?.timeScale().fitContent();
         }
       } catch (e) {

@@ -204,30 +204,17 @@ export default function BacktestDetails() {
               </Typography>
             </Box>
           </Box>
-
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Button
-              id="export-report-btn"
-              startIcon={<DownloadRoundedIcon />}
-              variant="contained"
-              size="small"
-              onClick={() => setSnack({ severity: 'info', message: 'Report export queued — PDF generation ready.' })}
-              sx={{ fontWeight: 700, height: 32 }}
-            >
-              Export Report
-            </Button>
-          </Box>
         </Box>
 
         {/* Guaranteed 100% Equal Width & Height Cards Grid (CSS Grid repeat(4, 1fr)) */}
-        <Box
+        <Box>
           sx={{
             display: 'grid',
             gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
             gap: 2,
             width: '100%',
           }}
-        >
+
           <HeroKpiCard
             icon={<LocalAtmRoundedIcon />}
             label="Net PnL"

@@ -11,6 +11,22 @@ from cryptosight.utils.logger import get_logger
 logger = get_logger("MLService")
 
 
+def clean_timestamp(dt_val) -> str:
+    """
+    Formats DB timestamp cleanly into 'YYYY-MM-DD HH:MM:SS', stripping raw UTC offset '+00:00'.
+    """
+    if not dt_val:
+        return ""
+    if hasattr(dt_val, "strftime"):
+        return dt_val.strftime("%Y-%m-%d %H:%M:%S")
+    s = str(dt_val).replace("T", " ")
+    if "+00:00" in s:
+        s = s.replace("+00:00", "")
+    elif "+00" in s and s.endswith(":00"):
+        s = s.split("+")[0]
+    return s.strip()
+
+
 def get_all_ml_models(
     task_type: Optional[str] = None,
     symbol: Optional[str] = None,
@@ -233,9 +249,9 @@ def get_ml_model_by_id(model_id: str) -> Optional[Dict[str, Any]]:
                 for tr in trade_rows:
                     t_rec = dict(zip(t_cols, tr))
                     if t_rec.get("entry_time"):
-                        t_rec["entry_time"] = t_rec["entry_time"].isoformat() if hasattr(t_rec["entry_time"], "isoformat") else str(t_rec["entry_time"])
+                        t_rec["entry_time"] = clean_timestamp(t_rec["entry_time"])
                     if t_rec.get("exit_time"):
-                        t_rec["exit_time"] = t_rec["exit_time"].isoformat() if hasattr(t_rec["exit_time"], "isoformat") else str(t_rec["exit_time"])
+                        t_rec["exit_time"] = clean_timestamp(t_rec["exit_time"])
                     recent_trades.append(t_rec)
             except Exception as leg_err:
                 logger.info(f"Note: Could not query backtest ledger table '{ledger_table}': {leg_err}")
@@ -343,9 +359,9 @@ def get_ml_model_ledger(
             for r in rows:
                 t = dict(zip(col_names, r))
                 if t.get("entry_time"):
-                    t["entry_time"] = t["entry_time"].isoformat() if hasattr(t["entry_time"], "isoformat") else str(t["entry_time"])
+                    t["entry_time"] = clean_timestamp(t["entry_time"])
                 if t.get("exit_time"):
-                    t["exit_time"] = t["exit_time"].isoformat() if hasattr(t["exit_time"], "isoformat") else str(t["exit_time"])
+                    t["exit_time"] = clean_timestamp(t["exit_time"])
                 trades.append(t)
 
     except Exception as err:

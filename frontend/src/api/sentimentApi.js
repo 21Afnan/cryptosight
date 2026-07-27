@@ -1,58 +1,56 @@
 /**
  * sentimentApi.js
- * Mirrors: GET /sentiment/summary, GET /sentiment/fear-greed, GET /sentiment/timeline
+ * Connects directly to live FastAPI backend (/api/v1/sentiment).
+ * Reads real PostgreSQL tables: metadata.sentiment_data and reddit_cleaned.<symbol>.
+ * ZERO fake default fallback values.
  */
-import {
-  SENTIMENT_DATA,
-  FEAR_GREED_CURRENT,
-  FEAR_GREED_TIMELINE,
-  SENTIMENT_TIMELINE,
-  NEWS_VOLUME,
-  NEWS_SENTIMENT_DAILY,
-  SENTIMENT_DISTRIBUTION,
-  MARKET_SENTIMENT_SUMMARY,
-} from '../mock/sentimentMock';
 
-const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+const BASE_URL = 'http://localhost:8000/api/v1/sentiment';
 
-/** GET /sentiment/summary */
+/** GET /api/v1/sentiment/summary */
 export async function getSentimentSummary() {
-  await delay(300 + Math.random() * 150);
-  return {
-    market_summary: { ...MARKET_SENTIMENT_SUMMARY },
-    per_symbol: [...SENTIMENT_DATA],
-    distribution: [...SENTIMENT_DISTRIBUTION],
-  };
+  try {
+    const res = await fetch(`${BASE_URL}/summary`);
+    if (!res.ok) {
+      throw new Error(`FastAPI Server returned status ${res.status}`);
+    }
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.warn('Backend DB sentiment summary fetch error:', err.message);
+    return {
+      market_summary: {
+        overall_score: 0,
+        overall_label: 'N/A',
+        total_posts_analyzed: 0,
+        total_bullish_pct: 0.0,
+        total_bearish_pct: 0.0,
+        total_neutral_pct: 0.0,
+        top_bullish_symbol: 'N/A',
+        top_bearish_symbol: 'N/A',
+        active_model: 'ModernFinBERT',
+      },
+      per_symbol: [],
+      distribution: [],
+    };
+  }
 }
 
-/** GET /sentiment/fear-greed */
-export async function getFearGreed() {
-  await delay(200 + Math.random() * 100);
-  return {
-    current: { ...FEAR_GREED_CURRENT },
-    timeline: [...FEAR_GREED_TIMELINE],
-  };
-}
-
-/** GET /sentiment/timeline */
-export async function getSentimentTimeline() {
-  await delay(250 + Math.random() * 100);
-  return {
-    data: [...SENTIMENT_TIMELINE],
-    total: SENTIMENT_TIMELINE.length,
-    page: 1,
-    pageSize: SENTIMENT_TIMELINE.length,
-  };
-}
-
-/** GET /sentiment/news-volume */
-export async function getNewsVolume() {
-  await delay(200 + Math.random() * 100);
-  return { data: [...NEWS_VOLUME], total: NEWS_VOLUME.length, page: 1, pageSize: NEWS_VOLUME.length };
-}
-
-/** GET /sentiment/news-sentiment */
-export async function getNewsSentiment() {
-  await delay(200 + Math.random() * 100);
-  return { data: [...NEWS_SENTIMENT_DAILY], total: NEWS_SENTIMENT_DAILY.length, page: 1, pageSize: NEWS_SENTIMENT_DAILY.length };
+/** GET /api/v1/sentiment/posts (Scraped Reddit Threads + ModernFinBERT AI Classifications) */
+export async function getRedditPosts(symbol = '') {
+  try {
+    const query = symbol && symbol.toUpperCase() !== 'ALL' ? `?symbol=${encodeURIComponent(symbol)}` : '';
+    const res = await fetch(`${BASE_URL}/posts${query}`);
+    if (!res.ok) {
+      throw new Error(`FastAPI Server returned status ${res.status}`);
+    }
+    const json = await res.json();
+    return {
+      data: json.posts || [],
+      total: json.total || 0,
+    };
+  } catch (err) {
+    console.warn('Backend DB sentiment posts fetch error:', err.message);
+    return { data: [], total: 0 };
+  }
 }

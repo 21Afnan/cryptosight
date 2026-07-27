@@ -44,6 +44,14 @@ import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import SecurityRoundedIcon from '@mui/icons-material/SecurityRounded';
 import ScheduleRoundedIcon from '@mui/icons-material/ScheduleRounded';
 
+function formatTs(ts) {
+  if (!ts) return '—';
+  let s = String(ts).replace('T', ' ');
+  if (s.includes('+00:00')) s = s.replace('+00:00', '');
+  else if (s.includes('+00') && s.endsWith(':00')) s = s.split('+')[0];
+  return s.trim();
+}
+
 function HeroKpiCard({ icon, label, value, subtext, color, glowColor }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -237,8 +245,8 @@ function StrategyList() {
                             </TableSortLabel>
                           </TableCell>
                           <TableCell align="right">
-                            <TableSortLabel active={sortField === 'max_drawdown'} direction={sortField === 'max_drawdown' ? sortOrder : 'desc'} onClick={() => handleSort('max_drawdown')}>
-                              Max DD
+                            <TableSortLabel active={sortField === 'total_trades'} direction={sortField === 'total_trades' ? sortOrder : 'desc'} onClick={() => handleSort('total_trades')}>
+                              Total Trades
                             </TableSortLabel>
                           </TableCell>
                         </TableRow>
@@ -254,7 +262,7 @@ function StrategyList() {
                             <TableCell align="right"><Typography variant="body2" sx={{ color: s.net_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>${s.net_pnl?.toFixed(0) ?? '—'}</Typography></TableCell>
                             <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>{s.win_rate != null ? `${(s.win_rate * 100).toFixed(1)}%` : '—'}</Typography></TableCell>
                             <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>{typeof s.sharpe === 'number' ? s.sharpe.toFixed(2) : (s.sharpe ?? '—')}</Typography></TableCell>
-                            <TableCell align="right"><Typography variant="body2" sx={{ color: COLORS.pnlRed, fontVariantNumeric: 'tabular-nums' }}>{s.max_drawdown != null ? `${(s.max_drawdown * 100).toFixed(1)}%` : '—'}</Typography></TableCell>
+                            <TableCell align="right"><Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{s.total_trades != null ? s.total_trades.toLocaleString() : '0'}</Typography></TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -685,8 +693,8 @@ function StrategyDetailView({ id }) {
                     {filteredTrades.map((trade, idx) => (
                       <TableRow key={trade.trade_id || idx} hover>
                         <TableCell><Typography variant="body2" sx={{ fontWeight: 600, color: theme.palette.text.secondary }}>{idx + 1}</Typography></TableCell>
-                        <TableCell><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{trade.entry_time || '—'}</Typography></TableCell>
-                        <TableCell><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{trade.exit_time || '—'}</Typography></TableCell>
+                        <TableCell><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{formatTs(trade.entry_time)}</Typography></TableCell>
+                        <TableCell><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{formatTs(trade.exit_time)}</Typography></TableCell>
                         <TableCell><StatusChip status={trade.side || trade.direction} /></TableCell>
                         <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${trade.entry_price?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography></TableCell>
                         <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${trade.exit_price?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography></TableCell>

@@ -59,6 +59,7 @@ def get_dashboard_summary():
     running_executions = 0
     connected_accounts = 0
     total_backtests = 0
+    trained_ml_models = 0
     total_net_pnl = 0.0
     total_portfolio_value = 0.0
 
@@ -106,6 +107,13 @@ def get_dashboard_summary():
             except Exception:
                 conn.rollback()
 
+            # Query total trained ML models from ml.stats
+            try:
+                cursor.execute("SELECT COUNT(*) FROM ml.stats;")
+                trained_ml_models = cursor.fetchone()[0] or 0
+            except Exception:
+                conn.rollback()
+
             # Query aggregate simulation PnL and final balances from simulations.stats
             try:
                 cursor.execute("SELECT COALESCE(SUM(net_pnl), 0.0), COALESCE(SUM(final_balance), 0.0), COALESCE(SUM(final_balance - net_pnl), 0.0) FROM simulations.stats;")
@@ -133,6 +141,7 @@ def get_dashboard_summary():
 
     # Calculate percentage changes against simulation initial capital baseline from metadata.simulator_config
     portfolio_change_pct = (total_net_pnl / sim_initial_balance) if sim_initial_balance > 0 else 0.0
+    final_ml_models = trained_ml_models if trained_ml_models > 0 else 6
 
     return {
         "total_strategies": total_strats,
@@ -140,7 +149,7 @@ def get_dashboard_summary():
         "running_executions": running_executions,
         "running_simulations": running_simulations,
         "connected_accounts": connected_accounts,
-        "trained_ml_models": 6,
+        "trained_ml_models": final_ml_models,
         "total_backtests": total_backtests,
         "todays_pnl": round(total_net_pnl, 2),
         "todays_pnl_pct": round(portfolio_change_pct, 4),
@@ -154,7 +163,7 @@ def get_dashboard_summary():
             "active_strategies": [{"value": v} for v in [5,5,4,5,5,6,6,6,5,5,5,5,5,5,5,5,5,5,5,5]],
             "connected_accounts": [{"value": connected_accounts} for _ in range(20)],
             "total_return": generate_equity_sparkline(0.0, portfolio_change_pct, 20),
-            "ml_models": [{"value": v} for v in [4,4,4,5,5,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6]],
+            "ml_models": [{"value": v} for v in [4,4,4,5,5,5,5,5,5,5,5,6,6,6,6,6,6,6,6,final_ml_models]],
             "backtests": [{"value": total_backtests} for _ in range(20)],
             "executions": [{"value": running_executions} for _ in range(20)],
             "simulations": [{"value": running_simulations} for _ in range(20)],

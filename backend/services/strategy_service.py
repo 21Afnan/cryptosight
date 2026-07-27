@@ -281,6 +281,22 @@ def get_strategy_by_id(identifier):
         conn.close()
 
 
+def clean_timestamp(dt_val) -> str:
+    """
+    Formats DB timestamp cleanly into 'YYYY-MM-DD HH:MM:SS', stripping raw UTC offset '+00:00'.
+    """
+    if not dt_val:
+        return ""
+    if hasattr(dt_val, "strftime"):
+        return dt_val.strftime("%Y-%m-%d %H:%M:%S")
+    s = str(dt_val).replace("T", " ")
+    if "+00:00" in s:
+        s = s.replace("+00:00", "")
+    elif "+00" in s and s.endswith(":00"):
+        s = s.split("+")[0]
+    return s.strip()
+
+
 def get_strategy_ledgers(strategy_name: str):
     """
     Fetches trade ledgers for a given strategy from simulation_ledgers.<clean_strategy_name>.
@@ -322,8 +338,8 @@ def get_strategy_ledgers(strategy_name: str):
             for r in rows:
                 t_id = str(r[0])
                 direction = (r[1] or "LONG").upper()
-                entry_time = str(r[2]) if r[2] else ""
-                exit_time = str(r[3]) if r[3] else ""
+                entry_time = clean_timestamp(r[2])
+                exit_time = clean_timestamp(r[3])
                 entry_p = float(r[4] or 0)
                 exit_p = float(r[5] or 0)
                 qty = float(r[6] or 0)

@@ -414,9 +414,8 @@ export default function Wallets() {
   return (
     <PageContainer title="Wallet Management">
       <Box sx={{ pt: 2 }}>
-        {/* Requirement 2.3: Top StatCard summary flashcard row */}
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={12} sm={6} md={3}>
+        <Box sx={{ display: 'flex', gap: 2.5, width: '100%', mb: 3.5, flexDirection: { xs: 'column', sm: 'row' } }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
             <StatCard
               title="Total Balance"
               value={`$${summary.totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
@@ -425,8 +424,8 @@ export default function Wallets() {
               icon={<AccountBalanceWalletRoundedIcon />}
               colorIndex={0}
             />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
             <StatCard
               title="Connected Wallets"
               value={`${summary.activeCount} / ${wallets.length}`}
@@ -435,8 +434,8 @@ export default function Wallets() {
               icon={<CheckCircleRoundedIcon />}
               colorIndex={1}
             />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
             <StatCard
               title="Unrealized PnL"
               value={`${summary.totalUnrealizedPnL >= 0 ? '+' : ''}$${summary.totalUnrealizedPnL.toFixed(2)}`}
@@ -445,8 +444,8 @@ export default function Wallets() {
               icon={<AccountBalanceWalletRoundedIcon />}
               colorIndex={2}
             />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
             <StatCard
               title="Total Realized PnL"
               value={`${summary.totalPnL >= 0 ? '+' : ''}$${summary.totalPnL.toFixed(2)}`}
@@ -455,28 +454,24 @@ export default function Wallets() {
               icon={<AccountBalanceWalletRoundedIcon />}
               colorIndex={3}
             />
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
 
         {/* Toolbar */}
-        <Box sx={{ mb: 3 }}>
-          {/* Full-width 100% Combined Account Equity Curve */}
-          {!loading && wallets.length > 0 && (
-            <Grid container spacing={2} sx={{ width: '100%' }}>
-              <Grid item xs={12}>
-                <Card>
-                  <CardContent sx={{ p: '20px !important' }}>
-                    <Typography variant="h6" sx={{ mb: 0.5, fontWeight: 700 }}>Combined Account Equity Curve</Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>Cumulative portfolio balance across all wallets</Typography>
-                    <Box sx={{ height: 260 }}>
-                      <EquityCurveChart data={equityCurveData} height={260} label="Total Balance" />
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
-          )}
-        </Box>
+        {/* Full-width 100% Combined Account Equity Curve */}
+        {!loading && (
+          <Box sx={{ width: '100%', mb: 3 }}>
+            <Card sx={{ width: '100%' }}>
+              <CardContent sx={{ p: '20px !important' }}>
+                <Typography variant="h6" sx={{ mb: 0.5, fontWeight: 700 }}>Combined Account Equity Curve</Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>Cumulative portfolio balance across all wallets</Typography>
+                <Box sx={{ height: 260, width: '100%' }}>
+                  <EquityCurveChart data={equityCurveData} height={260} label="Total Balance" />
+                </Box>
+              </CardContent>
+            </Card>
+          </Box>
+        )}
 
         {/* Account Performance & Symbol Breakdown Card */}
         {!loading && wallets.length > 0 && wallets[0]?.account_stats && (

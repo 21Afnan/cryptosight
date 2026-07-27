@@ -22,6 +22,23 @@ from cryptosight.utils.logger import get_logger
 logger = get_logger("BacktestService")
 
 
+def clean_timestamp(dt_val) -> str:
+    """
+    Formats DB timestamp cleanly into 'YYYY-MM-DD HH:MM:SS', stripping raw UTC offset '+00:00'.
+    """
+    if not dt_val:
+        return ""
+    if hasattr(dt_val, "strftime"):
+        return dt_val.strftime("%Y-%m-%d %H:%M:%S")
+    s = str(dt_val).replace("T", " ")
+    if "+00:00" in s:
+        s = s.replace("+00:00", "")
+    elif "+00" in s and s.endswith(":00"):
+        s = s.split("+")[0]
+    return s.strip()
+
+
+
 # =============================================================================
 # Rich Offline Fallback Datasets (Used ONLY when DB is OFFLINE)
 # =============================================================================
@@ -503,8 +520,8 @@ def get_backtest_by_id(identifier: str) -> dict:
                         trades.append({
                             "trade_id": f"BT_{idx + 1}",
                             "side": str(tr[2] or "LONG").upper(),
-                            "entry_time": tr[0].isoformat() if tr[0] else "",
-                            "exit_time": tr[1].isoformat() if tr[1] else "",
+                            "entry_time": clean_timestamp(tr[0]),
+                            "exit_time": clean_timestamp(tr[1]),
                             "entry_price": float(tr[3] or 0.0),
                             "exit_price": float(tr[4] or 0.0),
                             "net_pnl": float(tr[5] or 0.0),
