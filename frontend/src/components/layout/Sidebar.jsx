@@ -17,13 +17,13 @@ import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
 import SentimentSatisfiedAltRoundedIcon from '@mui/icons-material/SentimentSatisfiedAltRounded';
 import ShowChartRoundedIcon from '@mui/icons-material/ShowChartRounded';
 import MenuOpenRoundedIcon from '@mui/icons-material/MenuOpenRounded';
-import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
+import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 
 const NAV_ITEMS = [
   { label: 'Dashboard',        path: '/',           icon: DashboardRoundedIcon },
   { label: 'Strategies',       path: '/strategies', icon: ShowChartRoundedIcon },
   { label: 'Wallets',          path: '/wallets',    icon: AccountBalanceWalletRoundedIcon },
-  { label: 'Deployment',       path: '/deployment', icon: RocketLaunchRoundedIcon },
+  { label: 'Execution',        path: '/deployment', icon: PlayArrowRoundedIcon },
   { label: 'Backtests',        path: '/backtests',  icon: HistoryRoundedIcon },
   { label: 'Machine Learning', path: '/ml',         icon: PsychologyRoundedIcon },
   { label: 'Sentiment',        path: '/sentiment',  icon: SentimentSatisfiedAltRoundedIcon },

@@ -171,6 +171,7 @@ def get_strategy_by_id(identifier):
             drawdown_curve = []
             monthly_returns = []
             trade_distribution = []
+            pnl_per_trade = []
             
             try:
                 cursor.execute(f"""
@@ -183,7 +184,7 @@ def get_strategy_by_id(identifier):
                 m_returns = {}
                 pnl_counts = {"loss_large": 0, "loss_small": 0, "win_small": 0, "win_large": 0}
                 
-                for tr in t_rows:
+                for idx, tr in enumerate(t_rows):
                     pnl = float(tr[1] or 0)
                     balance += pnl
                     if balance > peak:
@@ -209,6 +210,11 @@ def get_strategy_by_id(identifier):
                         
                     equity_curve.append({"time": time_str, "value": round(balance, 2)})
                     drawdown_curve.append({"time": time_str, "value": round(dd, 4)})
+                    pnl_per_trade.append({
+                        "trade_id": f"T_{idx + 1}",
+                        "exit_time": str(tr[0] or ""),
+                        "net_pnl": round(pnl, 2),
+                    })
 
                 for m, val in m_returns.items():
                     monthly_returns.append({"month": m, "value": round(val / init_bal, 4) if init_bal else 0.0})
@@ -275,6 +281,7 @@ def get_strategy_by_id(identifier):
                 "drawdown_curve": drawdown_curve,
                 "monthly_returns": monthly_returns,
                 "trade_distribution": trade_distribution,
+                "pnl_per_trade": pnl_per_trade,
                 "charts": charts_val,
             }
     finally:

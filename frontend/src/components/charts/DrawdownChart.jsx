@@ -64,9 +64,24 @@ export default function DrawdownChart({ data = [], height = 220 }) {
           textColor: isDark ? COLORS.darkTextSecondary : '#6B7280',
           scaleMargins: { top: 0.15, bottom: 0.15 },
         },
+        localization: {
+          timeFormatter: (time) => {
+            if (typeof time === 'number') {
+              const d = new Date(time * 1000);
+              const m = d.toLocaleString('en-US', { month: 'short' });
+              const day = String(d.getDate()).padStart(2, '0');
+              const yr = String(d.getFullYear()).slice(-2);
+              const hrs = String(d.getHours()).padStart(2, '0');
+              const mins = String(d.getMinutes()).padStart(2, '0');
+              return `${day} ${m} '${yr}, ${hrs}:${mins}`;
+            }
+            return String(time).replace('Z', '').replace('UTC', '').trim();
+          },
+        },
         timeScale: {
           borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
           timeVisible: true,
+          secondsVisible: false,
         },
       });
 

@@ -28,6 +28,7 @@ import EquityCurveChart from '../../components/charts/EquityCurveChart';
 import DrawdownChart from '../../components/charts/DrawdownChart';
 import MonthlyReturnsChart from '../../components/charts/MonthlyReturnsChart';
 import RollingMetricsChart from '../../components/charts/RollingMetricsChart';
+import TradePnlChart from '../../components/charts/TradePnlChart';
 import LedgerFilterBar, { filterLedgerRows } from '../../components/ui/LedgerFilterBar';
 import { useMockFetch } from '../../hooks/useMockFetch';
 import { getBacktestById } from '../../api/backtestsApi';
@@ -358,6 +359,7 @@ export default function BacktestDetails() {
               </Typography>
               <Tabs value={chartTab} onChange={(_, v) => { setChartTab(v); setTimeout(() => window.dispatchEvent(new Event('resize')), 50); }} sx={{ minHeight: '36px' }}>
                 <Tab label="Equity Curve & Drawdown" sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
+                <Tab label="PnL Per Trade" sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
                 <Tab label="Monthly Returns" sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
                 <Tab label="Rolling Metrics" sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
               </Tabs>
@@ -388,13 +390,22 @@ export default function BacktestDetails() {
             {chartTab === 1 && (
               <Box sx={{ width: '100%', height: 360 }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                  Net PnL Per Trade ($)
+                </Typography>
+                <TradePnlChart data={bt.pnl_per_trade?.length ? bt.pnl_per_trade : (bt.trades ?? [])} height={340} />
+              </Box>
+            )}
+
+            {chartTab === 2 && (
+              <Box sx={{ width: '100%', height: 360 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
                   Monthly Returns Breakdown
                 </Typography>
                 <MonthlyReturnsChart data={bt.monthly_returns ?? []} height={340} />
               </Box>
             )}
 
-            {chartTab === 2 && (
+            {chartTab === 3 && (
               <Box sx={{ width: '100%', height: 360 }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
                   Rolling Ratios (Sharpe · Sortino · Calmar)

@@ -253,11 +253,14 @@ def generate_charts_from_trades(trades: list, initial_balance: float = 10000.0) 
 
     rolling_points = []
     pnl_history = []
+    pnl_per_trade = []
 
-    for trade in sorted_trades:
-        exit_time = trade.get("exit_time", "")[:10]
-        if not exit_time:
+    for idx, trade in enumerate(sorted_trades):
+        raw_exit_time = trade.get("exit_time", "") or trade.get("entry_time", "")
+        if not raw_exit_time:
             continue
+        exit_time = str(raw_exit_time).strip()
+        date_str = exit_time[:10]
         pnl = float(trade.get("net_pnl") or 0.0)
         pnl_history.append(pnl)
         current_balance += pnl
@@ -268,13 +271,19 @@ def generate_charts_from_trades(trades: list, initial_balance: float = 10000.0) 
 
         equity_points.append({"time": exit_time, "value": round(current_balance, 2)})
         drawdown_points.append({"time": exit_time, "value": round(dd, 4)})
+        pnl_per_trade.append({
+            "trade_id": trade.get("trade_id") or f"BT_{idx + 1}",
+            "exit_time": exit_time,
+            "net_pnl": round(pnl, 2),
+            "side": trade.get("side") or trade.get("direction") or "LONG",
+        })
 
         # Monthly grouping
         try:
-            dt = datetime.strptime(exit_time, "%Y-%m-%d")
+            dt = datetime.strptime(date_str, "%Y-%m-%d")
             m_key = dt.strftime("%b %y")
         except Exception:
-            m_key = exit_time[:7]
+            m_key = date_str[:7]
 
         if m_key not in monthly_map:
             monthly_map[m_key] = 0.0
@@ -316,6 +325,7 @@ def generate_charts_from_trades(trades: list, initial_balance: float = 10000.0) 
         "drawdown_curve": drawdown_points,
         "monthly_returns": monthly_returns_list,
         "rolling_metrics": rolling_points,
+        "pnl_per_trade": pnl_per_trade,
     }
 
 
@@ -579,8 +589,9 @@ def get_backtest_by_id(identifier: str) -> dict:
     drawdown_curve = _extract_list(charts.get("drawdown_curve") or charts.get("drawdown"))
     monthly_returns = _extract_list(charts.get("monthly_returns"))
     rolling_metrics = _extract_list(charts.get("rolling_metrics"))
+    pnl_per_trade = _extract_list(charts.get("pnl_per_trade"))
 
-    if (not equity_curve or not drawdown_curve or not monthly_returns or not rolling_metrics) and trades:
+    if (not equity_curve or not drawdown_curve or not monthly_returns or not rolling_metrics or not pnl_per_trade) and trades:
         gen_charts = generate_charts_from_trades(trades)
         if not equity_curve:
             equity_curve = gen_charts["equity_curve"]
@@ -590,6 +601,16 @@ def get_backtest_by_id(identifier: str) -> dict:
             monthly_returns = gen_charts["monthly_returns"]
         if not rolling_metrics:
             rolling_metrics = gen_charts["rolling_metrics"]
+        if not pnl_per_trade:
+            pnl_per_trade = gen_charts["pnl_per_trade"]
+
+    if not pnl_per_trade and trades:
+        pnl_per_trade = [{
+            "trade_id": t.get("trade_id") or f"BT_{i+1}",
+            "exit_time": t.get("exit_time") or t.get("entry_time") or "",
+            "net_pnl": float(t.get("net_pnl") or 0.0),
+            "side": str(t.get("side") or t.get("direction") or "LONG").upper(),
+        } for i, t in enumerate(trades)]
 
     # Final Normalized Response Payload
     raw_win_rate = metrics.get("win_rate")
@@ -648,6 +669,7 @@ def get_backtest_by_id(identifier: str) -> dict:
         "drawdown_curve": drawdown_curve,
         "monthly_returns": monthly_returns,
         "rolling_metrics": rolling_metrics,
+        "pnl_per_trade": pnl_per_trade,
         "trades": trades,
     }
 

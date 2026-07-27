@@ -12,6 +12,26 @@ import { COLORS } from '../../theme/theme';
  * @param {Array}  markers     - [{ time, position: 'belowBar'|'aboveBar', color, shape, text }]
  * @param {number} height
  */
+function cleanSeriesData(data) {
+  if (!Array.isArray(data) || !data.length) return [];
+  const map = new Map();
+  data.forEach((item) => {
+    if (!item || item.time == null) return;
+    const timeStr = String(item.time).split(' ')[0].split('T')[0];
+    const val = Number(item.value ?? item.equity ?? item.balance ?? 0);
+    if (timeStr && !isNaN(val)) map.set(timeStr, val);
+  });
+  const clean = [];
+  map.forEach((val, timeStr) => clean.push({ time: timeStr, value: val }));
+  clean.sort((a, b) => (a.time > b.time ? 1 : a.time < b.time ? -1 : 0));
+  if (clean.length === 1) {
+    const dt = new Date(clean[0].time);
+    dt.setDate(dt.getDate() - 1);
+    clean.unshift({ time: dt.toISOString().split('T')[0], value: clean[0].value });
+  }
+  return clean;
+}
+
 export default function TradeHistoryChart({ equityData = [], markers = [], height = 300 }) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
@@ -64,8 +84,9 @@ export default function TradeHistoryChart({ equityData = [], markers = [], heigh
 
       seriesRef.current = series;
 
-      if (equityData.length > 0) {
-        series.setData(equityData);
+      const clean = cleanSeriesData(equityData);
+      if (clean.length > 0) {
+        series.setData(clean);
         if (markers.length > 0) {
           try { series.setMarkers(markers); } catch { /* ignore */ }
         }
@@ -89,18 +110,22 @@ export default function TradeHistoryChart({ equityData = [], markers = [], heigh
   }, [isDark, height]);
 
   useEffect(() => {
-    if (seriesRef.current && equityData.length > 0) {
+    if (seriesRef.current && equityData) {
       try {
-        seriesRef.current.setData(equityData);
-        if (markers.length > 0) {
-          try { seriesRef.current.setMarkers(markers); } catch { /* ignore */ }
+        const clean = cleanSeriesData(equityData);
+        if (clean.length > 0) {
+          seriesRef.current.setData(clean);
+          if (markers.length > 0) {
+            try { seriesRef.current.setMarkers(markers); } catch { /* ignore */ }
+          }
+          chartRef.current?.timeScale().fitContent();
         }
-        chartRef.current?.timeScale().fitContent();
       } catch (e) {
         console.warn("TradeHistoryChart setData warning:", e);
       }
     }
   }, [equityData, markers]);
+
 
   return <Box ref={containerRef} sx={{ width: '100%', height }} />;
 }

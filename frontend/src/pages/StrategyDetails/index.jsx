@@ -26,6 +26,7 @@ import EquityCurveChart from '../../components/charts/EquityCurveChart';
 import DrawdownChart from '../../components/charts/DrawdownChart';
 import MonthlyReturnsChart from '../../components/charts/MonthlyReturnsChart';
 import DistributionChart from '../../components/charts/DistributionChart';
+import TradePnlChart from '../../components/charts/TradePnlChart';
 import LedgerFilterBar, { filterLedgerRows } from '../../components/ui/LedgerFilterBar';
 import StrategyFilterBar, { filterStrategies } from '../../components/ui/StrategyFilterBar';
 import { useMockFetch } from '../../hooks/useMockFetch';
@@ -123,7 +124,7 @@ function HeroKpiCard({ icon, label, value, subtext, color, glowColor }) {
   );
 }
 
-function ChartCard({ title, children, height }) {
+function ChartCard({ title, children, height, sx = {} }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   return (
@@ -133,6 +134,7 @@ function ChartCard({ title, children, height }) {
         border: 'none',
         boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.4)' : '0 8px 26px rgba(14, 203, 129, 0.24)',
         borderRadius: 2.5,
+        ...sx,
       }}
     >
       <CardContent sx={{ p: '20px !important' }}>
@@ -643,7 +645,7 @@ function StrategyDetailView({ id }) {
           </Card>
         </Box>
 
-        {/* 4 Performance Charts: 2 per row (2 in row 1, 2 in row 2) */}
+        {/* Performance Charts Grid */}
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
           <ChartCard title="Equity Curve" height={300}>
             <EquityCurveChart data={strategy.charts?.returns?.raw_values?.length ? strategy.charts.returns.raw_values : (strategy.equity_curve ?? [])} height={300} />
@@ -651,11 +653,14 @@ function StrategyDetailView({ id }) {
           <ChartCard title="Drawdown" height={300}>
             <DrawdownChart data={strategy.charts?.drawdown?.raw_values?.length ? strategy.charts.drawdown.raw_values : (strategy.drawdown_curve ?? [])} height={300} />
           </ChartCard>
-          <ChartCard title="Monthly Returns" height={270}>
-            <MonthlyReturnsChart data={strategy.monthly_returns ?? []} height={270} />
+          <ChartCard title="Net PnL Per Trade ($)" height={280}>
+            <TradePnlChart data={strategy.pnl_per_trade?.length ? strategy.pnl_per_trade : (rawTrades ?? [])} height={260} />
           </ChartCard>
-          <ChartCard title="Trade PnL Distribution" height={270}>
-            <DistributionChart data={strategy.trade_distribution ?? []} height={270} />
+          <ChartCard title="Monthly Returns" height={280}>
+            <MonthlyReturnsChart data={strategy.monthly_returns ?? []} height={260} />
+          </ChartCard>
+          <ChartCard title="Trade PnL Distribution" height={280} sx={{ gridColumn: { md: '1 / -1' } }}>
+            <DistributionChart data={strategy.trade_distribution ?? []} height={260} />
           </ChartCard>
         </Box>
 

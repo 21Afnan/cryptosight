@@ -23,6 +23,7 @@ import EquityCurveChart from '../../components/charts/EquityCurveChart';
 import DailyReturnsChart from '../../components/charts/DailyReturnsChart';
 import PositionSizeChart from '../../components/charts/PositionSizeChart';
 import TradeHistoryChart from '../../components/charts/TradeHistoryChart';
+import TradePnlChart from '../../components/charts/TradePnlChart';
 import LedgerFilterBar, { filterLedgerRows } from '../../components/ui/LedgerFilterBar';
 import { useMockFetch } from '../../hooks/useMockFetch';
 import { getDeploymentById } from '../../api/deploymentApi';
@@ -30,6 +31,7 @@ import { COLORS } from '../../theme/theme';
 
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
+import ShowChartRoundedIcon from '@mui/icons-material/ShowChartRounded';
 
 function InfoRow({ label, value, color }) {
   const theme = useTheme();
@@ -64,11 +66,13 @@ export default function ExecutionDetails() {
 
   const rawSignals = exec?.signal_history ?? [];
   const filteredSignals = filterLedgerRows(rawSignals, ledgerFilters);
+  const rawTrades = exec?.trades ?? [];
+  const filteredTrades = filterLedgerRows(rawTrades, ledgerFilters);
 
-  if (loading) return <PageContainer title="Execution Details" breadcrumbs="Deployment"><Box sx={{ pt: 3 }}><LoadingSkeleton variant="detail" /></Box></PageContainer>;
+  if (loading) return <PageContainer title="Execution Details" breadcrumbs="Execution"><Box sx={{ pt: 3 }}><LoadingSkeleton variant="detail" /></Box></PageContainer>;
   if (error || !exec) return (
-    <PageContainer title="Execution Details" breadcrumbs="Deployment">
-      <EmptyState icon={ErrorOutlineRoundedIcon} title="Execution not found" description={error || 'The requested execution instance does not exist.'} action={<Button onClick={() => navigate('/deployment')}>Back to Deployment</Button>} />
+    <PageContainer title="Execution Details" breadcrumbs="Execution">
+      <EmptyState icon={ErrorOutlineRoundedIcon} title="Execution not found" description={error || 'The requested execution instance does not exist.'} action={<Button onClick={() => navigate('/deployment')}>Back to Execution</Button>} />
     </PageContainer>
   );
 
@@ -86,7 +90,7 @@ export default function ExecutionDetails() {
     }));
 
   return (
-    <PageContainer title={exec.strategy_name} breadcrumbs="Deployment">
+    <PageContainer title={exec.strategy_name} breadcrumbs="Execution">
       <Box sx={{ pt: 3 }}>
         <Button startIcon={<ArrowBackRoundedIcon />} onClick={() => navigate('/deployment')} size="small" sx={{ mb: 2 }}>Back</Button>
 
@@ -146,8 +150,8 @@ export default function ExecutionDetails() {
                     <Grid item xs={6} md={3}><InfoRow label="Side" value={<StatusChip status={pos.side} />} /></Grid>
                     <Grid item xs={6} md={3}><InfoRow label="Entry Price" value={`$${pos.entry_price?.toLocaleString()}`} /></Grid>
                     <Grid item xs={6} md={3}><InfoRow label="Current Price" value={`$${pos.current_price?.toLocaleString()}`} /></Grid>
-                    <Grid item xs={6} md={3}><InfoRow label="Take Profit" value={`$${pos.tp?.toLocaleString()}`} color={COLORS.pnlGreen} /></Grid>
-                    <Grid item xs={6} md={3}><InfoRow label="Stop Loss" value={`$${pos.sl?.toLocaleString()}`} color={COLORS.pnlRed} /></Grid>
+                    <Grid item xs={6} md={3}><InfoRow label="Take Profit" value={(pos.tp ?? pos.take_profit) != null ? `$${pos.tp ?? pos.take_profit}` : '—'} color={COLORS.pnlGreen} /></Grid>
+                    <Grid item xs={6} md={3}><InfoRow label="Stop Loss" value={(pos.sl ?? pos.stop_loss) != null ? `$${pos.sl ?? pos.stop_loss}` : '—'} color={COLORS.pnlRed} /></Grid>
                     <Grid item xs={6} md={3}><InfoRow label="Unrealized PnL" value={`${pos.unrealized_pnl >= 0 ? '+' : ''}$${pos.unrealized_pnl?.toFixed(2)}`} color={pos.unrealized_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed} /></Grid>
                     <Grid item xs={6} md={3}><InfoRow label="Opened" value={new Date(pos.opened_at).toLocaleString()} /></Grid>
                   </Grid>
@@ -165,8 +169,8 @@ export default function ExecutionDetails() {
             </ChartCard>
           </Grid>
           <Grid item xs={12} md={4}>
-            <ChartCard title="Daily Returns" height={300}>
-              <DailyReturnsChart data={exec.daily_returns ?? []} height={300} />
+            <ChartCard title="Net PnL Per Trade ($)" height={300}>
+              <TradePnlChart data={exec.pnl_per_trade?.length ? exec.pnl_per_trade : (exec.trades?.length ? exec.trades : (exec.daily_returns ?? []))} height={280} />
             </ChartCard>
           </Grid>
           <Grid item xs={12} md={6}>
@@ -180,6 +184,58 @@ export default function ExecutionDetails() {
             </ChartCard>
           </Grid>
         </Grid>
+
+        {/* Execution Trade Ledgers Table */}
+        <Card sx={{ mb: 3 }}>
+          <CardContent sx={{ p: '20px !important' }}>
+            <Typography variant="h5" sx={{ mb: 2, fontWeight: 700 }}>
+              Execution Trade Ledgers ({filteredTrades.length} trades recorded)
+            </Typography>
+            <LedgerFilterBar onChange={setLedgerFilters} />
+            {!filteredTrades.length ? (
+              <EmptyState icon={ShowChartRoundedIcon} title="No trades found" description="No trade ledgers recorded for this strategy execution run yet." />
+            ) : (
+              <TableContainer>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Trade ID</TableCell>
+                      <TableCell>Direction</TableCell>
+                      <TableCell>Entry Time</TableCell>
+                      <TableCell>Exit Time</TableCell>
+                      <TableCell align="right">Entry Price</TableCell>
+                      <TableCell align="right">Exit Price</TableCell>
+                      <TableCell align="right">Quantity</TableCell>
+                      <TableCell align="right">Net PnL ($)</TableCell>
+                      <TableCell>Exit Reason</TableCell>
+                      <TableCell>Status</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filteredTrades.map((t) => (
+                      <TableRow key={t.trade_id} hover>
+                        <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{t.trade_id}</Typography></TableCell>
+                        <TableCell><StatusChip status={t.side} /></TableCell>
+                        <TableCell><Typography variant="body2" sx={{ fontSize: 12 }}>{t.entry_time?.replace('Z', '').replace('UTC', '')}</Typography></TableCell>
+                        <TableCell><Typography variant="body2" sx={{ fontSize: 12 }}>{t.exit_time?.replace('Z', '').replace('UTC', '')}</Typography></TableCell>
+                        <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${t.entry_price?.toLocaleString()}</Typography></TableCell>
+                        <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${t.exit_price?.toLocaleString()}</Typography></TableCell>
+                        <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>{t.quantity}</Typography></TableCell>
+                        <TableCell align="right">
+                          <Typography variant="body2" sx={{ color: t.net_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                            {t.net_pnl >= 0 ? '+' : ''}${t.net_pnl?.toFixed(2)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell><Typography variant="body2" sx={{ fontSize: 12 }}>{t.exit_reason}</Typography></TableCell>
+                        <TableCell><StatusChip status={t.status || 'Completed'} /></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Signal History */}
         <Card>

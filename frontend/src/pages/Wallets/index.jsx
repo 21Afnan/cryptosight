@@ -297,17 +297,23 @@ function WalletDrawer({ wallet, open, onClose }) {
         {wallet.active_positions?.length === 0 ? (
           <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>No active positions</Typography>
         ) : (
-          wallet.active_positions?.map((p) => (
-            <WalletDetailRow
-              key={p.position_id}
-              icon={SwapHorizRoundedIcon}
-              title={p.symbol}
-              status={p.side}
-              subtitle={`Entry: $${p.entry_price?.toLocaleString()} · TP: $${p.tp?.toLocaleString()} · SL: $${p.sl?.toLocaleString()}`}
-              rightValue={`${p.unrealized_pnl >= 0 ? '+' : ''}$${p.unrealized_pnl?.toFixed(2)}`}
-              rightColor={p.unrealized_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed}
-            />
-          ))
+          wallet.active_positions?.map((p) => {
+            const tpVal = p.tp ?? p.take_profit;
+            const slVal = p.sl ?? p.stop_loss;
+            const tpStr = tpVal != null ? `$${tpVal}` : '—';
+            const slStr = slVal != null ? `$${slVal}` : '—';
+            return (
+              <WalletDetailRow
+                key={p.position_id || p.order_id || p.symbol}
+                icon={SwapHorizRoundedIcon}
+                title={p.symbol}
+                status={p.side}
+                subtitle={`Entry: $${p.entry_price != null ? p.entry_price : '—'} · TP: ${tpStr} · SL: ${slStr}`}
+                rightValue={`${p.unrealized_pnl >= 0 ? '+' : ''}$${p.unrealized_pnl?.toFixed(2)}`}
+                rightColor={p.unrealized_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed}
+              />
+            );
+          })
         )}
 
         <Divider sx={{ my: 2 }} />

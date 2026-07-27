@@ -22,7 +22,7 @@ import { useMockFetch } from '../../hooks/useMockFetch';
 import { getDeployments } from '../../api/deploymentApi';
 import { COLORS } from '../../theme/theme';
 
-import RocketLaunchRoundedIcon from '@mui/icons-material/RocketLaunchRounded';
+import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
 
 export default function Deployment() {
@@ -38,15 +38,15 @@ export default function Deployment() {
   const deployments = data?.data ?? [];
 
   return (
-    <PageContainer title="Strategy Deployment">
+    <PageContainer title="Strategy Execution">
       <Box sx={{ pt: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <SearchBar onSearch={setSearch} placeholder="Search deployments…" />
+          <SearchBar onSearch={setSearch} placeholder="Search active executions…" />
         </Box>
 
-        {error && <EmptyState icon={ErrorOutlineRoundedIcon} title="Failed to load deployments" description={error} />}
+        {error && <EmptyState icon={ErrorOutlineRoundedIcon} title="Failed to load executions" description={error} />}
         {loading ? <LoadingSkeleton variant="table" /> : deployments.length === 0 ? (
-          <EmptyState icon={RocketLaunchRoundedIcon} title="No deployments found" description="No active deployments match your search." />
+          <EmptyState icon={PlayArrowRoundedIcon} title="No active executions found" description="No active strategy executions match your search." />
         ) : (
           <Card>
             <CardContent sx={{ p: '20px !important' }}>

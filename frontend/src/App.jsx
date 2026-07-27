@@ -64,6 +64,8 @@ export default function App() {
                 <Route path="/wallets"            element={<Wallets />} />
                 <Route path="/deployment"         element={<Deployment />} />
                 <Route path="/deployment/:id"     element={<ExecutionDetails />} />
+                <Route path="/execution"          element={<Deployment />} />
+                <Route path="/execution/:id"      element={<ExecutionDetails />} />
                 <Route path="/backtests"          element={<BacktestRequests />} />
                 <Route path="/backtests/:id"      element={<BacktestDetails />} />
                 <Route path="/ml"                 element={<MachineLearning />} />

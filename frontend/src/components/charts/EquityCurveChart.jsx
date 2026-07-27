@@ -15,77 +15,94 @@ function prepareEquityData(data) {
   let rawList = Array.isArray(data) ? data : (data?.raw_values || data?.values || data?.data || []);
   if (!rawList || !rawList.length) return [];
 
-  const points = [];
   const now = new Date();
+  const rawPoints = [];
 
   rawList.forEach((item, idx) => {
     if (item == null) return;
 
+    let numVal = 0;
     let timeVal = null;
-    let numVal = null;
 
     if (typeof item === 'number' || (typeof item === 'string' && !isNaN(Number(item)) && !item.includes('-'))) {
-      // Primitive number format: [10000, 10200, 10150]
       numVal = Number(item);
       const d = new Date(now);
       d.setDate(d.getDate() - (rawList.length - 1 - idx));
-      timeVal = d.toISOString().split('T')[0];
+      timeVal = Math.floor(d.getTime() / 1000);
     } else if (typeof item === 'object') {
-      // Object format: { time: ..., value: ... } or { timestamp: ..., equity: ... }
       numVal = Number(item.value ?? item.equity ?? item.balance ?? item.val ?? 0);
       const rawTime = item.time ?? item.timestamp ?? item.date ?? item.created_at;
 
       if (rawTime != null) {
-        if (typeof rawTime === 'string' && rawTime.includes('-')) {
-          timeVal = rawTime.split(' ')[0].split('T')[0];
-        } else if (typeof rawTime === 'number') {
+        if (typeof rawTime === 'number') {
           timeVal = rawTime > 1e11 ? Math.floor(rawTime / 1000) : Math.floor(rawTime);
+        } else if (typeof rawTime === 'string') {
+          const str = rawTime.trim();
+          if (!str) {
+            const d = new Date(now);
+            d.setDate(d.getDate() - (rawList.length - 1 - idx));
+            timeVal = Math.floor(d.getTime() / 1000);
+          } else if (!isNaN(Number(str)) && !str.includes('-')) {
+            const num = Number(str);
+            timeVal = num > 1e11 ? Math.floor(num / 1000) : Math.floor(num);
+          } else {
+            let isoStr = str.includes(' ') ? str.replace(' ', 'T') : str;
+            if (isoStr.length === 10) {
+              isoStr += 'T00:00:00';
+            }
+            const ms = Date.parse(isoStr);
+            if (!isNaN(ms)) {
+              timeVal = Math.floor(ms / 1000);
+            } else {
+              const d = new Date(now);
+              d.setDate(d.getDate() - (rawList.length - 1 - idx));
+              timeVal = Math.floor(d.getTime() / 1000);
+            }
+          }
         } else {
-          timeVal = String(rawTime);
+          const d = new Date(now);
+          d.setDate(d.getDate() - (rawList.length - 1 - idx));
+          timeVal = Math.floor(d.getTime() / 1000);
         }
       } else {
         const d = new Date(now);
         d.setDate(d.getDate() - (rawList.length - 1 - idx));
-        timeVal = d.toISOString().split('T')[0];
+        timeVal = Math.floor(d.getTime() / 1000);
       }
     }
 
-    if (timeVal != null && !isNaN(numVal)) {
-      points.push({ time: timeVal, value: numVal });
+    if (timeVal != null && !isNaN(timeVal) && !isNaN(numVal)) {
+      rawPoints.push({ time: timeVal, value: numVal });
     }
   });
 
-  if (!points.length) return [];
+  if (!rawPoints.length) return [];
 
-  // Sort ascending by time
-  points.sort((a, b) => (a.time > b.time ? 1 : a.time < b.time ? -1 : 0));
+  // Sort ascending strictly by integer timestamp
+  rawPoints.sort((a, b) => a.time - b.time);
 
-  // Deduplicate exact duplicate timestamps for lightweight-charts
+  // Deduplicate timestamps so Lightweight Charts receives strictly increasing time values
   const clean = [];
   let lastTime = null;
-  points.forEach((p) => {
+
+  rawPoints.forEach((p) => {
     let t = p.time;
-    if (typeof t === 'number' && typeof lastTime === 'number' && t <= lastTime) {
+    if (lastTime != null && t <= lastTime) {
       t = lastTime + 1;
     }
     clean.push({ time: t, value: p.value });
     lastTime = t;
   });
 
+  // Guarantee at least 2 points
   if (clean.length === 1) {
-    let prevTime;
-    if (typeof clean[0].time === 'number') {
-      prevTime = clean[0].time - 60;
-    } else {
-      const d = new Date(clean[0].time);
-      d.setDate(d.getDate() - 1);
-      prevTime = d.toISOString().split('T')[0];
-    }
-    clean.unshift({ time: prevTime, value: clean[0].value });
+    clean.unshift({ time: clean[0].time - 86400, value: clean[0].value });
   }
 
   return clean;
 }
+
+
 
 export default function EquityCurveChart({ data = [], height = 300, label = 'Portfolio Value' }) {
   const containerRef = useRef(null);
@@ -127,6 +144,20 @@ export default function EquityCurveChart({ data = [], height = 300, label = 'Por
           borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
           textColor: isDark ? COLORS.darkTextSecondary : '#6B7280',
           scaleMargins: { top: 0.15, bottom: 0.15 },
+        },
+        localization: {
+          timeFormatter: (time) => {
+            if (typeof time === 'number') {
+              const d = new Date(time * 1000);
+              const m = d.toLocaleString('en-US', { month: 'short' });
+              const day = String(d.getDate()).padStart(2, '0');
+              const yr = String(d.getFullYear()).slice(-2);
+              const hrs = String(d.getHours()).padStart(2, '0');
+              const mins = String(d.getMinutes()).padStart(2, '0');
+              return `${day} ${m} '${yr}, ${hrs}:${mins}`;
+            }
+            return String(time).replace('Z', '').replace('UTC', '').trim();
+          },
         },
         timeScale: {
           borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
