@@ -105,6 +105,13 @@ export const ML_MODELS = [
       short_prob: 0.183,
       hold_prob: 0.105,
     },
+    backtest_ledger: [
+      { trade_id: 't-101', entry_time: '2026-04-09 08:15', direction: 'LONG', signal: 1, entry_price: 60220.50, exit_price: 61450.00, quantity: 0.015, net_pnl: 18.44, perc_pnl: 2.04, exit_reason: 'TAKE_PROFIT', status: 'CLOSED' },
+      { trade_id: 't-102', entry_time: '2026-04-10 12:30', direction: 'SHORT', signal: -1, entry_price: 61100.00, exit_price: 60500.00, quantity: 0.015, net_pnl: 9.00, perc_pnl: 0.98, exit_reason: 'TAKE_PROFIT', status: 'CLOSED' },
+      { trade_id: 't-103', entry_time: '2026-04-12 16:45', direction: 'LONG', signal: 1, entry_price: 60800.00, exit_price: 60400.00, quantity: 0.015, net_pnl: -6.00, perc_pnl: -0.65, exit_reason: 'STOP_LOSS', status: 'CLOSED' },
+      { trade_id: 't-104', entry_time: '2026-04-15 09:00', direction: 'SHORT', signal: -1, entry_price: 61500.00, exit_price: 60100.00, quantity: 0.015, net_pnl: 21.00, perc_pnl: 2.27, exit_reason: 'MARKET_EXIT', status: 'CLOSED' },
+      { trade_id: 't-105', entry_time: '2026-04-18 21:15', direction: 'LONG', signal: 1, entry_price: 59900.00, exit_price: 61200.00, quantity: 0.015, net_pnl: 19.50, perc_pnl: 2.17, exit_reason: 'TAKE_PROFIT', status: 'CLOSED' },
+    ],
   },
   {
     model_id: 'mdl-002',

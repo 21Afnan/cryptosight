@@ -8,11 +8,11 @@ data:
   enabled: true
   symbols:
     - "BTC"
-  exchange: "binance"           # Options: "binance" | "bybit"
+  exchange: "bybit"           # Options: "binance" | "bybit"
   timeframe: "1m"               # Base timeframe fetched from DB
   target_timeframe: "15m"       # Resampled timeframe used for ML training (e.g. "15m", "1h", "4h")
-  start_date: "2025-01-01"
-  end_date: "2026-06-30"
+  start_date: "2026-01-01"
+  end_date: "now"
   fill_method: "ffill"
   max_retries: 5
   retry_delay: 3
@@ -68,36 +68,36 @@ splitting:
 # --- 5. CLASSIFICATION MODELS ---
 classification:
   models:
-    # - name: logistic_regression
-    #   parameters:
-    #     class_weight: "balanced"
-    #     max_iter: 1000
+     - name: logistic_regression
+       parameters:
+         class_weight: "balanced"
+         max_iter: 1000
 
-    # - name: decision_tree
-    #   parameters:
-    #     class_weight: "balanced"
-    #     max_depth: 5
+     - name: decision_tree
+       parameters:
+         class_weight: "balanced"
+         max_depth: 5
 
-    #- name: random_forest
-    #  parameters:
-    #    class_weight: "balanced"
-    #    n_estimators: 100
-    #    max_depth: 5
+     - name: random_forest
+       parameters:
+         class_weight: "balanced"
+         n_estimators: 100
+         max_depth: 5
 
-    #- name: lightgbm
-    #  parameters:
-    #    class_weight: "balanced"
-    #    n_estimators: 100
-    #    learning_rate: 0.05
-    #    verbosity: -1
+     - name: lightgbm
+       parameters:
+         class_weight: "balanced"
+         n_estimators: 100
+         learning_rate: 0.05
+         verbosity: -1
 
-    #- name: xgboost
-    #  parameters:
-    #    n_estimators: 100
-    #    max_depth: 5
+     - name: xgboost
+       parameters:
+         n_estimators: 100
+         max_depth: 5
 
-    - name: lstm_classifier
-      parameters:
+     - name: lstm_classifier
+       parameters:
         hidden_size: 64
         num_layers: 1
         dropout: 0.0
@@ -106,11 +106,11 @@ classification:
         learning_rate: 0.0005
         lookback_window: 15
 
-    # - name: svm
-    #   parameters:
-    #     class_weight: "balanced"
-    #     C: 1.0
-    #     probability: true
+     - name: svm
+       parameters:
+         class_weight: "balanced"
+         C: 1.0
+         probability: true
 
 # ==============================================================================
 # --- 7. REGRESSION MODELS ---

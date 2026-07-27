@@ -8,10 +8,10 @@ symbol: "btc"
 timeframe: "1m"
 
 # Backtest start date
-start_time: "2026-04-01"
+start_time: "2026-01-01"
 
 # Backtest end date
-end_time: "2026-06-01"
+end_time: "now"
 
 # Starting balance
 initial_balance: 10000.0

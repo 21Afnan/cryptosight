@@ -471,6 +471,123 @@ def insert_backtest_ledger(conn, exchange: str, symbol: str, timeframe: str, led
         raise
 
 
+def create_ml_backtest_schema_and_table(conn, model_id: str):
+    """
+    Creates the dedicated 'ml_backtests' schema and model-specific table if they don't exist.
+    """
+    clean_table_name = str(model_id).lower().replace("-", "_").replace(" ", "_")
+    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS ml_backtests;"
+    create_table_sql = f"""
+    CREATE TABLE IF NOT EXISTS ml_backtests.{clean_table_name} (
+        entry_time     TIMESTAMP WITH TIME ZONE PRIMARY KEY,
+        direction      VARCHAR(8)    NOT NULL,
+        signal         NUMERIC(10,4) NOT NULL,
+        entry_price    NUMERIC(18,8) NOT NULL,
+        quantity       NUMERIC(18,8) NOT NULL,
+        take_profit    NUMERIC(18,8) NOT NULL,
+        stop_loss      NUMERIC(18,8) NOT NULL,
+        exit_price     NUMERIC(18,8) NOT NULL,
+        exit_time      TIMESTAMP WITH TIME ZONE NOT NULL,
+        exit_reason    VARCHAR(32)   NOT NULL,
+        status         VARCHAR(16)   NOT NULL,
+        net_pnl        NUMERIC(18,8) NOT NULL,
+        perc_pnl       NUMERIC(10,6) NOT NULL,
+        cumulative_pnl NUMERIC(18,8) NOT NULL,
+        balance        NUMERIC(18,8) NOT NULL
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_schema_sql)
+            cursor.execute(create_table_sql)
+            conn.commit()
+            logger.info(f"Table 'ml_backtests.{clean_table_name}' verified/created successfully.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating ML backtest table 'ml_backtests.{clean_table_name}': {error}")
+        raise
+
+
+def insert_ml_backtest_ledger(conn, model_id: str, ledger_df: pd.DataFrame):
+    """
+    Inserts all trade rows from an ML backtest ledger DataFrame into ml_backtests.{model_id}.
+    Uses fast tab-separated COPY buffer for maximum performance.
+    """
+    if ledger_df is None or ledger_df.empty:
+        return
+
+    clean_table_name = str(model_id).lower().replace("-", "_").replace(" ", "_")
+    create_ml_backtest_schema_and_table(conn, model_id)
+
+    full_table = f"ml_backtests.{clean_table_name}"
+    temp_table = f"temp_ml_{clean_table_name}"
+
+    ledger_cols = (
+        "entry_time", "direction", "signal", "entry_price", "quantity",
+        "take_profit", "stop_loss", "exit_price", "exit_time", "exit_reason",
+        "status", "net_pnl", "perc_pnl", "cumulative_pnl", "balance"
+    )
+
+    buffer = StringIO()
+    writer = csv.writer(buffer, delimiter="\t")
+    for idx_val, row in ledger_df.iterrows():
+        entry_time = row["entry_time"] if "entry_time" in row and pd.notna(row["entry_time"]) else idx_val
+        writer.writerow([
+            entry_time,
+            row.get("direction", "LONG"),
+            float(row.get("signal", 0.0)) if pd.notna(row.get("signal")) else 0.0,
+            row.get("entry_price", 0.0),
+            row.get("quantity", 0.0),
+            row.get("take_profit", 0.0) if pd.notna(row.get("take_profit")) else 0.0,
+            row.get("stop_loss", 0.0) if pd.notna(row.get("stop_loss")) else 0.0,
+            row.get("exit_price", 0.0),
+            row.get("exit_time", entry_time),
+            row.get("exit_reason", "MARKET_EXIT"),
+            row.get("status", "CLOSED"),
+            row.get("net_pnl", 0.0),
+            row.get("perc_pnl", 0.0),
+            row.get("cumulative_pnl", 0.0),
+            row.get("balance", 0.0),
+        ])
+    buffer.seek(0)
+
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(f"DROP TABLE IF EXISTS {temp_table};")
+            cursor.execute(f"""
+                CREATE TEMP TABLE {temp_table}
+                (LIKE {full_table} INCLUDING DEFAULTS) ON COMMIT DROP;
+            """)
+            copy_sql = f"COPY {temp_table} ({', '.join(ledger_cols)}) FROM STDIN WITH (FORMAT CSV, DELIMITER E'\\t')"
+            cursor.copy_expert(copy_sql, buffer)
+            cursor.execute(f"""
+                INSERT INTO {full_table} ({', '.join(ledger_cols)})
+                SELECT DISTINCT ON (entry_time) {', '.join(ledger_cols)} FROM {temp_table}
+                ORDER BY entry_time ASC
+                ON CONFLICT (entry_time) DO UPDATE SET
+                    direction      = EXCLUDED.direction,
+                    signal         = EXCLUDED.signal,
+                    entry_price    = EXCLUDED.entry_price,
+                    quantity       = EXCLUDED.quantity,
+                    take_profit    = EXCLUDED.take_profit,
+                    stop_loss      = EXCLUDED.stop_loss,
+                    exit_price     = EXCLUDED.exit_price,
+                    exit_time      = EXCLUDED.exit_time,
+                    exit_reason    = EXCLUDED.exit_reason,
+                    status         = EXCLUDED.status,
+                    net_pnl        = EXCLUDED.net_pnl,
+                    perc_pnl       = EXCLUDED.perc_pnl,
+                    cumulative_pnl = EXCLUDED.cumulative_pnl,
+                    balance        = EXCLUDED.balance;
+            """)
+        conn.commit()
+        logger.info(f"Saved {len(ledger_df)} trade rows to dedicated table '{full_table}' via copy_expert.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error inserting ML backtest ledger into '{full_table}': {error}")
+        raise
+
+
 # ── BACKTEST STATS ────────────────────────────────────────────────────────────
 
 def create_backtest_stats_table(conn):

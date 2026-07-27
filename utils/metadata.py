@@ -800,15 +800,18 @@ def fetch_execution_config(conn) -> dict:
         logger.error(f"Error fetching metadata.execution_config: {error}")
         raise RuntimeError(f"metadata.execution_config could not be fetched and no config exists — cannot proceed without real config: {error}")
     
-def create_ml_configs_table(conn):
+def create_ml_schema_and_tables(conn):
     """
-    Creates the `metadata.ml_configs` table to store regression & classification JSON configs.
+    Creates dedicated `ml` schema with 2 specialized tables:
+    1. `ml.configs`: ML Dataset & System Configurations
+    2. `ml.stats`: Per-Model Evaluation Metrics, QuantStats Trading Metrics & Plotly Charts
     """
-    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS metadata;"
-    create_table_sql = """
-    CREATE TABLE IF NOT EXISTS metadata.ml_configs (
-        config_id            SERIAL PRIMARY KEY,
-        config_name          VARCHAR(255) UNIQUE NOT NULL,
+    sql_script = """
+    CREATE SCHEMA IF NOT EXISTS ml;
+
+    -- 1. ML Configs Table
+    CREATE TABLE IF NOT EXISTS ml.configs (
+        config_name          VARCHAR(255) PRIMARY KEY,
         task_type            VARCHAR(50) NOT NULL,
         symbol               VARCHAR(50) NOT NULL,
         exchange             VARCHAR(50) NOT NULL,
@@ -817,27 +820,11 @@ def create_ml_configs_table(conn):
         created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
-    """
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute(create_schema_sql)
-            cursor.execute(create_table_sql)
-            conn.commit()
-            logger.info("Table 'metadata.ml_configs' verified/created successfully.")
-    except Exception as error:
-        conn.rollback()
-        logger.error(f"Error creating table 'metadata.ml_configs': {error}")
-        raise
 
-
-def create_ml_stats_table(conn):
-    """
-    Creates the `metadata.ml_stats` table to store ML model performance metrics, Sharpe, Win Rate, and JSONB charts.
-    """
-    create_schema_sql = "CREATE SCHEMA IF NOT EXISTS metadata;"
-    create_table_sql = """
-    CREATE TABLE IF NOT EXISTS metadata.ml_stats (
+    -- 2. ML Stats Table
+    CREATE TABLE IF NOT EXISTS ml.stats (
         model_id             VARCHAR(255) PRIMARY KEY,
+        config_name          VARCHAR(255) REFERENCES ml.configs(config_name) ON DELETE CASCADE,
         model_name           VARCHAR(255) NOT NULL,
         task_type            VARCHAR(50) NOT NULL,
         symbol               VARCHAR(50) NOT NULL,
@@ -856,16 +843,11 @@ def create_ml_stats_table(conn):
     """
     try:
         with conn.cursor() as cursor:
-            cursor.execute(create_schema_sql)
-            cursor.execute(create_table_sql)
+            cursor.execute(sql_script)
             conn.commit()
-            logger.info("Table 'metadata.ml_stats' verified/created successfully.")
+            logger.info("Successfully created/verified 'ml' schema, 'ml.configs', and 'ml.stats' tables.")
     except Exception as error:
         conn.rollback()
-        logger.error(f"Error creating table 'metadata.ml_stats': {error}")
+        logger.error(f"Error creating 'ml' schema and tables: {error}")
         raise
-
-
-
-
 
