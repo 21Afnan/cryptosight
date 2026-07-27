@@ -48,11 +48,13 @@ export default function TradePnlChart({ data = [], height = 260 }) {
     const rawTime = item.exit_time ?? item.time ?? item.date ?? item.entry_time ?? `Trade #${idx + 1}`;
     const cleanTime = formatCleanDateTime(rawTime);
     const side = (item.side ?? item.direction ?? '').toUpperCase();
-    const tradeId = item.trade_id ?? `#${idx + 1}`;
+    const tradeId = item.trade_id ?? `${idx + 1}`;
+    const tradeLabel = `#${tradeId}`;
 
     return {
       index: idx + 1,
       tradeId,
+      tradeLabel,
       side,
       rawTime,
       displayTime: cleanTime,
@@ -76,7 +78,7 @@ export default function TradePnlChart({ data = [], height = 260 }) {
         boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.5)' : '0 4px 20px rgba(0,0,0,0.1)',
       }}>
         <div style={{ fontWeight: 700, marginBottom: 4, color: isDark ? '#FFFFFF' : '#111827' }}>
-          Trade {d.tradeId} {d.side ? `(${d.side})` : ''}
+          Trade #{d.tradeId} {d.side ? `(${d.side})` : ''}
         </div>
         <div style={{ color: isDark ? COLORS.darkTextSecondary : '#6B7280', fontSize: 11, marginBottom: 6 }}>
           {d.displayTime}
@@ -95,14 +97,13 @@ export default function TradePnlChart({ data = [], height = 260 }) {
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={chartData} margin={{ top: 12, right: 12, bottom: 8, left: 12 }} barSize={Math.max(6, Math.min(24, Math.floor(600 / chartData.length)))}>
+      <BarChart data={chartData} margin={{ top: 12, right: 12, bottom: 8, left: 12 }} barSize={Math.max(12, Math.min(36, Math.floor(600 / chartData.length)))}>
         <CartesianGrid strokeDasharray="3 3" stroke={isDark ? COLORS.chartGridDark : COLORS.chartGridLight} vertical={false} />
         <XAxis
-          dataKey="displayTime"
+          dataKey="tradeLabel"
           tick={{ fontSize: 10, fill: isDark ? COLORS.darkTextSecondary : '#6B7280' }}
           axisLine={false}
           tickLine={false}
-          interval="preserveStartEnd"
         />
         <YAxis
           tickFormatter={(v) => `$${v}`}

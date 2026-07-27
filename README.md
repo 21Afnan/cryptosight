@@ -180,8 +180,8 @@ graph TD
   1. `Dashboard` (`/`): Executive overview, portfolio total value, strategy count, asset donut allocation, strategy ranking table.
   2. `StrategyDetails` (`/strategies` & `/strategies/:id`): Strategy catalog, configuration parameters, YAML rules inspector, risk settings, trade ledger.
   3. `Wallets` (`/wallets`): Wallet balances, exchange connection modal (Binance/Bybit), API credentials status, equity growth curve.
-  4. `Deployment` (`/deployment`): Live strategy runner overview, active position count, engine status toggle, live PnL.
-  5. `ExecutionDetails` (`/deployment/:id`): Detailed live trade runner view, position details, live trade log execution feed.
+  4. `Deployment` (`/deployment`): Live strategy runner overview, active position count, engine status toggle, live PnL, and strict ledger gatekeeping (warning toast when opening strategies without a DB ledger).
+  5. `ExecutionDetails` (`/deployment/:id`): Institutional live trade execution inspector featuring a 100% full-width 8-metric KPI matrix (`Current PnL`, `PnL %`, `Win Rate`, `Profit Factor`, `Total Trades`, `Max Drawdown`, `Last Signal`, `Last Execution`), an 8-parameter **Execution Configuration** matrix mapped 1:1 with `metadata.execution_config`, full-width **Performance Charts & Oscillators** with 4 tabs (`Equity Curve & Drawdown`, `PnL Per Trade`, `Trade History & Position Size`, `Monthly Returns`), dynamic PostgreSQL trade ledger calculations (`execution_service.py`), and clean timestamp formatting (automatically stripping `.microseconds`, `+00:00`, `UTC`, and `Z` noise).
   6. `BacktestRequests` (`/backtests`): Vectorized backtest list, status pills, run new backtest modal form.
   7. `BacktestDetails` (`/backtests/:id`): Full strategy backtest inspector with 4 Lightweight Charts tabs (Equity, Drawdown, Monthly Returns, Rolling Metrics), 59+ QuantStats metrics grid, and interactive trade ledger.
   8. `MachineLearning` (`/ml`): Model catalog, task type filter (classification/regression), symbol filter, model accuracy/F1 score KPI cards.

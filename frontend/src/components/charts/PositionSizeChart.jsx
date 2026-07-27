@@ -16,6 +16,10 @@ export default function PositionSizeChart({ data = [], height = 200 }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
+  if (!Array.isArray(data) || !data.length) {
+    return null;
+  }
+
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
     const entry = payload[0].payload;

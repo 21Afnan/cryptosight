@@ -16,6 +16,10 @@ export default function MonthlyReturnsChart({ data = [], height = 220 }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
+  if (!Array.isArray(data) || !data.length) {
+    return null;
+  }
+
   const formatPct = (v) => `${(v * 100).toFixed(1)}%`;
 
   const CustomTooltip = ({ active, payload, label }) => {

@@ -12,6 +12,8 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
 import Button from '@mui/material/Button';
 import { useTheme } from '@mui/material/styles';
 
@@ -20,6 +22,8 @@ import StatusChip from '../../components/ui/StatusChip';
 import EmptyState from '../../components/ui/EmptyState';
 import LoadingSkeleton from '../../components/ui/LoadingSkeleton';
 import EquityCurveChart from '../../components/charts/EquityCurveChart';
+import DrawdownChart from '../../components/charts/DrawdownChart';
+import MonthlyReturnsChart from '../../components/charts/MonthlyReturnsChart';
 import DailyReturnsChart from '../../components/charts/DailyReturnsChart';
 import PositionSizeChart from '../../components/charts/PositionSizeChart';
 import TradeHistoryChart from '../../components/charts/TradeHistoryChart';
@@ -32,6 +36,44 @@ import { COLORS } from '../../theme/theme';
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
 import ShowChartRoundedIcon from '@mui/icons-material/ShowChartRounded';
+import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
+
+function safeCurrency(val, fallback = '—') {
+  if (val === null || val === undefined) return fallback;
+  const n = Number(val);
+  if (isNaN(n)) return fallback;
+  return `${n >= 0 ? '+' : '-'}$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function safePercent(val, fallback = '—') {
+  if (val === null || val === undefined) return fallback;
+  const n = Number(val);
+  if (isNaN(n)) return fallback;
+  return `${n >= 0 ? '+' : ''}${(n * (Math.abs(n) <= 1.0 ? 100 : 1)).toFixed(2)}%`;
+}
+
+function safeDate(val, fallback = '—') {
+  if (!val || val === '—' || val === 'Invalid Date') return fallback;
+  try {
+    const str = String(val).split('.')[0].replace('Z', '').replace('UTC', '').replace('+00:00', '').trim();
+    const d = new Date(str.includes(' ') ? str.replace(' ', 'T') : str);
+    if (isNaN(d.getTime())) return str;
+    return d.toLocaleString('en-US', { month: 'short', day: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch {
+    return fallback;
+  }
+}
+
+function formatCleanDate(val, fallback = '—') {
+  if (!val || val === '—' || val === 'null' || val === 'undefined') return fallback;
+  return String(val)
+    .split('.')[0]
+    .replace('T', ' ')
+    .replace('+00:00', '')
+    .replace('Z', '')
+    .replace('UTC', '')
+    .trim();
+}
 
 function InfoRow({ label, value, color }) {
   const theme = useTheme();
@@ -61,11 +103,10 @@ export default function ExecutionDetails() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const [ledgerFilters, setLedgerFilters] = React.useState({ startDate: '', endDate: '', side: 'all', symbol: '' });
+  const [chartTab, setChartTab] = React.useState(0);
 
   const { data: exec, loading, error } = useMockFetch(() => getDeploymentById(id), [id]);
 
-  const rawSignals = exec?.signal_history ?? [];
-  const filteredSignals = filterLedgerRows(rawSignals, ledgerFilters);
   const rawTrades = exec?.trades ?? [];
   const filteredTrades = filterLedgerRows(rawTrades, ledgerFilters);
 
@@ -76,18 +117,49 @@ export default function ExecutionDetails() {
     </PageContainer>
   );
 
+  if (exec.has_ledger === false) return (
+    <PageContainer title={exec.strategy_name} breadcrumbs="Execution">
+      <Box sx={{ pt: 3 }}>
+        <Button startIcon={<ArrowBackRoundedIcon />} onClick={() => navigate('/deployment')} size="small" sx={{ mb: 2 }}>Back</Button>
+        <EmptyState
+          icon={ErrorOutlineRoundedIcon}
+          title="Execution Ledger Not Found"
+          description={`No trade ledger table (execution_ledgers) exists for '${exec.strategy_name}' in the database yet. Details will open once trades are recorded in database.`}
+          action={<Button onClick={() => navigate('/deployment')}>Back to Execution</Button>}
+        />
+      </Box>
+    </PageContainer>
+  );
+
   const pos = exec.active_position;
 
-  // Build trade markers for TradeHistoryChart
-  const tradeMarkers = (exec.signal_history ?? [])
-    .filter((s) => s.triggered && s.signal !== 'flat')
-    .map((s) => ({
-      time: s.timestamp.split('T')[0],
-      position: s.signal === 'long' ? 'belowBar' : 'aboveBar',
-      color: s.signal === 'long' ? COLORS.pnlGreen : COLORS.pnlRed,
-      shape: s.signal === 'long' ? 'arrowUp' : 'arrowDown',
-      text: s.signal.toUpperCase(),
-    }));
+  // Derive position size data from real DB trades if position_size_history is empty
+  const positionSizeData = exec.position_size_history?.length
+    ? exec.position_size_history
+    : (exec.trades ?? []).map((t, idx) => {
+        const rawVal = t.quantity && t.entry_price ? (t.quantity * t.entry_price) : (t.quantity || 1000);
+        return {
+          trade: t.trade_id || `#${idx + 1}`,
+          size: Math.round(Number(rawVal) || 1000),
+          side: (t.side || 'LONG').toLowerCase(),
+        };
+      });
+
+  // Build trade markers for TradeHistoryChart directly from real DB trades or signals
+  const tradeMarkers = (exec.trades?.length ? exec.trades : (exec.signal_history ?? []))
+    .map((t, idx) => {
+      const rawTime = t.exit_time || t.entry_time || t.timestamp || '';
+      const cleanTime = String(rawTime).split(' ')[0].split('T')[0];
+      const isLong = (t.side || t.signal || 'LONG').toUpperCase() === 'LONG';
+      return {
+        time: cleanTime,
+        position: isLong ? 'belowBar' : 'aboveBar',
+        color: isLong ? COLORS.pnlGreen : COLORS.pnlRed,
+        shape: isLong ? 'arrowUp' : 'arrowDown',
+        text: t.trade_id || (isLong ? 'BUY' : 'SELL'),
+      };
+    })
+    .filter((m) => Boolean(m.time));
 
   return (
     <PageContainer title={exec.strategy_name} breadcrumbs="Execution">
@@ -100,90 +172,196 @@ export default function ExecutionDetails() {
           <StatusChip status={exec.status} size="medium" />
           <Chip label={exec.symbol} sx={{ color: COLORS.accent, background: `${COLORS.accent}15` }} />
           <Chip label={exec.exchange} />
-          <Chip label={exec.wallet_label} />
+          <Chip label={exec.wallet_label || `Live ${exec.exchange} Wallet`} />
         </Box>
 
-        {/* PnL summary */}
-        <Grid container spacing={2} sx={{ mb: 3 }}>
+        {/* PnL & Performance Key Stats Matrix (8 Cards filling 100% full width) */}
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)', lg: 'repeat(4, 1fr)' },
+            gap: 2,
+            mb: 3,
+            width: '100%',
+            boxSizing: 'border-box',
+          }}
+        >
           {[
-            { label: 'Current PnL', value: `${exec.current_pnl >= 0 ? '+' : ''}$${exec.current_pnl?.toFixed(2)}`, color: exec.current_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed },
-            { label: 'PnL %', value: `${exec.current_pnl_pct >= 0 ? '+' : ''}${(exec.current_pnl_pct * 100).toFixed(2)}%`, color: exec.current_pnl_pct >= 0 ? COLORS.pnlGreen : COLORS.pnlRed },
-            { label: 'Daily Return', value: `${exec.daily_return >= 0 ? '+' : ''}${(exec.daily_return * 100).toFixed(2)}%`, color: exec.daily_return >= 0 ? COLORS.pnlGreen : COLORS.pnlRed },
-            { label: 'Last Signal', value: exec.last_signal?.toUpperCase() },
-            { label: 'Last Execution', value: new Date(exec.last_execution_time).toLocaleString() },
-            { label: 'Running Since', value: new Date(exec.started_at).toLocaleDateString() },
-          ].map(({ label, value, color }) => (
-            <Grid item xs={6} sm={4} md={2} key={label}>
-              <Card sx={{ textAlign: 'center', p: 1.5 }}>
-                <Typography variant="caption" sx={{ color: theme.palette.text.secondary, display: 'block' }}>{label}</Typography>
-                <Typography variant="h5" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: color || theme.palette.text.primary, fontSize: '1rem', mt: 0.5 }}>{value}</Typography>
-              </Card>
-            </Grid>
+            { label: 'Current PnL', value: safeCurrency(exec.current_pnl ?? exec.net_pnl), color: (exec.current_pnl ?? exec.net_pnl ?? 0) >= 0 ? COLORS.pnlGreen : COLORS.pnlRed },
+            { label: 'PnL %', value: safePercent(exec.current_pnl_pct), color: (exec.current_pnl_pct ?? 0) >= 0 ? COLORS.pnlGreen : COLORS.pnlRed },
+            { label: 'Win Rate', value: safePercent(exec.win_rate), color: (exec.win_rate ?? 0) >= 0.5 ? COLORS.pnlGreen : theme.palette.text.primary, sub: exec.winning_trades != null ? `${exec.winning_trades}W / ${exec.losing_trades ?? 0}L` : '' },
+            { label: 'Profit Factor', value: exec.profit_factor ? Number(exec.profit_factor).toFixed(2) : '—', color: (exec.profit_factor ?? 0) >= 1.2 ? COLORS.pnlGreen : theme.palette.text.primary },
+            { label: 'Total Trades', value: exec.total_trades != null ? `${exec.total_trades} trades` : '—' },
+            { label: 'Max Drawdown', value: safePercent(exec.max_drawdown), color: (exec.max_drawdown ?? 0) < 0 ? COLORS.pnlRed : theme.palette.text.primary },
+            { label: 'Last Signal', value: exec.last_signal ? String(exec.last_signal).toUpperCase() : '—' },
+            { label: 'Last Execution', value: safeDate(exec.last_execution_time) },
+          ].map(({ label, value, color, sub }) => (
+            <Card key={label} sx={{ textAlign: 'center', p: 2, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 6px 20px rgba(0,0,0,0.06)' }}>
+              <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 10, display: 'block' }}>{label}</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: color || theme.palette.text.primary, fontSize: '1.05rem', mt: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</Typography>
+              {sub && <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontSize: 10, mt: 0.25 }}>{sub}</Typography>}
+            </Card>
           ))}
-        </Grid>
+        </Box>
 
-        {/* Config + Current Position */}
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={12} md={4}>
-            <Card sx={{ height: '100%' }}>
-              <CardContent sx={{ p: '20px !important' }}>
-                <Typography variant="h5" sx={{ mb: 2, fontWeight: 700 }}>Simulation Config</Typography>
-                <InfoRow label="Initial Balance" value={`$${exec.initial_balance?.toLocaleString()}`} />
-                <InfoRow label="Position Size Type" value={exec.position_size_type} />
-                <InfoRow label="Position Size Value" value={exec.position_size_type === 'percent' ? `${(exec.position_size_value * 100).toFixed(0)}%` : `$${exec.position_size_value}`} />
-                <InfoRow label="Commission" value={`${(exec.commission * 100).toFixed(2)}%`} />
-                <InfoRow label="Slippage" value={`${(exec.slippage * 100).toFixed(2)}%`} />
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} md={8}>
-            <Card sx={{ height: '100%' }}>
-              <CardContent sx={{ p: '20px !important' }}>
-                <Typography variant="h5" sx={{ mb: 2, fontWeight: 700 }}>Current Position</Typography>
-                {!pos ? (
-                  <Box sx={{ display: 'flex', alignItems: 'center', height: 80 }}>
-                    <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>No active position</Typography>
+        {/* Execution Configuration Card (Attractive Parameter Matrix) */}
+        <Card
+          sx={{
+            mb: 3,
+            background: isDark ? COLORS.darkSurface : '#ffffff',
+            border: 'none',
+            boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.4)' : '0 8px 26px rgba(14, 203, 129, 0.24)',
+            borderRadius: 2.5,
+            width: '100%',
+          }}
+        >
+          <CardContent sx={{ p: '20px !important', boxSizing: 'border-box', width: '100%' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <TuneRoundedIcon sx={{ color: COLORS.pnlGreen }} />
+                <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                  Execution Configuration
+                </Typography>
+              </Box>
+              <Chip label={exec.status?.toUpperCase() || 'ACTIVE'} size="small" sx={{ height: 22, fontSize: 11, fontWeight: 700, background: 'rgba(14, 203, 129, 0.15)', color: '#0ECB81' }} />
+            </Box>
+
+            {/* 8 Clean Parameter Matrix Boxes */}
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)', lg: 'repeat(4, 1fr)' },
+                gap: 1.5,
+                width: '100%',
+                boxSizing: 'border-box',
+              }}
+            >
+              {[
+                ['Reference Balance', exec.reference_balance ? `$${Number(exec.reference_balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '$10,000.00'],
+                ['Exchange', exec.exchange || 'BYBIT'],
+                ['Symbol', exec.symbol || 'BTC/USDT'],
+                ['Timeframe', exec.timeframe || '15m'],
+                ['Contract Category', exec.category || 'Linear'],
+                ['Order Type', exec.order_type || 'Market'],
+                ['Position Size Type', exec.position_size_type || 'Percent'],
+                ['Position Size Value', safePercent(exec.position_size_value)],
+              ].map(([label, value]) => (
+                <Box
+                  key={label}
+                  sx={{
+                    p: '12px 14px',
+                    minHeight: '62px',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    borderRadius: '12px',
+                    background: isDark ? 'rgba(38, 46, 37, 0.7)' : '#ffffff',
+                    border: 'none',
+                    boxShadow: isDark ? '0 2px 8px rgba(0, 0, 0, 0.3)' : '0 6px 18px rgba(14, 203, 129, 0.20)',
+                    transition: 'all 0.2s ease',
+                    overflow: 'hidden',
+                    '&:hover': {
+                      boxShadow: '0 10px 24px rgba(14, 203, 129, 0.32)',
+                      transform: 'translateY(-2px)',
+                    },
+                  }}
+                >
+                  <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, fontSize: 10, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {label}
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', mt: 0.5, color: theme.palette.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {value ?? '—'}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          </CardContent>
+        </Card>
+
+        {/* Performance Charts & Oscillators Card (Tabs matching Backtest Details) */}
+        <Card sx={{ mb: 3 }}>
+          <CardContent sx={{ p: '20px !important' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2.5, flexWrap: 'wrap', gap: 1 }}>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                Performance Charts & Oscillators
+              </Typography>
+              <Tabs
+                value={chartTab}
+                onChange={(_, v) => {
+                  setChartTab(v);
+                  setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+                }}
+                sx={{ minHeight: '36px' }}
+              >
+                <Tab label="Equity Curve & Drawdown" sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
+                <Tab label="PnL Per Trade" sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
+                <Tab label="Trade History & Position Size" sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
+                <Tab label="Monthly Returns" sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
+              </Tabs>
+            </Box>
+
+            {chartTab === 0 && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%' }}>
+                <Box sx={{ width: '100%', minWidth: 0 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                    Equity Curve Trajectory
+                  </Typography>
+                  <Box sx={{ height: 320, width: '100%', minWidth: 0, position: 'relative' }}>
+                    <EquityCurveChart data={exec.equity_curve ?? []} height={320} />
                   </Box>
-                ) : (
-                  <Grid container spacing={2}>
-                    <Grid item xs={6} md={3}><InfoRow label="Symbol" value={pos.symbol} /></Grid>
-                    <Grid item xs={6} md={3}><InfoRow label="Side" value={<StatusChip status={pos.side} />} /></Grid>
-                    <Grid item xs={6} md={3}><InfoRow label="Entry Price" value={`$${pos.entry_price?.toLocaleString()}`} /></Grid>
-                    <Grid item xs={6} md={3}><InfoRow label="Current Price" value={`$${pos.current_price?.toLocaleString()}`} /></Grid>
-                    <Grid item xs={6} md={3}><InfoRow label="Take Profit" value={(pos.tp ?? pos.take_profit) != null ? `$${pos.tp ?? pos.take_profit}` : '—'} color={COLORS.pnlGreen} /></Grid>
-                    <Grid item xs={6} md={3}><InfoRow label="Stop Loss" value={(pos.sl ?? pos.stop_loss) != null ? `$${pos.sl ?? pos.stop_loss}` : '—'} color={COLORS.pnlRed} /></Grid>
-                    <Grid item xs={6} md={3}><InfoRow label="Unrealized PnL" value={`${pos.unrealized_pnl >= 0 ? '+' : ''}$${pos.unrealized_pnl?.toFixed(2)}`} color={pos.unrealized_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed} /></Grid>
-                    <Grid item xs={6} md={3}><InfoRow label="Opened" value={new Date(pos.opened_at).toLocaleString()} /></Grid>
-                  </Grid>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
+                </Box>
 
-        {/* Charts */}
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={12} md={8}>
-            <ChartCard title="Equity Curve" height={300}>
-              <EquityCurveChart data={exec.equity_curve ?? []} height={300} />
-            </ChartCard>
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <ChartCard title="Net PnL Per Trade ($)" height={300}>
-              <TradePnlChart data={exec.pnl_per_trade?.length ? exec.pnl_per_trade : (exec.trades?.length ? exec.trades : (exec.daily_returns ?? []))} height={280} />
-            </ChartCard>
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <ChartCard title="Position Size per Trade" height={280}>
-              <PositionSizeChart data={exec.position_size_history ?? []} height={280} />
-            </ChartCard>
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <ChartCard title="Trade History (Entry/Exit Markers)" height={280}>
-              <TradeHistoryChart equityData={exec.equity_curve ?? []} markers={tradeMarkers} height={280} />
-            </ChartCard>
-          </Grid>
-        </Grid>
+                <Box sx={{ width: '100%', minWidth: 0 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                    Underwater Drawdown
+                  </Typography>
+                  <Box sx={{ height: 260, width: '100%', minWidth: 0, position: 'relative' }}>
+                    <DrawdownChart data={exec.drawdown_curve ?? []} height={260} />
+                  </Box>
+                </Box>
+              </Box>
+            )}
+
+            {chartTab === 1 && (
+              <Box sx={{ width: '100%', height: 360 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                  Net PnL Per Trade ($)
+                </Typography>
+                <TradePnlChart data={(exec.pnl_per_trade?.length && exec.pnl_per_trade.length >= exec.trades?.length) ? exec.pnl_per_trade : (exec.trades ?? [])} height={340} />
+              </Box>
+            )}
+
+            {chartTab === 2 && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%' }}>
+                <Box sx={{ width: '100%', minWidth: 0 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                    Position Size per Trade
+                  </Typography>
+                  <Box sx={{ height: 280, width: '100%', minWidth: 0, position: 'relative' }}>
+                    <PositionSizeChart data={positionSizeData} height={280} />
+                  </Box>
+                </Box>
+
+                <Box sx={{ width: '100%', minWidth: 0 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                    Trade History (Entry/Exit Markers)
+                  </Typography>
+                  <Box sx={{ height: 280, width: '100%', minWidth: 0, position: 'relative' }}>
+                    <TradeHistoryChart equityData={exec.equity_curve ?? []} markers={tradeMarkers} height={280} />
+                  </Box>
+                </Box>
+              </Box>
+            )}
+
+            {chartTab === 3 && (
+              <Box sx={{ width: '100%', height: 360 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                  Monthly Returns Breakdown
+                </Typography>
+                <MonthlyReturnsChart data={exec.monthly_returns ?? []} height={340} />
+              </Box>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Execution Trade Ledgers Table */}
         <Card sx={{ mb: 3 }}>
@@ -216,8 +394,8 @@ export default function ExecutionDetails() {
                       <TableRow key={t.trade_id} hover>
                         <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{t.trade_id}</Typography></TableCell>
                         <TableCell><StatusChip status={t.side} /></TableCell>
-                        <TableCell><Typography variant="body2" sx={{ fontSize: 12 }}>{t.entry_time?.replace('Z', '').replace('UTC', '')}</Typography></TableCell>
-                        <TableCell><Typography variant="body2" sx={{ fontSize: 12 }}>{t.exit_time?.replace('Z', '').replace('UTC', '')}</Typography></TableCell>
+                        <TableCell><Typography variant="body2" sx={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{formatCleanDate(t.entry_time)}</Typography></TableCell>
+                        <TableCell><Typography variant="body2" sx={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{formatCleanDate(t.exit_time)}</Typography></TableCell>
                         <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${t.entry_price?.toLocaleString()}</Typography></TableCell>
                         <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${t.exit_price?.toLocaleString()}</Typography></TableCell>
                         <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>{t.quantity}</Typography></TableCell>
@@ -237,39 +415,6 @@ export default function ExecutionDetails() {
           </CardContent>
         </Card>
 
-        {/* Signal History */}
-        <Card>
-          <CardContent sx={{ p: '20px !important' }}>
-            <Typography variant="h5" sx={{ mb: 2, fontWeight: 700 }}>Signal History ({filteredSignals.length} displayed)</Typography>
-            <LedgerFilterBar onChange={setLedgerFilters} />
-            <TableContainer>
-              <Table size="small" stickyHeader>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>#</TableCell>
-                    <TableCell>Timestamp</TableCell>
-                    <TableCell>Signal</TableCell>
-                    <TableCell align="right">Price</TableCell>
-                    <TableCell>Triggered</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredSignals.slice(0, 20).map((s) => (
-                    <TableRow key={s.signal_id} hover>
-                      <TableCell>{s.signal_id}</TableCell>
-                      <TableCell><Typography variant="body2" sx={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{new Date(s.timestamp).toLocaleString()}</Typography></TableCell>
-                      <TableCell><StatusChip status={s.signal === 'flat' ? 'neutral' : s.signal} label={s.signal?.toUpperCase()} /></TableCell>
-                      <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${s.price?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography></TableCell>
-                      <TableCell>
-                        <Chip label={s.triggered ? 'Yes' : 'No'} size="small" sx={{ height: 20, fontSize: 11, color: s.triggered ? COLORS.pnlGreen : theme.palette.text.secondary, background: s.triggered ? `${COLORS.pnlGreen}15` : 'rgba(139,147,167,0.1)' }} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </CardContent>
-        </Card>
       </Box>
     </PageContainer>
   );
