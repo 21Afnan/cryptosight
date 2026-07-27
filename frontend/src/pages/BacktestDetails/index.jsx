@@ -207,13 +207,14 @@ export default function BacktestDetails() {
         </Box>
 
         {/* Guaranteed 100% Equal Width & Height Cards Grid (CSS Grid repeat(4, 1fr)) */}
-        <Box>
+        <Box
           sx={{
             display: 'grid',
             gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
             gap: 2,
             width: '100%',
           }}
+        >
 
           <HeroKpiCard
             icon={<LocalAtmRoundedIcon />}

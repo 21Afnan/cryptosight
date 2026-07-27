@@ -5,27 +5,53 @@ import { createChart, CrosshairMode, AreaSeries } from 'lightweight-charts';
 import { COLORS } from '../../theme/theme';
 
 /**
- * Robust data cleaner that converts raw points into strictly ascending, 
- * unique time points (unix timestamps in seconds or YYYY-MM-DD strings) 
- * suitable for lightweight-charts area series.
+ * Universal Equity Curve Data Formatter.
+ * Handles ALL input formats across the application:
+ *   1. [{ time: 'YYYY-MM-DD' | unix_sec, value: 10000 }]
+ *   2. [{ timestamp: ..., equity: ... }]
+ *   3. Primitive number arrays: [10000, 10200, 10150, 10500]
  */
 function prepareEquityData(data) {
-  const rawList = Array.isArray(data) ? data : (data?.raw_values || data?.values || data?.data || []);
-  if (!rawList.length) return [];
+  let rawList = Array.isArray(data) ? data : (data?.raw_values || data?.values || data?.data || []);
+  if (!rawList || !rawList.length) return [];
 
   const points = [];
-  rawList.forEach((item) => {
-    if (!item || item.time == null) return;
-    let t = item.time;
-    // Check if unix timestamp (int/float) or YYYY-MM-DD string
-    if (typeof t === 'string' && t.includes('-')) {
-      t = t.split(' ')[0].split('T')[0];
-    } else {
-      t = Number(t);
+  const now = new Date();
+
+  rawList.forEach((item, idx) => {
+    if (item == null) return;
+
+    let timeVal = null;
+    let numVal = null;
+
+    if (typeof item === 'number' || (typeof item === 'string' && !isNaN(Number(item)) && !item.includes('-'))) {
+      // Primitive number format: [10000, 10200, 10150]
+      numVal = Number(item);
+      const d = new Date(now);
+      d.setDate(d.getDate() - (rawList.length - 1 - idx));
+      timeVal = d.toISOString().split('T')[0];
+    } else if (typeof item === 'object') {
+      // Object format: { time: ..., value: ... } or { timestamp: ..., equity: ... }
+      numVal = Number(item.value ?? item.equity ?? item.balance ?? item.val ?? 0);
+      const rawTime = item.time ?? item.timestamp ?? item.date ?? item.created_at;
+
+      if (rawTime != null) {
+        if (typeof rawTime === 'string' && rawTime.includes('-')) {
+          timeVal = rawTime.split(' ')[0].split('T')[0];
+        } else if (typeof rawTime === 'number') {
+          timeVal = rawTime > 1e11 ? Math.floor(rawTime / 1000) : Math.floor(rawTime);
+        } else {
+          timeVal = String(rawTime);
+        }
+      } else {
+        const d = new Date(now);
+        d.setDate(d.getDate() - (rawList.length - 1 - idx));
+        timeVal = d.toISOString().split('T')[0];
+      }
     }
-    const val = Number(item.value ?? 0);
-    if (!isNaN(val)) {
-      points.push({ time: t, value: val });
+
+    if (timeVal != null && !isNaN(numVal)) {
+      points.push({ time: timeVal, value: numVal });
     }
   });
 
@@ -34,7 +60,7 @@ function prepareEquityData(data) {
   // Sort ascending by time
   points.sort((a, b) => (a.time > b.time ? 1 : a.time < b.time ? -1 : 0));
 
-  // Deduplicate exact duplicate timestamps by adding 1 second or preserving order
+  // Deduplicate exact duplicate timestamps for lightweight-charts
   const clean = [];
   let lastTime = null;
   points.forEach((p) => {
@@ -46,7 +72,6 @@ function prepareEquityData(data) {
     lastTime = t;
   });
 
-  // If only 1 point, add a baseline point 1 minute prior with identical value
   if (clean.length === 1) {
     let prevTime;
     if (typeof clean[0].time === 'number') {
@@ -139,7 +164,16 @@ export default function EquityCurveChart({ data = [], height = 300, label = 'Por
         chart.timeScale().fitContent();
       }
 
+      // Explicit resize handle pass
+      const handleResize = () => {
+        if (containerRef.current && chartRef.current) {
+          chartRef.current.timeScale().fitContent();
+        }
+      };
+      const t = setTimeout(handleResize, 100);
+
       return () => {
+        clearTimeout(t);
         try {
           chart.remove();
         } catch {
@@ -167,13 +201,13 @@ export default function EquityCurveChart({ data = [], height = 300, label = 'Por
   }, [data]);
 
   return (
-    <Box
+    <div
       ref={containerRef}
-      sx={{
+      style={{
         width: '100%',
-        height,
+        height: `${height}px`,
         minWidth: 0,
-        '& .tv-lightweight-charts': { width: '100% !important' },
+        position: 'relative',
       }}
     />
   );
