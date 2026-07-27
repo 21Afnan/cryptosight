@@ -9,6 +9,20 @@ from cryptosight.utils.db import get_connection
 from cryptosight.backend.services.strategy_service import get_all_strategies
 from cryptosight.execution.bybit_executor import BybitExecutor
 
+def generate_equity_sparkline(start_val, end_val, length=20):
+    if start_val is None or start_val <= 0:
+        start_val = 10000.0
+    if end_val is None:
+        end_val = start_val
+    diff = end_val - start_val
+    data = []
+    for i in range(length):
+        progress = i / float(length - 1)
+        noise = (random.random() - 0.5) * 0.02 * (abs(diff) if diff != 0 else start_val * 0.01)
+        val = start_val + (diff * progress) + noise
+        data.append({"value": round(val, 2)})
+    return data
+
 def generate_sparkline(base, length=20, drift=0.005, vol=0.02):
     if base is None or base == 0:
         base = 100.0
@@ -48,47 +62,64 @@ def get_dashboard_summary():
     total_net_pnl = 0.0
     total_portfolio_value = 0.0
 
+    # 5. Query global simulator initial balance from metadata.simulator_config
+    base_init_bal = 10000.0
+    try:
+        from cryptosight.utils.metadata import fetch_simulator_config
+        sim_cfg = fetch_simulator_config(conn)
+        if sim_cfg and "initial_balance" in sim_cfg:
+            base_init_bal = float(sim_cfg["initial_balance"])
+    except Exception:
+        pass
+
+    total_strats = len(formatted_strategies)
+    active_strats = len([s for s in formatted_strategies if s.get("status") == "active"])
+    sim_initial_balance = base_init_bal * max(total_strats, 1)
+
     try:
         with conn.cursor() as cursor:
-            # 1. Query running simulations from simulations.active_positions
+            # Query running simulations from simulations.active_positions
             try:
                 cursor.execute("SELECT COUNT(*) FROM simulations.active_positions;")
                 running_simulations = cursor.fetchone()[0] or 0
             except Exception:
                 conn.rollback()
 
-            # 2. Query running executions from execution.stats
+            # Query running executions from execution.stats
             try:
                 cursor.execute("SELECT COUNT(*) FROM execution.stats;")
                 running_executions = cursor.fetchone()[0] or 0
             except Exception:
                 conn.rollback()
 
-            # 3. Query connected API accounts from account.api
+            # Query connected API accounts from account.api
             try:
                 cursor.execute("SELECT COUNT(*) FROM account.api;")
                 connected_accounts = cursor.fetchone()[0] or 0
             except Exception:
                 conn.rollback()
 
-            # 4. Query total backtests from metadata.backtest_data
+            # Query total backtests from metadata.backtest_data
             try:
                 cursor.execute("SELECT COUNT(*) FROM metadata.backtest_data;")
                 total_backtests = cursor.fetchone()[0] or 0
             except Exception:
                 conn.rollback()
 
-            # 5. Query aggregate portfolio value & total PnL from simulations.stats
+            # Query aggregate simulation PnL and final balances from simulations.stats
             try:
-                cursor.execute("SELECT COALESCE(SUM(net_pnl), 0.0), COALESCE(SUM(final_balance), 0.0) FROM simulations.stats;")
+                cursor.execute("SELECT COALESCE(SUM(net_pnl), 0.0), COALESCE(SUM(final_balance), 0.0), COALESCE(SUM(final_balance - net_pnl), 0.0) FROM simulations.stats;")
                 row = cursor.fetchone()
                 if row:
                     total_net_pnl = float(row[0] or 0.0)
                     total_portfolio_value = float(row[1] or 0.0)
+                    calc_init = float(row[2] or 0.0)
+                    if calc_init > 0:
+                        sim_initial_balance = calc_init
             except Exception:
                 conn.rollback()
 
-            # 6. Try fetching real live Bybit account wallet balance from execution API
+            # Try fetching real live Bybit account wallet balance from execution API
             try:
                 executor = BybitExecutor(conn=conn)
                 wallet = executor.get_wallet_balance("USDT")
@@ -100,11 +131,8 @@ def get_dashboard_summary():
     finally:
         conn.close()
 
-    total_strats = len(formatted_strategies)
-    active_strats = len([s for s in formatted_strategies if s.get("status") == "active"])
-
-    # Calculate percentage changes
-    portfolio_change_pct = (total_net_pnl / (total_portfolio_value - total_net_pnl)) if (total_portfolio_value - total_net_pnl) > 0 else 0.0
+    # Calculate percentage changes against simulation initial capital baseline from metadata.simulator_config
+    portfolio_change_pct = (total_net_pnl / sim_initial_balance) if sim_initial_balance > 0 else 0.0
 
     return {
         "total_strategies": total_strats,
@@ -121,16 +149,16 @@ def get_dashboard_summary():
         "total_return": round(portfolio_change_pct, 4),
         "total_return_usd": round(total_net_pnl, 2),
         "sparklines": {
-            "portfolio_value": generate_sparkline(total_portfolio_value, 20, 0.003, 0.015),
-            "todays_pnl": generate_sparkline(total_net_pnl, 20, 0.002, 0.08),
+            "portfolio_value": generate_equity_sparkline(sim_initial_balance, sim_initial_balance + total_net_pnl, 20),
+            "todays_pnl": generate_equity_sparkline(0.0, total_net_pnl, 20),
             "active_strategies": [{"value": v} for v in [5,5,4,5,5,6,6,6,5,5,5,5,5,5,5,5,5,5,5,5]],
             "connected_accounts": [{"value": connected_accounts} for _ in range(20)],
-            "total_return": generate_sparkline(portfolio_change_pct, 20, 0.005, 0.04),
+            "total_return": generate_equity_sparkline(0.0, portfolio_change_pct, 20),
             "ml_models": [{"value": v} for v in [4,4,4,5,5,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6]],
             "backtests": [{"value": total_backtests} for _ in range(20)],
             "executions": [{"value": running_executions} for _ in range(20)],
             "simulations": [{"value": running_simulations} for _ in range(20)],
-            "total_pnl": generate_sparkline(total_net_pnl, 20, 0.004, 0.012),
+            "total_pnl": generate_equity_sparkline(0.0, total_net_pnl, 20),
         },
         "strategies_summary": formatted_strategies,
     }

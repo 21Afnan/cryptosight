@@ -267,10 +267,10 @@ def add_wallet_account(payload: dict) -> dict:
         raise RuntimeError("Database connection unavailable.")
 
     try:
-        exchange = payload.get("exchange", "Bybit")
-        api_key = payload.get("api_key", "")
-        api_secret = payload.get("api_secret", "")
-        demo = payload.get("demo", True)
+        exchange = payload.get("exchange")
+        api_key = payload.get("api_key")
+        api_secret = payload.get("api_secret")
+        demo = payload.get("demo")
 
         upsert_account_api(conn, exchange=exchange, api_key=api_key, api_secret=api_secret, demo=demo)
         return get_wallets_data()
