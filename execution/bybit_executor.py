@@ -171,6 +171,21 @@ class BybitExecutor:
 
         return None
 
+    def wait_for_position_fill(self, symbol: str, expected_direction: str, retries: int = 5, delay: float = 0.5) -> dict:
+        """
+        Polls get_open_position() after order placement to capture the real 
+        avgEntryPrice and filled quantity from Bybit, since market orders can 
+        fill at a different price than the signal candle's close price used 
+        for sizing.
+        """
+        for attempt in range(retries):
+            pos = self.get_open_position(symbol)
+            if pos and pos["direction"] == expected_direction.upper() and pos["quantity"] > 0:
+                return pos
+            time.sleep(delay)
+        logger.warning(f"Could not confirm actual fill for {symbol} {expected_direction} after {retries} retries.")
+        return None
+
     def place_market_order(
         self,
         symbol: str,
@@ -333,6 +348,12 @@ class BybitExecutor:
             response = self.session.get_closed_pnl(**params)
             if response.get("retCode") == 0:
                 pnl_list = response.get("result", {}).get("list", [])
+                if not pnl_list and "startTime" in params:
+                    # Timezone shift fallback: retry without startTime filter if no records returned
+                    params_fallback = {"category": self.category, "symbol": bybit_symbol, "limit": 50}
+                    resp_fallback = self.session.get_closed_pnl(**params_fallback)
+                    if resp_fallback.get("retCode") == 0:
+                        pnl_list = resp_fallback.get("result", {}).get("list", [])
                 records = []
                 for item in pnl_list:
                     stop_order_type = str(item.get("stopOrderType", "")).strip()

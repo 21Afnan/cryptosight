@@ -316,6 +316,15 @@ def upsert_account_stats(conn, metrics: dict):
             logger.info("Account performance stats successfully upserted into 'account.stats'.")
     except Exception as error:
         conn.rollback()
+        try:
+            import psycopg2
+            is_type_mismatch = isinstance(error, getattr(psycopg2.errors, 'DatatypeMismatch', Exception)) or "datatype" in str(error).lower() or "type mismatch" in str(error).lower()
+        except Exception:
+            is_type_mismatch = "datatype" in str(error).lower() or "type mismatch" in str(error).lower()
+
+        if is_type_mismatch:
+            for col, val in data_map.items():
+                logger.error(f"Column '{col}' expected type mismatch: got value {val} of type {type(val)}")
         logger.error(f"Error updating 'account.stats': {error}")
         raise
 

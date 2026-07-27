@@ -974,6 +974,15 @@ def upsert_simulation_stats(
             logger.info(f"Simulation stats saved in 'simulations.stats' for strategy '{strategy_name}' (ID #{strategy_id}).")
     except Exception as error:
         conn.rollback()
+        try:
+            import psycopg2
+            is_type_mismatch = isinstance(error, getattr(psycopg2.errors, 'DatatypeMismatch', Exception)) or "datatype" in str(error).lower() or "type mismatch" in str(error).lower()
+        except Exception:
+            is_type_mismatch = "datatype" in str(error).lower() or "type mismatch" in str(error).lower()
+
+        if is_type_mismatch:
+            for col, val in data_map.items():
+                logger.error(f"Column '{col}' expected type mismatch: got value {val} of type {type(val)}")
         logger.error(f"Error updating 'simulations.stats' for strategy #{strategy_id}: {error}")
         raise
 
@@ -1250,11 +1259,13 @@ def insert_execution_ledger(
     commission: float,
     net_pnl: float,
     return_pct: float,
-    exit_reason: str
+    exit_reason: str,
+    balance_after: float
 ):
     """
     Inserts a completed trade record into `execution_ledgers.<strategy_name>`.
     STEP 5 FIX: Stores both entry_order_id and exit_order_id separately.
+    Includes post-trade balance (balance_after).
     """
     import re
     clean_strat = re.sub(r'[^a-zA-Z0-9_]+', '_', strategy_name.lower().strip())
@@ -1275,15 +1286,16 @@ def insert_execution_ledger(
         net_pnl         NUMERIC(18,8) NOT NULL,
         return_pct      NUMERIC(18,8) NOT NULL,
         exit_reason     VARCHAR(32) NOT NULL,
+        balance_after   NUMERIC(18,8) NOT NULL,
         created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
     """
     insert_sql = f"""
     INSERT INTO execution_ledgers.{clean_strat} (
         entry_order_id, exit_order_id, entry_time, exit_time, direction, entry_price, exit_price,
-        quantity, gross_pnl, commission, net_pnl, return_pct, exit_reason
+        quantity, gross_pnl, commission, net_pnl, return_pct, exit_reason, balance_after
     )
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
     """
     try:
         with conn.cursor() as cursor:
@@ -1292,12 +1304,13 @@ def insert_execution_ledger(
             # Defensive column addition if table already exists from older schema
             cursor.execute(f"ALTER TABLE execution_ledgers.{clean_strat} ADD COLUMN IF NOT EXISTS entry_order_id VARCHAR(128);")
             cursor.execute(f"ALTER TABLE execution_ledgers.{clean_strat} ADD COLUMN IF NOT EXISTS exit_order_id VARCHAR(128);")
+            cursor.execute(f"ALTER TABLE execution_ledgers.{clean_strat} ADD COLUMN IF NOT EXISTS balance_after NUMERIC(18,8);")
             cursor.execute(insert_sql, (
                 entry_order_id, exit_order_id, entry_time, exit_time, direction, entry_price, exit_price,
-                quantity, gross_pnl, commission, net_pnl, return_pct, exit_reason
+                quantity, gross_pnl, commission, net_pnl, return_pct, exit_reason, float(balance_after)
             ))
             conn.commit()
-            logger.info(f"Closed trade logged to 'execution_ledgers.{clean_strat}' ({exit_reason}, Net PnL=${net_pnl:,.2f}).")
+            logger.info(f"Closed trade logged to 'execution_ledgers.{clean_strat}' ({exit_reason}, Net PnL=${net_pnl:,.2f}, Balance After=${balance_after:,.2f}).")
     except Exception as error:
         conn.rollback()
         logger.error(f"Error logging closed trade for strategy '{strategy_name}': {error}")
@@ -1391,6 +1404,15 @@ def upsert_execution_stats(
             logger.info(f"Live execution stats saved in 'execution.stats' for strategy '{strategy_name}' (ID #{strategy_id}).")
     except Exception as error:
         conn.rollback()
+        try:
+            import psycopg2
+            is_type_mismatch = isinstance(error, getattr(psycopg2.errors, 'DatatypeMismatch', Exception)) or "datatype" in str(error).lower() or "type mismatch" in str(error).lower()
+        except Exception:
+            is_type_mismatch = "datatype" in str(error).lower() or "type mismatch" in str(error).lower()
+
+        if is_type_mismatch:
+            for col, val in data_map.items():
+                logger.error(f"Column '{col}' expected type mismatch: got value {val} of type {type(val)}")
         logger.error(f"Error updating 'execution.stats' for strategy #{strategy_id}: {error}")
         raise
 
