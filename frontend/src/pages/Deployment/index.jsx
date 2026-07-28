@@ -4,6 +4,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
+import Chip from '@mui/material/Chip';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -87,13 +88,12 @@ export default function Deployment() {
                       <TableCell>Strategy</TableCell>
                       <TableCell>Symbol</TableCell>
                       <TableCell>Exchange</TableCell>
-                      <TableCell>Wallet</TableCell>
+                      <TableCell>Timeframe</TableCell>
                       <TableCell>Status</TableCell>
                       <TableCell>Position</TableCell>
-                      <TableCell align="right">Current PnL</TableCell>
-                      <TableCell align="right">Daily Return</TableCell>
-                      <TableCell>Last Signal</TableCell>
-                      <TableCell>Last Execution</TableCell>
+                      <TableCell align="right">Total Trades</TableCell>
+                      <TableCell align="right">Win Rate</TableCell>
+                      <TableCell align="right">Net PnL ($)</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -111,27 +111,28 @@ export default function Deployment() {
                         sx={{ cursor: d.has_ledger === false ? 'not-allowed' : 'pointer', opacity: d.has_ledger === false ? 0.75 : 1 }}
                       >
                         <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{d.strategy_name}</Typography></TableCell>
-                        <TableCell><Typography variant="body2" sx={{ color: COLORS.accent, fontWeight: 500 }}>{d.symbol}</Typography></TableCell>
+                        <TableCell><Typography variant="body2" sx={{ color: COLORS.accent, fontWeight: 700 }}>{d.symbol}</Typography></TableCell>
                         <TableCell>{d.exchange}</TableCell>
-                        <TableCell><Typography variant="body2" sx={{ fontSize: 12, fontFamily: 'monospace', color: theme.palette.text.secondary }}>{d.wallet_label}</Typography></TableCell>
+                        <TableCell><Chip label={d.timeframe || '15m'} size="small" variant="outlined" sx={{ height: 20, fontSize: 10 }} /></TableCell>
                         <TableCell><StatusChip status={d.status} /></TableCell>
                         <TableCell>
                           {d.active_position ? <StatusChip status={d.active_position.side} /> : <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>None</Typography>}
                         </TableCell>
                         <TableCell align="right">
-                          <Typography variant="body2" sx={{ color: d.current_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                            {d.current_pnl >= 0 ? '+' : ''}${d.current_pnl?.toFixed(2)}
+                          <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                            {d.total_trades ?? 0}
                           </Typography>
                         </TableCell>
                         <TableCell align="right">
-                          <Typography variant="body2" sx={{ color: d.daily_return >= 0 ? COLORS.pnlGreen : COLORS.pnlRed, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
-                            {d.daily_return >= 0 ? '+' : ''}{(d.daily_return * 100).toFixed(2)}%
+                          <Typography variant="body2" sx={{ color: COLORS.pnlGreen, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                            {(d.win_rate ?? 0).toFixed(1)}%
                           </Typography>
                         </TableCell>
-                        <TableCell>
-                          <StatusChip status={d.last_signal === 'flat' ? 'neutral' : d.last_signal} label={d.last_signal?.toUpperCase()} />
+                        <TableCell align="right">
+                          <Typography variant="body2" sx={{ color: (d.net_pnl ?? d.current_pnl ?? 0) >= 0 ? COLORS.pnlGreen : COLORS.pnlRed, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                            {(d.net_pnl ?? d.current_pnl ?? 0) >= 0 ? '+' : ''}${(d.net_pnl ?? d.current_pnl ?? 0).toFixed(2)}
+                          </Typography>
                         </TableCell>
-                        <TableCell><Typography variant="body2" sx={{ fontSize: 12, color: theme.palette.text.secondary }}>{new Date(d.last_execution_time).toLocaleString()}</Typography></TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

@@ -356,19 +356,23 @@ class BybitExecutor:
                         pnl_list = resp_fallback.get("result", {}).get("list", [])
                 records = []
                 for item in pnl_list:
+                    create_type = str(item.get("createType", "")).strip()
                     stop_order_type = str(item.get("stopOrderType", "")).strip()
                     exec_type = str(item.get("execType", "")).strip()
                     order_type = str(item.get("orderType", "")).strip()
 
-                    if stop_order_type in ("TakeProfit", "PartialTakeProfit"):
-                        exit_reason = "TAKE_PROFIT"
-                    elif stop_order_type in ("StopLoss", "PartialStopLoss"):
-                        exit_reason = "STOP_LOSS"
-                    elif stop_order_type == "TrailingStop":
-                        exit_reason = "TRAILING_STOP"
-                    elif exec_type == "BustTrade":
+                    # Exact Bybit Exchange API V5 Execution & Trigger Mapping
+                    if exec_type in ("BustTrade", "Liquidation"):
                         exit_reason = "LIQUIDATION"
-                    elif order_type == "Market":
+                    elif exec_type == "AdlTrade" or "Adl" in create_type:
+                        exit_reason = "ADL"
+                    elif stop_order_type in ("TakeProfit", "PartialTakeProfit") or create_type in ("CreateByTakeProfit", "CreateByPartialTakeProfit"):
+                        exit_reason = "TAKE_PROFIT"
+                    elif stop_order_type in ("StopLoss", "PartialStopLoss") or create_type in ("CreateByStopLoss", "CreateByPartialStopLoss"):
+                        exit_reason = "STOP_LOSS"
+                    elif stop_order_type == "TrailingStop" or create_type == "CreateByTrailingStop":
+                        exit_reason = "TRAILING_STOP"
+                    elif create_type in ("CreateByClosing", "CloseByMarket") or order_type == "Market":
                         exit_reason = "MARKET_EXIT"
                     elif order_type == "Limit":
                         exit_reason = "LIMIT_EXIT"
@@ -383,10 +387,10 @@ class BybitExecutor:
 
                     records.append({
                         "order_id": item.get("orderId"),
-                        "closed_pnl": float(item.get("closedPnl", 0.0)),
-                        "exit_price": float(item.get("avgExitPrice", 0.0)),
-                        "entry_price": float(item.get("avgEntryPrice", 0.0)),
-                        "quantity": float(item.get("qty", 0.0)),
+                        "closed_pnl": float(item.get("closedPnl")),
+                        "exit_price": float(item.get("avgExitPrice")),
+                        "entry_price": float(item.get("avgEntryPrice")),
+                        "quantity": float(item.get("qty")),
                         "commission": commission,
                         "exit_type": str(item.get("execType", "")),
                         "stop_order_type": stop_order_type,

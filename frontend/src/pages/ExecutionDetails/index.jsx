@@ -385,29 +385,39 @@ export default function ExecutionDetails() {
                       <TableCell align="right">Exit Price</TableCell>
                       <TableCell align="right">Quantity</TableCell>
                       <TableCell align="right">Net PnL ($)</TableCell>
-                      <TableCell>Exit Reason</TableCell>
+                      <TableCell align="right">Return %</TableCell>
                       <TableCell>Status</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {filteredTrades.map((t) => (
-                      <TableRow key={t.trade_id} hover>
-                        <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{t.trade_id}</Typography></TableCell>
-                        <TableCell><StatusChip status={t.side} /></TableCell>
-                        <TableCell><Typography variant="body2" sx={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{formatCleanDate(t.entry_time)}</Typography></TableCell>
-                        <TableCell><Typography variant="body2" sx={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{formatCleanDate(t.exit_time)}</Typography></TableCell>
-                        <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${t.entry_price?.toLocaleString()}</Typography></TableCell>
-                        <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${t.exit_price?.toLocaleString()}</Typography></TableCell>
-                        <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>{t.quantity}</Typography></TableCell>
-                        <TableCell align="right">
-                          <Typography variant="body2" sx={{ color: t.net_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                            {t.net_pnl >= 0 ? '+' : ''}${t.net_pnl?.toFixed(2)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell><Typography variant="body2" sx={{ fontSize: 12 }}>{t.exit_reason}</Typography></TableCell>
-                        <TableCell><StatusChip status={t.status || 'Completed'} /></TableCell>
-                      </TableRow>
-                    ))}
+                    {filteredTrades.map((t) => {
+                      const retPct = t.return_pct != null && t.return_pct !== 0
+                        ? t.return_pct
+                        : (t.entry_price && t.quantity ? (t.net_pnl / (t.entry_price * t.quantity)) * 100 : 0);
+
+                      return (
+                        <TableRow key={t.trade_id} hover>
+                          <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{t.trade_id}</Typography></TableCell>
+                          <TableCell><StatusChip status={t.side} /></TableCell>
+                          <TableCell><Typography variant="body2" sx={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{formatCleanDate(t.entry_time)}</Typography></TableCell>
+                          <TableCell><Typography variant="body2" sx={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{formatCleanDate(t.exit_time)}</Typography></TableCell>
+                          <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${t.entry_price?.toLocaleString()}</Typography></TableCell>
+                          <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${t.exit_price?.toLocaleString()}</Typography></TableCell>
+                          <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>{t.quantity}</Typography></TableCell>
+                          <TableCell align="right">
+                            <Typography variant="body2" sx={{ color: t.net_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                              {t.net_pnl >= 0 ? '+' : ''}${t.net_pnl?.toFixed(2)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <Typography variant="body2" sx={{ color: retPct >= 0 ? COLORS.pnlGreen : COLORS.pnlRed, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                              {retPct >= 0 ? '+' : ''}{retPct.toFixed(2)}%
+                            </Typography>
+                          </TableCell>
+                          <TableCell><StatusChip status={t.status || 'Completed'} /></TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </TableContainer>

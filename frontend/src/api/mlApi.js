@@ -1,13 +1,8 @@
 /**
  * mlApi.js
- * Dual-Mode FastAPI Backend & Offline Fallback API Client for Machine Learning Engine (/api/v1/ml).
- * 
- * 1. Live Mode: Directly queries FastAPI + PostgreSQL database.
- * 2. Inactive/Offline Mode: Invokes separate fallback functions when DB backend is unreachable.
+ * Pure Live FastAPI Backend API Client for Machine Learning Engine (/api/v1/ml).
+ * Queries FastAPI + PostgreSQL database directly without any mock fallback data.
  */
-
-import { ML_MODELS } from '../mock/mlMock';
-import { findMockById } from '../utils/findMockById';
 
 const BASE_URL = 'http://localhost:8000/api/v1/ml';
 
@@ -26,7 +21,7 @@ function applyClientFilters(data, { search = '', filter = {}, sort = {} } = {}) 
   if (filter.type) result = result.filter((m) => m.type.toLowerCase() === filter.type.toLowerCase());
   if (filter.status) result = result.filter((m) => m.status.toLowerCase() === filter.status.toLowerCase());
   if (filter.symbol) result = result.filter((m) => m.symbol.toUpperCase() === filter.symbol.toUpperCase());
-  
+
   if (sort.field) {
     const dir = sort.dir === 'desc' ? -1 : 1;
     result.sort((a, b) => {
@@ -38,55 +33,7 @@ function applyClientFilters(data, { search = '', filter = {}, sort = {} } = {}) 
   return result;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SEPARATE OFFLINE FALLBACK FUNCTIONS (TRIGGERED ONLY WHEN DB IS INACTIVE)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function getOfflineMockModelsFallback({ search = '', filter = {}, sort = {}, page = 1, pageSize = 50 } = {}) {
-  const filtered = applyClientFilters(ML_MODELS, { search, filter, sort });
-  const start = (page - 1) * pageSize;
-  const classificationCount = ML_MODELS.filter(m => m.type?.toLowerCase() === 'classification').length;
-  const regressionCount = ML_MODELS.filter(m => m.type?.toLowerCase() === 'regression').length;
-  const topModel = ML_MODELS.reduce((max, m) => (m.score > (max?.score ?? 0) ? m : max), ML_MODELS[0]);
-
-  return {
-    data: filtered.slice(start, start + pageSize),
-    total: filtered.length,
-    kpis: {
-      total_models: ML_MODELS.length,
-      classification_models: classificationCount,
-      regression_models: regressionCount,
-      top_performer: topModel?.name || 'N/A',
-    },
-    page,
-    pageSize,
-    isFallback: true,
-  };
-}
-
-function getOfflineMockModelByIdFallback(id) {
-  const model = findMockById(ML_MODELS, id, ['model_id', 'id']);
-  if (!model) return null;
-  return { ...model, isFallback: true };
-}
-
-function getOfflineMockLedgerFallback(id, limit = 50, offset = 0) {
-  const model = findMockById(ML_MODELS, id, ['model_id', 'id']);
-  const trades = model?.backtest_ledger || [];
-  return {
-    total_trades: trades.length,
-    trades: trades.slice(offset, offset + limit),
-    limit,
-    offset,
-    isFallback: true,
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN EXPORTED API CLIENT FUNCTIONS
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** GET /api/v1/ml/models — Primary Live Query with Automatic Offline Fallback */
+/** GET /api/v1/ml/models — Primary Live Query */
 export async function getModels({ search = '', filter = {}, sort = {}, page = 1, pageSize = 50 } = {}) {
   try {
     const params = new URLSearchParams();
@@ -121,12 +68,20 @@ export async function getModels({ search = '', filter = {}, sort = {}, page = 1,
       isFallback: false,
     };
   } catch (err) {
-    console.warn('Backend DB is inactive/unreachable. Activating separate offline fallback mode:', err.message);
-    return getOfflineMockModelsFallback({ search, filter, sort, page, pageSize });
+    console.error('Error fetching live ML models from backend:', err.message);
+    return {
+      data: [],
+      total: 0,
+      kpis: { total_models: 0, classification_models: 0, regression_models: 0, top_performer: 'N/A' },
+      page,
+      pageSize,
+      isFallback: false,
+      error: err.message,
+    };
   }
 }
 
-/** GET /api/v1/ml/models/:id — Primary Live Query with Automatic Offline Fallback */
+/** GET /api/v1/ml/models/:id — Primary Live Query */
 export async function getModelById(id) {
   try {
     const res = await fetch(`${BASE_URL}/models/${id}`);
@@ -139,12 +94,12 @@ export async function getModelById(id) {
     }
     return { ...json.data, isFallback: false };
   } catch (err) {
-    console.warn(`Backend DB inactive for model ${id}. Activating separate offline fallback mode:`, err.message);
-    return getOfflineMockModelByIdFallback(id);
+    console.error(`Error fetching live ML model details for ${id}:`, err.message);
+    return null;
   }
 }
 
-/** GET /api/v1/ml/models/:id/ledger — Primary Live Query with Automatic Offline Fallback */
+/** GET /api/v1/ml/models/:id/ledger — Primary Live Query */
 export async function getModelLedger(id, limit = 50, offset = 0) {
   try {
     const res = await fetch(`${BASE_URL}/models/${id}/ledger?limit=${limit}&offset=${offset}`);
@@ -154,7 +109,13 @@ export async function getModelLedger(id, limit = 50, offset = 0) {
     const json = await res.json();
     return { ...json?.data, isFallback: false };
   } catch (err) {
-    console.warn(`Backend DB inactive for ledger ${id}. Activating separate offline fallback mode:`, err.message);
-    return getOfflineMockLedgerFallback(id, limit, offset);
+    console.error(`Error fetching live ML ledger for ${id}:`, err.message);
+    return {
+      total_trades: 0,
+      trades: [],
+      limit,
+      offset,
+      isFallback: false,
+    };
   }
 }

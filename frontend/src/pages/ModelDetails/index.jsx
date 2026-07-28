@@ -99,7 +99,7 @@ function SpecTileCard({ icon: Icon, title, value, color = COLORS.accent }) {
   );
 }
 
-function MlPipelineCircularDiagram({ ds = {}, ti = {}, hp = {}, modelName = '', algorithm = '' }) {
+function MlPipelineCircularDiagram({ ds = {}, ti = {}, hp = {}, featureList = [], modelName = '', algorithm = '' }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
@@ -115,7 +115,7 @@ function MlPipelineCircularDiagram({ ds = {}, ti = {}, hp = {}, modelName = '', 
             Model Pipeline & System Architecture
           </Typography>
           <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
-            Configured pipeline specifications and hyperparameters
+            Configured pipeline specifications, hyperparameters, and feature engineering
           </Typography>
         </Box>
         <Chip
@@ -124,8 +124,8 @@ function MlPipelineCircularDiagram({ ds = {}, ti = {}, hp = {}, modelName = '', 
         />
       </Box>
 
-      {/* 2-Column Spacious Equal 50/50 Grid Cards */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2.5, width: '100%', mb: 1 }}>
+      {/* 3-Column Equal Grid Cards */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2.5, width: '100%', mb: 1 }}>
 
         {/* Stage 1: Data Ingestion */}
         <Paper
@@ -161,7 +161,7 @@ function MlPipelineCircularDiagram({ ds = {}, ti = {}, hp = {}, modelName = '', 
             </Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
               <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Target Objective</Typography>
-              <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>{ds?.target || 'Direction (Long/Short/Hold)'}</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>{ds?.target || 'Target Return'}</Typography>
             </Box>
           </Stack>
         </Paper>
@@ -214,9 +214,85 @@ function MlPipelineCircularDiagram({ ds = {}, ti = {}, hp = {}, modelName = '', 
           )}
         </Paper>
 
+        {/* Stage 3: Feature Specifications & Technical Indicators */}
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2.5,
+            width: '100%',
+            borderRadius: 2.5,
+            background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)',
+            border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}`,
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+            <Box sx={{ width: 32, height: 32, borderRadius: 2, background: `${COLORS.pnlGreen}15`, color: COLORS.pnlGreen, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <PsychologyRoundedIcon fontSize="small" />
+            </Box>
+            <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11, color: COLORS.pnlGreen }}>
+              3. Feature Specifications & Inputs
+            </Typography>
+          </Box>
+
+          <Stack spacing={1.25}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+              <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Total Features</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>
+                {ds?.features || (featureList.length > 0 ? featureList.length : 24)} Features
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+              <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Preprocessing</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>
+                {ti?.preprocessing || 'RobustScaler + Winsorization'}
+              </Typography>
+            </Box>
+
+            <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, mt: 0.5, display: 'block' }}>
+              Key Input Indicators
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, maxHeight: 110, overflowY: 'auto', pr: 0.5 }}>
+              {featureList && featureList.length > 0 ? (
+                featureList.map((feat) => (
+                  <Chip
+                    key={typeof feat === 'string' ? feat : feat?.feature}
+                    label={typeof feat === 'string' ? feat : feat?.feature}
+                    size="small"
+                    variant="outlined"
+                    sx={{
+                      height: 20,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      fontFamily: 'monospace',
+                      color: theme.palette.text.primary,
+                      borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)',
+                    }}
+                  />
+                ))
+              ) : (
+                <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontStyle: 'italic', fontSize: 11 }}>
+                  No feature indicators logged in model configuration
+                </Typography>
+              )}
+            </Box>
+          </Stack>
+        </Paper>
+
       </Box>
     </Card>
   );
+}
+
+function parseScoreValue(val) {
+  if (val == null) return 0;
+  if (typeof val === 'number') {
+    if (isNaN(val)) return 0;
+    return val <= 1.0 && val >= 0 ? val : val / 100.0;
+  }
+  const str = String(val).replace('%', '').trim();
+  const num = parseFloat(str);
+  if (isNaN(num)) return 0;
+  return num <= 1.0 && num >= 0 ? num : num / 100.0;
 }
 
 function RadialScoreCircle({ value = 0, label = 'Score', color = COLORS.accent }) {
@@ -225,7 +301,7 @@ function RadialScoreCircle({ value = 0, label = 'Score', color = COLORS.accent }
   const size = 56;
   const radius = 22;
   const circumference = 2 * Math.PI * radius;
-  const pct = Math.min(1, Math.max(0, value));
+  const pct = parseScoreValue(value);
   const strokeDashoffset = circumference * (1 - pct);
 
   return (
@@ -464,7 +540,14 @@ export default function ModelDetails() {
             </Grid>
 
             {/* Infographic Lifecycle Pipeline Flow Diagram */}
-            <MlPipelineCircularDiagram ds={ds} ti={ti} hp={hp} modelName={model.name} algorithm={model.type} />
+            <MlPipelineCircularDiagram
+              ds={ds}
+              ti={ti}
+              hp={hp}
+              featureList={model.feature_list || ds?.features_summary?.features_list || model.feature_importance?.map(f => (typeof f === 'string' ? f : f?.feature)) || []}
+              modelName={model.name}
+              algorithm={model.type}
+            />
 
           </Box>
         )}
@@ -494,11 +577,11 @@ export default function ModelDetails() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={[
-                      { metric: 'Accuracy', value: parseFloat(((ev?.accuracy ?? model.score ?? 0.7736) * 100).toFixed(1)), fill: COLORS.accent },
-                      { metric: 'Precision', value: parseFloat(((ev?.precision ?? 0.712) * 100).toFixed(1)), fill: COLORS.pnlRed },
-                      { metric: 'Recall', value: parseFloat(((ev?.recall ?? 0.685) * 100).toFixed(1)), fill: '#F87171' },
-                      { metric: 'F1-Score', value: parseFloat(((ev?.f1_score ?? ev?.f1 ?? 0.698) * 100).toFixed(1)), fill: '#DC2626' },
-                      { metric: 'ROC-AUC', value: parseFloat(((ev?.auc ?? ev?.roc_auc ?? 0.824) * 100).toFixed(1)), fill: COLORS.warning },
+                      { metric: 'Accuracy', value: parseFloat((parseScoreValue(ev?.val_accuracy ?? ev?.test_accuracy ?? ev?.accuracy ?? model.score) * 100).toFixed(1)), fill: COLORS.accent },
+                      { metric: 'Precision', value: parseFloat((parseScoreValue(ev?.val_precision ?? ev?.test_precision ?? ev?.precision) * 100).toFixed(1)), fill: COLORS.pnlRed },
+                      { metric: 'Recall', value: parseFloat((parseScoreValue(ev?.val_recall ?? ev?.test_recall ?? ev?.recall) * 100).toFixed(1)), fill: '#F87171' },
+                      { metric: 'F1-Score', value: parseFloat((parseScoreValue(ev?.val_f1_score ?? ev?.test_f1_score ?? ev?.f1_score ?? ev?.f1) * 100).toFixed(1)), fill: '#DC2626' },
+                      { metric: 'ROC-AUC', value: parseFloat((parseScoreValue(ev?.auc ?? ev?.roc_auc) * 100).toFixed(1)), fill: COLORS.warning },
                     ]}
                     margin={{ top: 20, right: 30, left: 10, bottom: 20 }}
                   >
@@ -569,22 +652,22 @@ export default function ModelDetails() {
                     <Grid container spacing={2}>
                       <Grid item xs={6} sm={3}>
                         <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
-                          <RadialScoreCircle value={ev?.val_accuracy ?? ev?.accuracy ?? model.score ?? 0.7736} label="Accuracy" color={COLORS.accent} />
+                          <RadialScoreCircle value={ev?.val_accuracy ?? ev?.test_accuracy ?? ev?.accuracy ?? model.score} label="Accuracy" color={COLORS.accent} />
                         </Paper>
                       </Grid>
                       <Grid item xs={6} sm={3}>
                         <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
-                          <RadialScoreCircle value={ev?.val_precision ?? ev?.precision ?? 0.712} label="Precision" color={COLORS.pnlRed} />
+                          <RadialScoreCircle value={ev?.val_precision ?? ev?.test_precision ?? ev?.precision} label="Precision" color={COLORS.pnlRed} />
                         </Paper>
                       </Grid>
                       <Grid item xs={6} sm={3}>
                         <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
-                          <RadialScoreCircle value={ev?.val_recall ?? ev?.recall ?? 0.685} label="Recall" color="#F87171" />
+                          <RadialScoreCircle value={ev?.val_recall ?? ev?.test_recall ?? ev?.recall} label="Recall" color="#F87171" />
                         </Paper>
                       </Grid>
                       <Grid item xs={6} sm={3}>
                         <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
-                          <RadialScoreCircle value={ev?.val_f1_score ?? ev?.f1_score ?? ev?.f1 ?? 0.698} label="F1-Score" color="#DC2626" />
+                          <RadialScoreCircle value={ev?.val_f1_score ?? ev?.test_f1_score ?? ev?.f1_score ?? ev?.f1} label="F1-Score" color="#DC2626" />
                         </Paper>
                       </Grid>
                     </Grid>

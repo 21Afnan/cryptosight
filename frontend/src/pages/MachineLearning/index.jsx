@@ -195,8 +195,7 @@ export default function MachineLearning() {
                       <TableCell>Symbol</TableCell>
                       <TableCell>Timeframe</TableCell>
                       <TableCell>Status</TableCell>
-                      <TableCell>Primary Metric</TableCell>
-                      <TableCell align="right">Score</TableCell>
+                      <TableCell align="right">Accuracy (%)</TableCell>
                       <TableCell align="right">Sharpe</TableCell>
                       <TableCell align="right">Win Rate</TableCell>
                       <TableCell>Training Date</TableCell>
@@ -250,17 +249,14 @@ export default function MachineLearning() {
                             }}
                           />
                         </TableCell>
-                        <TableCell>{m.primary_metric}</TableCell>
                         <TableCell align="right">
                           {(() => {
-                            const val = m.score;
-                            if (val == null) return <Typography variant="body2">—</Typography>;
-                            const num = Number(val);
-                            const isReg = m.primary_metric === 'R2 Score' || m.primary_metric === 'R² Score' || m.type?.toLowerCase() === 'regression';
-                            const formattedText = isReg ? num.toFixed(4) : `${(num <= 1.0 ? num * 100 : num).toFixed(1)}%`;
-                            const color = num < 0 ? COLORS.pnlRed : COLORS.accent;
+                            const acc = m.accuracy ?? m.evaluation_metrics?.accuracy ?? m.metrics?.ml_accuracy?.accuracy ?? m.score;
+                            if (acc == null) return <Typography variant="body2">—</Typography>;
+                            const num = Number(acc);
+                            const formattedText = m.type?.toLowerCase() === 'regression' ? (num > 1 ? `${num.toFixed(1)}%` : num.toFixed(4)) : `${(num <= 1.0 ? num * 100 : num).toFixed(1)}%`;
                             return (
-                              <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color }}>
+                              <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: COLORS.accent }}>
                                 {formattedText}
                               </Typography>
                             );

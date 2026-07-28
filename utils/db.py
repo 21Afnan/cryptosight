@@ -1426,6 +1426,9 @@ def insert_execution_ledger(
     )
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
     """
+    if not exit_reason:
+        exit_reason = "MARKET_EXIT"
+
     try:
         with conn.cursor() as cursor:
             cursor.execute(create_schema_sql)

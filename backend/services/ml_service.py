@@ -118,6 +118,28 @@ def get_all_ml_models(
                 else:
                     score_val = float(record["score"]) if record["score"] is not None else 0.0
 
+                acc_val = metrics.get("ml_accuracy", {}).get("accuracy")
+                if acc_val is None and record["score"] is not None:
+                    acc_val = float(record["score"])
+
+                pnl_val = metrics.get("quant_stats", {}).get("net_pnl")
+                ret_val = metrics.get("quant_stats", {}).get("total_return") or metrics.get("quant_stats", {}).get("net_pnl_pct") or metrics.get("quant_stats", {}).get("return_pct")
+
+                # If missing in json metrics, attempt dynamic query from live ml_backtests schema
+                if ret_val is None or pnl_val is None:
+                    try:
+                        clean_tbl = str(record["model_id"]).lower().strip().replace("-", "_").replace(" ", "_")
+                        with conn.cursor() as calc_cursor:
+                            calc_cursor.execute(f"SELECT SUM(perc_pnl), SUM(net_pnl) FROM ml_backtests.{clean_tbl};")
+                            p_row = calc_cursor.fetchone()
+                            if p_row:
+                                if ret_val is None and p_row[0] is not None:
+                                    ret_val = float(p_row[0])
+                                if pnl_val is None and p_row[1] is not None:
+                                    pnl_val = float(p_row[1])
+                    except Exception:
+                        pass
+
                 models.append({
                     "model_id": record["model_id"],
                     "config_name": record["config_name"],
@@ -129,6 +151,9 @@ def get_all_ml_models(
                     "status": record["status"] or "trained",
                     "primary_metric": p_metric,
                     "score": score_val,
+                    "accuracy": float(acc_val) if acc_val is not None else None,
+                    "net_pnl": float(pnl_val) if pnl_val is not None else None,
+                    "return_pct": float(ret_val) if ret_val is not None else None,
                     "win_rate": float(record["win_rate"]) if record["win_rate"] is not None else 0.0,
                     "sharpe": raw_sharpe,
                     "max_drawdown": float(record["max_drawdown"]) if record["max_drawdown"] is not None else 0.0,
@@ -289,6 +314,12 @@ def get_ml_model_by_id(model_id: str) -> Optional[Dict[str, Any]]:
             quant_stats = metrics.get("quant_stats", {})
             evaluation_metrics = metrics.get("ml_accuracy", {})
 
+            raw_feature_list = ds_info.get("features_summary", {}).get("features_list", [])
+            if not raw_feature_list:
+                feat_imp = charts.get("feature_importance", [])
+                if isinstance(feat_imp, list) and feat_imp:
+                    raw_feature_list = [f.get("feature") if isinstance(f, dict) else str(f) for f in feat_imp]
+
             model_detail = {
                 "id": record["model_id"],
                 "model_id": record["model_id"],
@@ -306,6 +337,7 @@ def get_ml_model_by_id(model_id: str) -> Optional[Dict[str, Any]]:
                 "evaluation_metrics": evaluation_metrics,
                 "backtest_metrics": quant_stats,
                 "backtest_ledger": recent_trades,
+                "feature_list": raw_feature_list,
                 "feature_importance": charts.get("feature_importance", []),
                 "confusion_matrix": charts.get("confusion_matrix", []),
                 "quant_charts": charts.get("quant_charts", {}),

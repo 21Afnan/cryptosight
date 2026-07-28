@@ -16,8 +16,10 @@ import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
 import Stack from '@mui/material/Stack';
-import Tabs from '@mui/material/Tabs';
-import Tab from '@mui/material/Tab';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
 import Button from '@mui/material/Button';
 import {
   BarChart,
@@ -82,8 +84,8 @@ function CleanPostTableRow({ post, isDark, theme }) {
 
   return (
     <>
-      <TableRow hover onClick={() => setOpen(!open)} sx={{ cursor: 'pointer', '& > *': { borderBottom: open ? 'none' : undefined } }}>
-        <TableCell width={80}>
+      <TableRow hover onClick={() => setOpen(!open)} sx={{ cursor: 'pointer' }}>
+        <TableCell width={75}>
           <Chip
             label={post.symbol}
             size="small"
@@ -96,7 +98,7 @@ function CleanPostTableRow({ post, isDark, theme }) {
             }}
           />
         </TableCell>
-        <TableCell width={120}>
+        <TableCell width={110}>
           <Typography variant="body2" sx={{ color: theme.palette.text.secondary, fontSize: 12, fontWeight: 500 }}>
             {post.subreddit}
           </Typography>
@@ -110,13 +112,13 @@ function CleanPostTableRow({ post, isDark, theme }) {
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              maxWidth: 440,
+              maxWidth: 320,
             }}
           >
             {post.title}
           </Typography>
         </TableCell>
-        <TableCell align="right" width={110}>
+        <TableCell align="right" width={95}>
           <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
             <ThumbUpAltRoundedIcon sx={{ fontSize: 13, color: theme.palette.text.secondary }} />
             <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>
@@ -124,20 +126,20 @@ function CleanPostTableRow({ post, isDark, theme }) {
             </Typography>
           </Box>
         </TableCell>
-        <TableCell align="center" width={120}>
+        <TableCell align="center" width={110}>
           <StatusChip label={post.sentiment || 'Neutral'} status={post.sentiment || 'Neutral'} />
         </TableCell>
-        <TableCell align="right" width={120}>
+        <TableCell align="right" width={110}>
           <Typography variant="body2" sx={{ color: chipColor, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
             {(post.confidence * 100).toFixed(1)}%
           </Typography>
         </TableCell>
-        <TableCell width={180} sx={{ whiteSpace: 'nowrap' }}>
+        <TableCell width={150} sx={{ whiteSpace: 'nowrap' }}>
           <Typography variant="body2" sx={{ fontSize: 12, color: theme.palette.text.secondary, fontVariantNumeric: 'tabular-nums' }}>
             {formatTs(post.created_utc)}
           </Typography>
         </TableCell>
-        <TableCell width={110} align="center">
+        <TableCell width={100} align="center">
           <Button
             size="small"
             onClick={(e) => {
@@ -177,14 +179,15 @@ function CleanPostTableRow({ post, isDark, theme }) {
                   mb: 2,
                   lineHeight: 1.6,
                   wordBreak: 'break-word',
-                  whiteSpace: 'pre-wrap',
+                  overflowWrap: 'anywhere',
+                  whiteSpace: 'normal',
                 }}
               >
                 "{post.body || post.title}"
               </Typography>
 
               {post.comments && post.comments.length > 0 && (
-                <Box>
+                <Box sx={{ width: '100%' }}>
                   <Typography
                     variant="caption"
                     sx={{
@@ -200,9 +203,21 @@ function CleanPostTableRow({ post, isDark, theme }) {
                   >
                     <CommentRoundedIcon sx={{ fontSize: 14 }} /> Top Scraped Comments ({post.comments.length})
                   </Typography>
-                  <Stack spacing={0.75}>
+                  <Stack spacing={1} sx={{ width: '100%' }}>
                     {post.comments.map((c, idx) => (
-                      <Typography key={idx} variant="caption" sx={{ color: theme.palette.text.primary, fontSize: 12 }}>
+                      <Typography
+                        key={idx}
+                        variant="caption"
+                        sx={{
+                          color: theme.palette.text.primary,
+                          fontSize: 12,
+                          lineHeight: 1.5,
+                          display: 'block',
+                          wordBreak: 'break-word',
+                          overflowWrap: 'anywhere',
+                          whiteSpace: 'normal',
+                        }}
+                      >
                         • {c}
                       </Typography>
                     ))}
@@ -226,8 +241,8 @@ export default function Sentiment() {
   const [postsData, setPostsData] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Filters, Sorting & Tabs
-  const [activeTab, setActiveTab] = useState(0); // 0: ALL TOP 10, 1: BTC TOP 10, 2: ADA TOP 10
+  // Filters, Sorting & Dynamic Symbol Selector
+  const [selectedSymbol, setSelectedSymbol] = useState('ALL');
   const [selectedSentiment, setSelectedSentiment] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortOrder, setSortOrder] = useState('desc'); // 'desc' or 'asc'
@@ -236,7 +251,7 @@ export default function Sentiment() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const targetSym = activeTab === 1 ? 'BTC' : activeTab === 2 ? 'ADA' : '';
+      const targetSym = selectedSymbol === 'ALL' ? '' : selectedSymbol;
       const [sumRes, postsRes] = await Promise.all([
         getSentimentSummary(),
         getRedditPosts(targetSym),
@@ -252,14 +267,22 @@ export default function Sentiment() {
 
   useEffect(() => {
     fetchData();
-  }, [activeTab]);
+  }, [selectedSymbol]);
 
   const ms = summaryData?.market_summary;
 
-  // Filter perSymbol to ONLY show active database symbols with total_posts > 0 (BTC & ADA)
+  // Filter perSymbol to ONLY show active database symbols with total_posts > 0
   const perSymbol = useMemo(() => {
     return (summaryData?.per_symbol ?? []).filter((s) => s.total_posts > 0);
   }, [summaryData]);
+
+  // Extract unique active symbols dynamically from PostgreSQL DB
+  const availableSymbols = useMemo(() => {
+    const symbolsFromDb = (perSymbol ?? []).map((s) => s.symbol.toUpperCase());
+    const symbolsFromPosts = (postsData ?? []).map((p) => (p.symbol || '').toUpperCase()).filter(Boolean);
+    const set = new Set([...symbolsFromDb, ...symbolsFromPosts]);
+    return Array.from(set).sort();
+  }, [perSymbol, postsData]);
 
   // Distribution chart data using standard trading Red/Green colors
   const distribution = useMemo(() => {
@@ -272,11 +295,12 @@ export default function Sentiment() {
     });
   }, [summaryData]);
 
-  // Strictly Top 10 Posts filtered by active tab, search & sorted by Upvotes (asc/desc)
+  // Strictly Top 10 Posts filtered by selected symbol, search & sorted by Upvotes (asc/desc)
   const top10Posts = useMemo(() => {
     let filtered = [...postsData];
-    if (activeTab === 1) filtered = filtered.filter((p) => p.symbol === 'BTC');
-    if (activeTab === 2) filtered = filtered.filter((p) => p.symbol === 'ADA');
+    if (selectedSymbol !== 'ALL') {
+      filtered = filtered.filter((p) => (p.symbol || '').toUpperCase() === selectedSymbol.toUpperCase());
+    }
 
     if (selectedSentiment !== 'ALL') {
       filtered = filtered.filter((p) => (p.sentiment || '').toLowerCase() === selectedSentiment.toLowerCase());
@@ -300,7 +324,7 @@ export default function Sentiment() {
 
     // Strictly slice Top 10
     return filtered.slice(0, 10);
-  }, [postsData, activeTab, selectedSentiment, searchTerm, sortOrder]);
+  }, [postsData, selectedSymbol, selectedSentiment, searchTerm, sortOrder]);
 
   // Chart data: BTC vs ADA Comparison Bar Chart
   const comparisonChartData = useMemo(() => {
@@ -516,25 +540,24 @@ export default function Sentiment() {
                   Upvotes: {sortOrder === 'desc' ? 'High → Low' : 'Low → High'}
                 </Button>
 
-                {/* Tabs */}
-                <Tabs
-                  value={activeTab}
-                  onChange={(_, v) => setActiveTab(v)}
-                  sx={{
-                    minHeight: 36,
-                    '& .MuiTab-root': {
-                      minHeight: 36,
-                      px: 2,
-                      fontWeight: 700,
-                      fontSize: 12,
-                      borderRadius: '8px',
-                    },
-                  }}
-                >
-                  <Tab label="ALL TOP 10" />
-                  <Tab label="BTC TOP 10" />
-                  <Tab label="ADA TOP 10" />
-                </Tabs>
+                {/* Dynamic Symbol Selector Dropdown */}
+                <FormControl size="small" sx={{ minWidth: 160 }}>
+                  <InputLabel id="symbol-select-label" sx={{ fontSize: 12, fontWeight: 700 }}>Symbol</InputLabel>
+                  <Select
+                    labelId="symbol-select-label"
+                    value={selectedSymbol}
+                    label="Symbol"
+                    onChange={(e) => setSelectedSymbol(e.target.value)}
+                    sx={{ height: 36, borderRadius: '8px', fontSize: 12, fontWeight: 700 }}
+                  >
+                    <MenuItem value="ALL">All Active Symbols</MenuItem>
+                    {availableSymbols.map((sym) => (
+                      <MenuItem key={sym} value={sym}>
+                        {sym} Top 10
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Box>
             </Box>
 
@@ -542,14 +565,14 @@ export default function Sentiment() {
             {top10Posts.length === 0 ? (
               <EmptyState title="No Top Posts Found" description="No scraped Reddit posts match the selected criteria in PostgreSQL." />
             ) : (
-              <TableContainer>
-                <Table size="small">
+              <TableContainer sx={{ overflowX: 'auto', width: '100%' }}>
+                <Table size="small" sx={{ width: '100%', minWidth: 780, tableLayout: 'fixed' }}>
                   <TableHead>
                     <TableRow>
-                      <TableCell width={80}>Symbol</TableCell>
-                      <TableCell width={120}>Subreddit</TableCell>
+                      <TableCell width={75}>Symbol</TableCell>
+                      <TableCell width={110}>Subreddit</TableCell>
                       <TableCell>Post Title</TableCell>
-                      <TableCell align="right" width={110}>
+                      <TableCell align="right" width={95}>
                         <TableSortLabel
                           active={true}
                           direction={sortOrder}
@@ -558,10 +581,10 @@ export default function Sentiment() {
                           Upvotes
                         </TableSortLabel>
                       </TableCell>
-                      <TableCell align="center" width={120}>AI Sentiment</TableCell>
-                      <TableCell align="right" width={120}>FinBERT Score</TableCell>
-                      <TableCell width={180} sx={{ whiteSpace: 'nowrap' }}>Post Date & Time</TableCell>
-                      <TableCell width={110} align="center">Details</TableCell>
+                      <TableCell align="center" width={110}>AI Sentiment</TableCell>
+                      <TableCell align="right" width={110}>FinBERT Score</TableCell>
+                      <TableCell width={150} sx={{ whiteSpace: 'nowrap' }}>Post Date & Time</TableCell>
+                      <TableCell width={100} align="center">Details</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
