@@ -15,6 +15,7 @@ import Deployment from './pages/Deployment';
 import ExecutionDetails from './pages/ExecutionDetails';
 import BacktestRequests from './pages/BacktestRequests';
 import BacktestDetails from './pages/BacktestDetails';
+import StrategyBuilder from './pages/StrategyBuilder';
 import MachineLearning from './pages/MachineLearning';
 import ModelDetails from './pages/ModelDetails';
 import Sentiment from './pages/Sentiment';
@@ -68,6 +69,7 @@ export default function App() {
                 <Route path="/execution/:id"      element={<ExecutionDetails />} />
                 <Route path="/backtests"          element={<BacktestRequests />} />
                 <Route path="/backtests/:id"      element={<BacktestDetails />} />
+                <Route path="/strategy-builder"   element={<StrategyBuilder />} />
                 <Route path="/ml"                 element={<MachineLearning />} />
                 <Route path="/ml/:id"             element={<ModelDetails />} />
                 <Route path="/sentiment"          element={<Sentiment />} />
