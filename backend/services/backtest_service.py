@@ -2,7 +2,6 @@
 backtest_service.py
 PostgreSQL-backed Backtesting Service.
 All queries operate strictly against real database tables (metadata.strategy_data,
-metadata.backtest_runs, backtests.stats, and backtests.<strategy_slug>).
 No fake fallback datasets or hardcoded defaults are used.
 """
 
@@ -308,96 +307,60 @@ def get_backtest_by_id(identifier: str) -> dict:
     try:
         conn = get_connection()
         with conn.cursor() as cursor:
-            # First check if identifier corresponds to a run_id in metadata.backtest_runs
-            run_data = None
+            # Query strategy_data, backtests.stats, & metadata.backtest_data directly
             if numeric_id:
-                run_data = get_backtest_run_by_id(conn, numeric_id)
-
-            if run_data:
-                strat_id = run_data["strategy_id"]
-                status = run_data["status"]
-                error_message = run_data["error_message"]
-                metrics = run_data["metrics"] or {}
-                run_cfg = run_data["backtest_config"] or {}
-
                 cursor.execute("""
                     SELECT s.strategy_id, s.strategy_name, s.exchange, s.symbol, s.target_timeframe,
-                           bs.metrics, bs.charts, s.strategy_config
+                           COALESCE(bs.status, 'completed'), bs.metrics, bs.charts, s.strategy_config,
+                           bd.backtest_config
                     FROM metadata.strategy_data s
                     LEFT JOIN backtests.stats bs ON s.strategy_id = bs.strategy_id
+                    LEFT JOIN metadata.backtest_data bd ON s.strategy_id = bd.strategy_id
                     WHERE s.strategy_id = %s;
-                """, (strat_id,))
-                row = cursor.fetchone()
-                if row:
-                    strat_name = str(row[1])
-                    exchange = str(row[2]).upper() if row[2] else ""
-                    symbol = str(row[3]).upper() if row[3] else ""
-                    timeframe = str(row[4]) if row[4] else ""
-                    raw_m, raw_c = row[5], row[6]
-                    if raw_m and not metrics:
-                        metrics = raw_m if isinstance(raw_m, dict) else json.loads(raw_m)
-                    if raw_c:
-                        charts = raw_c if isinstance(raw_c, dict) else json.loads(raw_c)
-
-                    table_name = _to_slug(strat_name)
-                    strat_meta = {
-                        "id": run_data["run_id"],
-                        "run_id": run_data["run_id"],
-                        "strategy_id": strat_id,
-                        "strategy_name": strat_name,
-                        "exchange": exchange,
-                        "symbol": symbol,
-                        "timeframe": timeframe,
-                        "table_name": table_name,
-                        "status": status,
-                        "error_message": error_message,
-                    }
+                """, (numeric_id,))
             else:
-                # Query strategy_data & backtests.stats directly
-                if numeric_id:
-                    cursor.execute("""
-                        SELECT s.strategy_id, s.strategy_name, s.exchange, s.symbol, s.target_timeframe,
-                               COALESCE(bs.status, 'completed'), bs.metrics, bs.charts, s.strategy_config
-                        FROM metadata.strategy_data s
-                        LEFT JOIN backtests.stats bs ON s.strategy_id = bs.strategy_id
-                        WHERE s.strategy_id = %s;
-                    """, (numeric_id,))
-                else:
-                    cursor.execute("""
-                        SELECT s.strategy_id, s.strategy_name, s.exchange, s.symbol, s.target_timeframe,
-                               COALESCE(bs.status, 'completed'), bs.metrics, bs.charts, s.strategy_config
-                        FROM metadata.strategy_data s
-                        LEFT JOIN backtests.stats bs ON s.strategy_id = bs.strategy_id
-                        WHERE LOWER(s.strategy_name) = %s OR REGEXP_REPLACE(LOWER(s.strategy_name), '[^a-z0-9]+', '_', 'g') = %s;
-                    """, (str_id.lower(), slug_id))
-                
-                row = cursor.fetchone()
-                if row:
-                    strat_id = int(row[0])
-                    strat_name = str(row[1])
-                    exchange = str(row[2]).upper() if row[2] else ""
-                    symbol = str(row[3]).upper() if row[3] else ""
-                    timeframe = str(row[4]) if row[4] else ""
-                    status = str(row[5]) if row[5] else "completed"
-                    raw_m, raw_c = row[6], row[7]
+                cursor.execute("""
+                    SELECT s.strategy_id, s.strategy_name, s.exchange, s.symbol, s.target_timeframe,
+                           COALESCE(bs.status, 'completed'), bs.metrics, bs.charts, s.strategy_config,
+                           bd.backtest_config
+                    FROM metadata.strategy_data s
+                    LEFT JOIN backtests.stats bs ON s.strategy_id = bs.strategy_id
+                    LEFT JOIN metadata.backtest_data bd ON s.strategy_id = bd.strategy_id
+                    WHERE LOWER(s.strategy_name) = %s OR REGEXP_REPLACE(LOWER(s.strategy_name), '[^a-z0-9]+', '_', 'g') = %s;
+                """, (str_id.lower(), slug_id))
+            
+            row = cursor.fetchone()
+            if row:
+                strat_id = int(row[0])
+                strat_name = str(row[1])
+                exchange = str(row[2]).upper() if row[2] else ""
+                symbol = str(row[3]).upper() if row[3] else ""
+                timeframe = str(row[4]) if row[4] else ""
+                status = str(row[5]) if row[5] else "completed"
+                raw_m, raw_c = row[6], row[7]
+                raw_strat_cfg, raw_bt_cfg = row[8], row[9]
 
-                    if raw_m:
-                        metrics = raw_m if isinstance(raw_m, dict) else json.loads(raw_m)
-                    if raw_c:
-                        charts = raw_c if isinstance(raw_c, dict) else json.loads(raw_c)
+                if raw_m:
+                    metrics = raw_m if isinstance(raw_m, dict) else json.loads(raw_m)
+                if raw_c:
+                    charts = raw_c if isinstance(raw_c, dict) else json.loads(raw_c)
 
-                    table_name = _to_slug(strat_name)
-                    strat_meta = {
-                        "id": strat_id,
-                        "strategy_id": strat_id,
-                        "strategy_name": strat_name,
-                        "exchange": exchange,
-                        "symbol": symbol,
-                        "timeframe": timeframe,
-                        "table_name": table_name,
-                        "status": status,
-                        "error_message": None,
-                    }
+                strat_cfg = raw_strat_cfg if isinstance(raw_strat_cfg, dict) else (json.loads(raw_strat_cfg) if raw_strat_cfg else {})
+                bt_cfg = raw_bt_cfg if isinstance(raw_bt_cfg, dict) else (json.loads(raw_bt_cfg) if raw_bt_cfg else {})
+                run_cfg = {**strat_cfg, **bt_cfg}
+
+                table_name = _to_slug(strat_name)
+                strat_meta = {
+                    "id": strat_id,
+                    "strategy_id": strat_id,
+                    "strategy_name": strat_name,
+                    "exchange": exchange,
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "table_name": table_name,
+                    "status": status,
+                    "error_message": None,
+                }
 
             if strat_meta:
                 table_name = strat_meta["table_name"]

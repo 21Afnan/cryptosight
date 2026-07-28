@@ -297,49 +297,84 @@ export default function BacktestDetails() {
               Strategy Configuration
             </Typography>
 
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(5, 1fr)' },
-                gap: 1.5,
-                width: '100%',
-              }}
-            >
-              {[
-                ['Symbol', bt.symbol],
-                ['Exchange', bt.exchange],
-                ['Timeframe', bt.timeframe],
-                ['Start Date', bt.backtest_config?.start_date],
-                ['End Date', bt.backtest_config?.end_date],
-                ['Initial Balance', bt.backtest_config?.initial_balance != null ? `$${bt.backtest_config?.initial_balance?.toLocaleString()}` : '—'],
-                ['Commission', bt.backtest_config?.commission != null ? `${(bt.backtest_config?.commission * 100).toFixed(3)}%` : '—'],
-                ['Slippage', bt.backtest_config?.slippage != null ? `${(bt.backtest_config?.slippage * 100).toFixed(3)}%` : '—'],
-                ['Take Profit', bt.backtest_config?.take_profit != null ? `${(bt.backtest_config?.take_profit * 100).toFixed(1)}%` : '—'],
-                ['Stop Loss', bt.backtest_config?.stop_loss != null ? `${(bt.backtest_config?.stop_loss * 100).toFixed(1)}%` : '—'],
-              ].map(([label, value]) => (
+            {(() => {
+              const cfg = bt.backtest_config || {};
+
+              const parseTpSl = (val) => {
+                if (val == null) return null;
+                if (typeof val === 'object') {
+                  const v = val.value != null ? val.value : val.val;
+                  if (v == null) return null;
+                  return `${Number(v).toFixed(1)}%`;
+                }
+                const num = Number(val);
+                if (isNaN(num)) return String(val);
+                return `${(num <= 1.0 && num > 0 ? num * 100 : num).toFixed(1)}%`;
+              };
+
+              const parsePct = (val) => {
+                if (val == null) return null;
+                const num = Number(val);
+                if (isNaN(num)) return String(val);
+                return `${(num < 1.0 ? num * 100 : num).toFixed(3)}%`;
+              };
+
+              const startDate = cfg.start_date || cfg.start_time || cfg.startDate || null;
+              const endDate = cfg.end_date || cfg.end_time || cfg.endDate || null;
+              const initBal = cfg.initial_balance ?? cfg.initialBalance;
+              const comm = cfg.commission;
+              const slip = cfg.slippage;
+              const tp = parseTpSl(cfg.take_profit ?? bt.strategy_config?.take_profit);
+              const sl = parseTpSl(cfg.stop_loss ?? bt.strategy_config?.stop_loss);
+
+              const configItems = [
+                ['Symbol', bt.symbol || (cfg.symbol ? String(cfg.symbol).toUpperCase() : null)],
+                ['Exchange', bt.exchange || (cfg.exchange ? String(cfg.exchange).toUpperCase() : null)],
+                ['Timeframe', bt.timeframe || cfg.timeframe],
+                ['Start Date', startDate],
+                ['End Date', endDate],
+                ['Initial Balance', initBal != null ? `$${Number(initBal).toLocaleString()}` : '—'],
+                ['Commission', comm != null ? parsePct(comm) : '—'],
+                ['Slippage', slip != null ? parsePct(slip) : '—'],
+                ['Take Profit', tp ?? '—'],
+                ['Stop Loss', sl ?? '—'],
+              ];
+
+              return (
                 <Box
-                  key={label}
                   sx={{
-                    p: '12px 16px',
+                    display: 'grid',
+                    gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(5, 1fr)' },
+                    gap: 1.5,
                     width: '100%',
-                    height: '64px',
-                    boxSizing: 'border-box',
-                    borderRadius: '12px',
-                    background: isDark ? 'rgba(38, 46, 37, 0.7)' : '#ffffff',
-                    border: 'none',
-                    boxShadow: isDark ? '0 4px 14px rgba(0, 0, 0, 0.3)' : '0 6px 18px rgba(14, 203, 129, 0.20)',
-                    transition: 'all 0.2s ease',
-                    '&:hover': {
-                      boxShadow: '0 10px 24px rgba(14, 203, 129, 0.35)',
-                      transform: 'translateY(-2px)',
-                    },
                   }}
                 >
-                  <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', mt: 0.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value ?? '—'}</Typography>
+                  {configItems.map(([label, value]) => (
+                    <Box
+                      key={label}
+                      sx={{
+                        p: '12px 16px',
+                        width: '100%',
+                        height: '64px',
+                        boxSizing: 'border-box',
+                        borderRadius: '12px',
+                        background: isDark ? 'rgba(38, 46, 37, 0.7)' : '#ffffff',
+                        border: 'none',
+                        boxShadow: isDark ? '0 4px 14px rgba(0, 0, 0, 0.3)' : '0 6px 18px rgba(14, 203, 129, 0.20)',
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          boxShadow: '0 10px 24px rgba(14, 203, 129, 0.35)',
+                          transform: 'translateY(-2px)',
+                        },
+                      }}
+                    >
+                      <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', mt: 0.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value ?? '—'}</Typography>
+                    </Box>
+                  ))}
                 </Box>
-              ))}
-            </Box>
+              );
+            })()}
           </CardContent>
         </Card>
 
