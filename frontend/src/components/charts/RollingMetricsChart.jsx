@@ -8,7 +8,6 @@ import { COLORS } from '../../theme/theme';
 
 const METRIC_COLORS = {
   sharpe: COLORS.accent,
-  sortino: COLORS.pnlGreen,
   calmar: COLORS.warning,
 };
 

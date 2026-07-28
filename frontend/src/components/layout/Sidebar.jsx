@@ -40,6 +40,13 @@ export default function Sidebar() {
   const location = useLocation();
   const { collapsed, toggleSidebar, sidebarWidth } = useSidebar();
 
+  const handleLogoClick = (e) => {
+    if (location.pathname === '/') {
+      e.preventDefault();
+      window.location.reload();
+    }
+  };
+
   const sidebarBg = isDark ? GRADIENTS.sidebarDark : GRADIENTS.sidebar;
 
   return (
@@ -67,6 +74,9 @@ export default function Sidebar() {
     >
       {/* Logo area */}
       <Box
+        component={NavLink}
+        to="/"
+        onClick={handleLogoClick}
         sx={{
           px: collapsed ? 1.5 : 2.5,
           py: 2.5,
@@ -75,6 +85,12 @@ export default function Sidebar() {
           gap: 1.5,
           mb: 0.5,
           justifyContent: collapsed ? 'center' : 'flex-start',
+          textDecoration: 'none',
+          cursor: 'pointer',
+          transition: 'opacity 150ms ease',
+          '&:hover': {
+            opacity: 0.85,
+          }
         }}
       >
         <Box
@@ -82,16 +98,27 @@ export default function Sidebar() {
             width: 38,
             height: 38,
             borderRadius: '12px',
-            background: 'rgba(255,255,255,0.22)',
-            backdropFilter: 'blur(4px)',
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.06) 100%)',
+            backdropFilter: 'blur(8px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
-            border: '1px solid rgba(255,255,255,0.2)',
+            border: '1px solid rgba(255,255,255,0.25)',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
           }}
         >
-          <ShowChartRoundedIcon sx={{ color: '#FFFFFF', fontSize: 20 }} />
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            {/* Hexagonal blockchain eye shell */}
+            <path d="M2 12L6.5 6H17.5L22 12L17.5 18H6.5L2 12Z" stroke="rgba(255, 255, 255, 0.45)" strokeWidth="1.5" strokeLinejoin="round" />
+            
+            {/* Glowing iris lens */}
+            <circle cx="12" cy="12" r="5.5" fill="rgba(94, 139, 110, 0.38)" stroke="#FFFFFF" strokeWidth="1.5" />
+            
+            {/* Upward trend line representing sight analytics */}
+            <path d="M9.5 13.5L11.5 11.5L13.2 13.2L15.5 9.5" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M13.5 9.5H15.5V11.5" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </Box>
         {!collapsed && (
           <Box sx={{ minWidth: 0 }}>

@@ -326,61 +326,7 @@ export default function BacktestRequests() {
           />
         </Box>
 
-        {/* Quick Strategy Presets Section (4 Standalone Equal 25% Grid Cards, Less Oval, No White Card Container) */}
-        <Box sx={{ width: '100%' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, letterSpacing: 0.5 }}>
-              QUICK STRATEGY PRESETS
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              Click any card to auto-fill configuration
-            </Typography>
-          </Box>
 
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
-              gap: 2,
-              width: '100%',
-            }}
-          >
-            {PRESET_STRATEGIES.map((preset) => (
-              <Card
-                key={preset.name}
-                onClick={() => {
-                  setSnack({ severity: 'info', message: `Preset: ${preset.name}` });
-                }}
-                sx={{
-                  p: '14px 18px',
-                  height: '84px',
-                  boxSizing: 'border-box',
-                  borderRadius: '14px',
-                  cursor: 'pointer',
-                  background: isDark ? COLORS.darkSurface : '#ffffff',
-                  border: `1px solid ${isDark ? 'rgba(34, 197, 94, 0.25)' : 'rgba(34, 197, 94, 0.22)'}`,
-                  boxShadow: isDark ? '0 4px 18px rgba(34, 197, 94, 0.15)' : '0 6px 20px rgba(14, 203, 129, 0.20)',
-                  transition: 'all 0.2s ease',
-                  '&:hover': {
-                    borderColor: COLORS.pnlGreen,
-                    transform: 'translateY(-3px)',
-                    boxShadow: '0 10px 25px rgba(14, 203, 129, 0.32)',
-                  },
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {preset.name}
-                  </Typography>
-                  <Chip label={preset.tag} size="small" sx={{ height: 20, fontSize: 10, background: `${preset.color}20`, color: preset.color, fontWeight: 700 }} />
-                </Box>
-                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {preset.config.symbol} · {preset.config.exchange} · {preset.config.timeframe} · ${preset.config.initial_balance.toLocaleString()}
-                </Typography>
-              </Card>
-            ))}
-          </Box>
-        </Box>
 
         {/* Tabbed Catalog List Card */}
         <Card
@@ -501,12 +447,12 @@ export default function BacktestRequests() {
                               </Typography>
                             </TableCell>
                             <TableCell align="right">
-                              <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                              <Typography variant="body2" sx={{ color: bt.win_rate != null ? (bt.win_rate >= 0.5 ? COLORS.pnlGreen : COLORS.pnlRed) : 'inherit', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>
                                 {bt.win_rate != null ? `${(bt.win_rate * 100).toFixed(1)}%` : '—'}
                               </Typography>
                             </TableCell>
                             <TableCell align="right">
-                              <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                              <Typography variant="body2" sx={{ color: typeof bt.sharpe === 'number' ? (bt.sharpe >= 0 ? COLORS.pnlGreen : COLORS.pnlRed) : 'inherit', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>
                                 {bt.sharpe?.toFixed(2) ?? '—'}
                               </Typography>
                             </TableCell>

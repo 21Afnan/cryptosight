@@ -11,9 +11,12 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TablePagination from '@mui/material/TablePagination';
+import TableSortLabel from '@mui/material/TableSortLabel';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Drawer from '@mui/material/Drawer';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
 import Divider from '@mui/material/Divider';
 import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
@@ -360,15 +363,17 @@ function WalletDrawer({ wallet, open, onClose }) {
 // ─── Main Wallets Page ────────────────────────────────────────────────────────
 export default function Wallets() {
   const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [selectedWallet, setSelectedWallet] = useState(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [detailTab, setDetailTab] = useState(0);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [confirmToggle, setConfirmToggle] = useState(null);
   const [snack, setSnack] = useState(null);
+  const detailsRef = React.useRef(null);
 
   const { data, loading, error, refetch } = useMockFetch(
     () => getWallets({ search }),
@@ -376,6 +381,69 @@ export default function Wallets() {
   );
 
   const wallets = data?.data ?? [];
+
+  React.useEffect(() => {
+    if (wallets.length > 0 && !selectedWallet) {
+      setSelectedWallet(wallets[0]);
+    }
+  }, [wallets, selectedWallet]);
+
+  // Symbol performance breakdown filter and sort states
+  const [symbolSearch, setSymbolSearch] = useState('');
+  const [symbolPnlFilter, setSymbolPnlFilter] = useState('all');
+  const [symbolSortField, setSymbolSortField] = useState('net_pnl');
+  const [symbolSortOrder, setSymbolSortOrder] = useState('desc');
+
+  const handleSymbolSort = (field) => {
+    if (symbolSortField === field) {
+      setSymbolSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSymbolSortField(field);
+      setSymbolSortOrder('desc');
+    }
+  };
+
+  const filteredAndSortedSymbols = useMemo(() => {
+    if (!wallets || wallets.length === 0 || !wallets[0]?.account_stats?.per_symbol) {
+      return [];
+    }
+
+    let list = Object.entries(wallets[0].account_stats.per_symbol).map(([sym, meta]) => ({
+      symbol: sym,
+      total_trades: meta.total_trades ?? 0,
+      win_rate: meta.win_rate ?? 0,
+      net_pnl: meta.net_pnl ?? 0,
+    }));
+
+    if (symbolSearch.trim() !== '') {
+      const q = symbolSearch.toLowerCase();
+      list = list.filter(item => item.symbol.toLowerCase().includes(q));
+    }
+
+    if (symbolPnlFilter === 'profitable') {
+      list = list.filter(item => item.net_pnl > 0);
+    } else if (symbolPnlFilter === 'loss') {
+      list = list.filter(item => item.net_pnl < 0);
+    }
+
+    if (symbolSortField) {
+      list.sort((a, b) => {
+        let valA = a[symbolSortField];
+        let valB = b[symbolSortField];
+
+        if (typeof valA === 'string') {
+          valA = valA.toLowerCase();
+          valB = valB.toLowerCase();
+        }
+
+        if (valA < valB) return symbolSortOrder === 'asc' ? -1 : 1;
+        if (valA > valB) return symbolSortOrder === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return list;
+  }, [wallets, symbolSearch, symbolPnlFilter, symbolSortField, symbolSortOrder]);
 
   // Summary StatCards calculations (Requirement 2.3)
   const summary = useMemo(() => {
@@ -397,13 +465,27 @@ export default function Wallets() {
       { time: '2026-07-08', value: 154200.50 },
       { time: '2026-07-15', value: 159800.20 },
       { time: '2026-07-22', value: 162400.00 },
-      { time: '2026-07-25', value: parseFloat(currentBal.toFixed(2)) },
     ];
   }, [wallets, summary.totalBalance]);
+
+  const handleSelectWallet = (w) => {
+    setSelectedWallet(w);
+    setTimeout(() => {
+      const el = detailsRef.current;
+      if (el) {
+        const yOffset = -90; // offset to keep top header clean
+        const y = el.getBoundingClientRect().top + window.pageYOffset + yOffset;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      }
+    }, 150);
+  };
 
   const handleDelete = async () => {
     if (!confirmDelete) return;
     await deleteWallet(confirmDelete.id);
+    if (selectedWallet?.id === confirmDelete.id) {
+      setSelectedWallet(null);
+    }
     setConfirmDelete(null);
     setSnack('Wallet removed successfully.');
     refetch();
@@ -516,29 +598,99 @@ export default function Wallets() {
 
               <Divider sx={{ my: 2 }} />
 
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>Per-Symbol Performance Breakdown</Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Per-Symbol Performance Breakdown</Typography>
+                <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <TextField
+                    size="small"
+                    placeholder="Search symbol..."
+                    value={symbolSearch}
+                    onChange={(e) => setSymbolSearch(e.target.value)}
+                    sx={{
+                      width: 160,
+                      '& .MuiInputBase-input': { py: 0.75, fontSize: '0.8125rem' }
+                    }}
+                  />
+                  <TextField
+                    select
+                    size="small"
+                    value={symbolPnlFilter}
+                    onChange={(e) => setSymbolPnlFilter(e.target.value)}
+                    sx={{
+                      minWidth: 140,
+                      '& .MuiInputBase-input': { py: 0.75, fontSize: '0.8125rem' }
+                    }}
+                  >
+                    <MenuItem value="all" sx={{ fontSize: '0.8125rem' }}>All Symbols</MenuItem>
+                    <MenuItem value="profitable" sx={{ fontSize: '0.8125rem' }}>Profitable Only</MenuItem>
+                    <MenuItem value="loss" sx={{ fontSize: '0.8125rem' }}>Loss-making Only</MenuItem>
+                  </TextField>
+                </Box>
+              </Box>
               <TableContainer>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: 700 }}>Symbol</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 700 }}>Total Trades</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 700 }}>Win Rate</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 700 }}>Net PnL</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>
+                        <TableSortLabel
+                          active={symbolSortField === 'symbol'}
+                          direction={symbolSortField === 'symbol' ? symbolSortOrder : 'asc'}
+                          onClick={() => handleSymbolSort('symbol')}
+                        >
+                          Symbol
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>
+                        <TableSortLabel
+                          active={symbolSortField === 'total_trades'}
+                          direction={symbolSortField === 'total_trades' ? symbolSortOrder : 'desc'}
+                          onClick={() => handleSymbolSort('total_trades')}
+                        >
+                          Total Trades
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>
+                        <TableSortLabel
+                          active={symbolSortField === 'win_rate'}
+                          direction={symbolSortField === 'win_rate' ? symbolSortOrder : 'desc'}
+                          onClick={() => handleSymbolSort('win_rate')}
+                        >
+                          Win Rate
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>
+                        <TableSortLabel
+                          active={symbolSortField === 'net_pnl'}
+                          direction={symbolSortField === 'net_pnl' ? symbolSortOrder : 'desc'}
+                          onClick={() => handleSymbolSort('net_pnl')}
+                        >
+                          Net PnL
+                        </TableSortLabel>
+                      </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {Object.entries(wallets[0].account_stats.per_symbol || {}).map(([sym, meta]) => {
-                      const netPnl = meta.net_pnl ?? 0;
-                      return (
-                        <TableRow key={sym} hover>
-                          <TableCell><Typography variant="body2" sx={{ fontWeight: 700 }}>{sym}</Typography></TableCell>
-                          <TableCell align="right"><Typography variant="body2">{meta.total_trades ?? 0}</Typography></TableCell>
-                          <TableCell align="right"><Typography variant="body2" sx={{ fontWeight: 700, color: (meta.win_rate ?? 0) >= 50 ? COLORS.pnlGreen : COLORS.pnlRed }}>{(meta.win_rate ?? 0).toFixed(1)}%</Typography></TableCell>
-                          <TableCell align="right"><Typography variant="body2" sx={{ fontWeight: 700, color: netPnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed }}>{netPnl >= 0 ? '+' : ''}${netPnl.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography></TableCell>
-                        </TableRow>
-                      );
-                    })}
+                    {filteredAndSortedSymbols.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
+                          <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
+                            No matching symbols found.
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredAndSortedSymbols.map((item) => {
+                        const netPnl = item.net_pnl;
+                        return (
+                          <TableRow key={item.symbol} hover>
+                            <TableCell><Typography variant="body2" sx={{ fontWeight: 700 }}>{item.symbol}</Typography></TableCell>
+                            <TableCell align="right"><Typography variant="body2">{item.total_trades}</Typography></TableCell>
+                            <TableCell align="right"><Typography variant="body2" sx={{ fontWeight: 700, color: item.win_rate >= 50 ? COLORS.pnlGreen : COLORS.pnlRed }}>{item.win_rate.toFixed(1)}%</Typography></TableCell>
+                            <TableCell align="right"><Typography variant="body2" sx={{ fontWeight: 700, color: netPnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed }}>{netPnl >= 0 ? '+' : ''}${netPnl.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -580,11 +732,22 @@ export default function Wallets() {
                   </TableHead>
                   <TableBody>
                     {wallets.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((w) => (
-                      <TableRow key={w.id} hover>
+                      <TableRow
+                        key={w.id}
+                        hover
+                        onClick={() => handleSelectWallet(w)}
+                        selected={selectedWallet?.id === w.id}
+                        sx={{
+                          cursor: 'pointer',
+                          '&.Mui-selected': {
+                            backgroundColor: isDark ? 'rgba(94, 139, 110, 0.15) !important' : 'rgba(94, 139, 110, 0.08) !important',
+                          }
+                        }}
+                      >
                         <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{w.exchange}</Typography></TableCell>
                         <TableCell>{w.account_type}</TableCell>
                         <TableCell>
-                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 12, color: theme.palette.text.secondary }}>
+                          <Typography variant="body2" sx={{ fontSize: 12, color: theme.palette.text.secondary }}>
                             {w.api_key}
                           </Typography>
                         </TableCell>
@@ -594,9 +757,9 @@ export default function Wallets() {
                         <TableCell align="right"><Typography variant="body2" sx={{ color: w.total_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{w.total_pnl >= 0 ? '+' : ''}${w.total_pnl?.toFixed(2)}</Typography></TableCell>
                         <TableCell align="right">
                           <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
-                            <IconButton size="small" onClick={() => { setSelectedWallet(w); setDrawerOpen(true); }} aria-label="View wallet details"><ChevronRightRoundedIcon sx={{ fontSize: 18 }} /></IconButton>
-                            <IconButton size="small" onClick={() => setConfirmToggle(w)} aria-label="Toggle wallet status"><PowerSettingsNewRoundedIcon sx={{ fontSize: 18 }} /></IconButton>
-                            <IconButton size="small" onClick={() => setConfirmDelete(w)} aria-label="Delete wallet" sx={{ color: COLORS.pnlRed }}><DeleteRoundedIcon sx={{ fontSize: 18 }} /></IconButton>
+                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleSelectWallet(w); }} aria-label="View wallet details"><ChevronRightRoundedIcon sx={{ fontSize: 18 }} /></IconButton>
+                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); setConfirmToggle(w); }} aria-label="Toggle wallet status"><PowerSettingsNewRoundedIcon sx={{ fontSize: 18 }} /></IconButton>
+                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); setConfirmDelete(w); }} aria-label="Delete wallet" sx={{ color: COLORS.pnlRed }}><DeleteRoundedIcon sx={{ fontSize: 18 }} /></IconButton>
                           </Box>
                         </TableCell>
                       </TableRow>
@@ -616,6 +779,201 @@ export default function Wallets() {
             </CardContent>
           </Card>
         )}
+
+        {/* Render Live Wallet Ledgers directly inline on the main layout page */}
+        {selectedWallet && (
+          <Card ref={detailsRef} sx={{ mt: 3.5 }}>
+            <CardContent sx={{ p: '20px !important' }}>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                  Live Wallet Ledgers: {selectedWallet.exchange}
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Active positions, pending orders, execution logs & assigned strategies
+                </Typography>
+              </Box>
+
+              <Divider sx={{ my: 2 }} />
+
+              <Tabs
+                value={detailTab}
+                onChange={(_, v) => setDetailTab(v)}
+                sx={{ mb: 2.5, minHeight: '36px' }}
+              >
+                <Tab label={`Active Positions (${selectedWallet.active_positions?.length ?? 0})`} sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
+                <Tab label={`Open Orders (${selectedWallet.open_orders?.length ?? 0})`} sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
+                <Tab label={`Assigned Strategies (${selectedWallet.assigned_strategies?.length ?? 0})`} sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
+              </Tabs>
+
+              {detailTab === 0 && (
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 700 }}>Symbol</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Strategy Name</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Direction</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700 }}>Quantity</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700 }}>Entry Price</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700 }}>Mark Price</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700 }}>Unrealized PnL</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {(!selectedWallet.active_positions || selectedWallet.active_positions.length === 0) ? (
+                        <TableRow>
+                          <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
+                              No active positions found for this wallet.
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        selectedWallet.active_positions.map((p, index) => {
+                          const netPnl = p.unrealized_pnl ?? 0;
+                          const isLong = String(p.direction || p.side || 'LONG').toUpperCase() === 'LONG';
+                          return (
+                            <TableRow key={p.id || index} hover>
+                              <TableCell><Typography variant="body2" sx={{ fontWeight: 700 }}>{p.symbol}</Typography></TableCell>
+                              <TableCell>
+                                <Typography variant="body2" sx={{ fontWeight: 500, color: COLORS.accent }}>
+                                  {p.strategy_name || '—'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={isLong ? 'Long' : 'Short'}
+                                  size="small"
+                                  sx={{
+                                    height: 18,
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    color: isLong ? COLORS.pnlGreen : COLORS.pnlRed,
+                                    background: isLong ? `${COLORS.pnlGreen}15` : `${COLORS.pnlRed}15`,
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>{p.quantity}</Typography></TableCell>
+                              <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${p.entry_price != null ? Number(p.entry_price).toFixed(2) : '—'}</Typography></TableCell>
+                              <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${p.mark_price != null ? Number(p.mark_price).toFixed(2) : '—'}</Typography></TableCell>
+                              <TableCell align="right">
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    fontWeight: 700,
+                                    fontVariantNumeric: 'tabular-nums',
+                                    color: netPnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed
+                                  }}
+                                >
+                                  {netPnl >= 0 ? '+' : ''}${netPnl.toFixed(2)}
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+
+              {detailTab === 1 && (
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 700 }}>Symbol</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Side</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700 }}>Quantity</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700 }}>Price</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {(!selectedWallet.open_orders || selectedWallet.open_orders.length === 0) ? (
+                        <TableRow>
+                          <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
+                              No open orders found for this wallet.
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        selectedWallet.open_orders.map((o, index) => {
+                          const isBuy = String(o.side || 'BUY').toUpperCase() === 'BUY';
+                          return (
+                            <TableRow key={o.order_id || index} hover>
+                              <TableCell><Typography variant="body2" sx={{ fontWeight: 700 }}>{o.symbol}</Typography></TableCell>
+                              <TableCell><Typography variant="body2" sx={{ textTransform: 'uppercase' }}>{o.type || 'limit'}</Typography></TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={isBuy ? 'Buy' : 'Sell'}
+                                  size="small"
+                                  sx={{
+                                    height: 18,
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    color: isBuy ? COLORS.pnlGreen : COLORS.pnlRed,
+                                    background: isBuy ? `${COLORS.pnlGreen}15` : `${COLORS.pnlRed}15`,
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>{o.quantity}</Typography></TableCell>
+                              <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${o.price != null ? Number(o.price).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—'}</Typography></TableCell>
+                              <TableCell><StatusChip status={o.status || 'pending'} /></TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+
+              {detailTab === 2 && (
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 700 }}>Strategy Name</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Symbol</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Exchange</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Timeframe</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {(!selectedWallet.assigned_strategies || selectedWallet.assigned_strategies.length === 0) ? (
+                        <TableRow>
+                          <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
+                              No assigned strategies found for this wallet.
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        selectedWallet.assigned_strategies.map((s, index) => (
+                          <TableRow key={s.strategy_id || s.id || index} hover>
+                            <TableCell><Typography variant="body2" sx={{ fontWeight: 700 }}>{s.strategy_name || s.name}</Typography></TableCell>
+                            <TableCell>
+                              <Chip
+                                label={s.symbol}
+                                size="small"
+                                sx={{ height: 18, fontSize: 10, color: COLORS.accent, background: `${COLORS.accent}15`, fontWeight: 600 }}
+                              />
+                            </TableCell>
+                            <TableCell><Typography variant="body2" sx={{ textTransform: 'capitalize' }}>{s.exchange}</Typography></TableCell>
+                            <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{s.timeframe}</Typography></TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </Box>
 
       {/* Add Wallet Dialog (Requirement 2.1) */}
@@ -627,9 +985,6 @@ export default function Wallets() {
           refetch();
         }}
       />
-
-      {/* Wallet detail drawer */}
-      <WalletDrawer wallet={selectedWallet} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
 
       {/* Confirm dialogs */}
       <ConfirmDialog

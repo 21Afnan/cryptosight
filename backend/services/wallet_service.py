@@ -52,12 +52,14 @@ def get_wallets_data(search: str = "", filter_status: str = "") -> dict:
                     active_positions.append({
                         "id": f"pos-{r.get('strategy_id', 0)}",
                         "symbol": str(r.get("symbol", "")).upper(),
+                        "exchange": str(r.get("exchange", "")).lower(),
                         "direction": str(r.get("direction", "LONG")).upper(),
                         "quantity": float(r.get("quantity", 0.0)),
                         "entry_price": float(r.get("entry_price", 0.0)),
                         "mark_price": float(r.get("mark_price", 0.0)),
                         "unrealized_pnl": float(r.get("unrealized_pnl", 0.0)),
                         "status": str(r.get("status", "OPEN")),
+                        "strategy_name": str(r.get("strategy_name")) if pd.notna(r.get("strategy_name")) else f"Strategy {r.get('strategy_id')}",
                     })
         except Exception as e:
             logger.warning(f"execution.active_positions read skipped: {e}")

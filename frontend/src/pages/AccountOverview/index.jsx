@@ -231,7 +231,7 @@ export default function AccountOverview() {
                       </TableCell>
 
                       <TableCell>
-                        <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 12, color: theme.palette.text.secondary }}>
+                        <Typography variant="body2" sx={{ fontSize: 12, color: theme.palette.text.secondary }}>
                           {w.api_key}
                         </Typography>
                       </TableCell>

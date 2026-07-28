@@ -21,7 +21,7 @@ import ModelDetails from './pages/ModelDetails';
 import Sentiment from './pages/Sentiment';
 
 // Theme context — exposes toggleTheme() to Topbar and any other consumer
-export const ThemeContext = createContext({ mode: 'dark', toggleTheme: () => {} });
+export const ThemeContext = createContext({ mode: 'dark', toggleTheme: () => { } });
 
 const THEME_STORAGE_KEY = 'cryptosight_theme';
 
@@ -56,25 +56,25 @@ export default function App() {
         <ErrorBoundary>
           <SidebarProvider>
             <SearchProvider>
-            <BrowserRouter>
-              <Sidebar />
-              <Routes>
-                <Route path="/"                   element={<Dashboard />} />
-                <Route path="/strategies"         element={<StrategyDetails />} />
-                <Route path="/strategies/:id"     element={<StrategyDetails />} />
-                <Route path="/wallets"            element={<Wallets />} />
-                <Route path="/deployment"         element={<Deployment />} />
-                <Route path="/deployment/:id"     element={<ExecutionDetails />} />
-                <Route path="/execution"          element={<Deployment />} />
-                <Route path="/execution/:id"      element={<ExecutionDetails />} />
-                <Route path="/backtests"          element={<BacktestRequests />} />
-                <Route path="/backtests/:id"      element={<BacktestDetails />} />
-                <Route path="/strategy-builder"   element={<StrategyBuilder />} />
-                <Route path="/ml"                 element={<MachineLearning />} />
-                <Route path="/ml/:id"             element={<ModelDetails />} />
-                <Route path="/sentiment"          element={<Sentiment />} />
-              </Routes>
-            </BrowserRouter>
+              <BrowserRouter>
+                <Sidebar />
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/strategies" element={<StrategyDetails />} />
+                  <Route path="/strategies/:id" element={<StrategyDetails />} />
+                  <Route path="/wallets" element={<Wallets />} />
+                  <Route path="/deployment" element={<Deployment />} />
+                  <Route path="/deployment/:id" element={<ExecutionDetails />} />
+                  <Route path="/execution" element={<Deployment />} />
+                  <Route path="/execution/:id" element={<ExecutionDetails />} />
+                  <Route path="/backtests" element={<BacktestRequests />} />
+                  <Route path="/backtests/:id" element={<BacktestDetails />} />
+                  <Route path="/strategy-builder" element={<StrategyBuilder />} />
+                  <Route path="/ml" element={<MachineLearning />} />
+                  <Route path="/ml/:id" element={<ModelDetails />} />
+                  <Route path="/sentiment" element={<Sentiment />} />
+                </Routes>
+              </BrowserRouter>
             </SearchProvider>
           </SidebarProvider>
         </ErrorBoundary>

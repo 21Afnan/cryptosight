@@ -182,10 +182,11 @@ def get_strategy_by_id(identifier):
                 peak = init_bal
                 
                 m_returns = {}
-                pnl_counts = {"loss_large": 0, "loss_small": 0, "win_small": 0, "win_large": 0}
+                pnl_vals = []
                 
                 for idx, tr in enumerate(t_rows):
                     pnl = float(tr[1] or 0)
+                    pnl_vals.append(pnl)
                     balance += pnl
                     if balance > peak:
                         peak = balance
@@ -198,15 +199,6 @@ def get_strategy_by_id(identifier):
                             m_returns[m_key] = m_returns.get(m_key, 0.0) + pnl
                         except Exception:
                             pass
-                    
-                    if pnl < -50:
-                        pnl_counts["loss_large"] += 1
-                    elif pnl < 0:
-                        pnl_counts["loss_small"] += 1
-                    elif pnl < 50:
-                        pnl_counts["win_small"] += 1
-                    else:
-                        pnl_counts["win_large"] += 1
                         
                     equity_curve.append({"time": time_str, "value": round(balance, 2)})
                     drawdown_curve.append({"time": time_str, "value": round(dd, 4)})
@@ -219,12 +211,42 @@ def get_strategy_by_id(identifier):
                 for m, val in m_returns.items():
                     monthly_returns.append({"month": m, "value": round(val / init_bal, 4) if init_bal else 0.0})
                     
-                trade_distribution = [
-                    {"range": "< -$50", "count": pnl_counts["loss_large"], "positive": False},
-                    {"range": "-$50 to $0", "count": pnl_counts["loss_small"], "positive": False},
-                    {"range": "$0 to $50", "count": pnl_counts["win_small"], "positive": True},
-                    {"range": "> $50", "count": pnl_counts["win_large"], "positive": True},
-                ]
+                if pnl_vals:
+                    min_p = min(pnl_vals)
+                    max_p = max(pnl_vals)
+                    if min_p == max_p:
+                        min_p -= 1.0
+                        max_p += 1.0
+                    
+                    num_bins = 10
+                    bin_width = (max_p - min_p) / num_bins
+                    bins = []
+                    for i in range(num_bins):
+                        b_start = min_p + i * bin_width
+                        b_end = min_p + (i + 1) * bin_width
+                        bins.append({
+                            "start": b_start,
+                            "end": b_end,
+                            "count": 0,
+                            "range": f"${round(b_start, 1)} to ${round(b_end, 1)}"
+                        })
+                    
+                    # Distribute values into bins
+                    for pval in pnl_vals:
+                        for b in bins:
+                            if b["start"] <= pval <= b["end"]:
+                                b["count"] += 1
+                                break
+                                
+                    trade_distribution = []
+                    for b in bins:
+                        trade_distribution.append({
+                            "range": b["range"],
+                            "count": b["count"],
+                            "positive": (b["start"] + b["end"]) / 2 >= 0
+                        })
+                else:
+                    trade_distribution = []
             except Exception:
                 pass
 

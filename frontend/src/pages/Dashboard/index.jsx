@@ -138,28 +138,14 @@ function HeroBanner({ data }) {
           sx={{
             color: '#FFFFFF',
             fontWeight: 800,
-            fontSize: '1.625rem',
+            fontSize: '1.875rem',
             lineHeight: 1.2,
             letterSpacing: '-0.025em',
-            mb: 1.5,
+            mb: 3,
           }}
         >
-          {data ? (
-            <>
-              Portfolio:{' '}
-              <Box component="span" sx={{ opacity: 0.95 }}>
-                ${fmt(data.portfolio_value)}
-              </Box>
-            </>
-          ) : (
-            'Welcome to CryptoSight'
-          )}
+          Welcome to CryptoSight
         </Typography>
-        {data && (
-          <Typography sx={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.875rem', mb: 2.5, lineHeight: 1.5 }}>
-            {data.active_strategies} active strategies · {data.running_executions} live executions · {fmtPct(data.portfolio_change_pct)} today
-          </Typography>
-        )}
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
           <Button
             id="hero-view-strategies-btn"
@@ -296,7 +282,7 @@ export default function Dashboard() {
           <CardContent sx={{ p: '20px !important' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
               <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                Strategies Overview ({filteredStrategiesList.length} displayed)
+                Strategies Overview (Top 5)
               </Typography>
               <Button
                 id="view-all-strategies-btn"
@@ -354,7 +340,7 @@ export default function Dashboard() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {filteredStrategiesList.map((row) => (
+                    {filteredStrategiesList.slice(0, 5).map((row) => (
                       <TableRow
                         key={row.strategy_id}
                         hover
@@ -402,12 +388,26 @@ export default function Dashboard() {
                           </Typography>
                         </TableCell>
                         <TableCell align="right">
-                          <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: typeof row.sharpe === 'number' ? (row.sharpe >= 0 ? COLORS.pnlGreen : COLORS.pnlRed) : 'inherit',
+                              fontWeight: 700,
+                              fontVariantNumeric: 'tabular-nums',
+                            }}
+                          >
                             {typeof row.sharpe === 'number' ? row.sharpe.toFixed(2) : (row.sharpe ?? '—')}
                           </Typography>
                         </TableCell>
                         <TableCell align="right">
-                          <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: row.win_rate != null ? (row.win_rate >= 0.5 ? COLORS.pnlGreen : COLORS.pnlRed) : 'inherit',
+                              fontWeight: 700,
+                              fontVariantNumeric: 'tabular-nums',
+                            }}
+                          >
                             {row.win_rate != null ? `${(row.win_rate * 100).toFixed(1)}%` : '—'}
                           </Typography>
                         </TableCell>

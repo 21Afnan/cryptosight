@@ -32,6 +32,7 @@ import StrategyFilterBar, { filterStrategies } from '../../components/ui/Strateg
 import { useMockFetch } from '../../hooks/useMockFetch';
 import { getStrategies, getStrategyById, getStrategyTrades } from '../../api/strategiesApi';
 import { COLORS } from '../../theme/theme';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
 import ShowChartRoundedIcon from '@mui/icons-material/ShowChartRounded';
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
@@ -51,6 +52,46 @@ function formatTs(ts) {
   if (s.includes('+00:00')) s = s.replace('+00:00', '');
   else if (s.includes('+00') && s.endsWith(':00')) s = s.split('+')[0];
   return s.trim();
+}
+
+function WinLossDonutChart({ winRate = 0, totalTrades = 0 }) {
+  const wins = Math.round(winRate * totalTrades);
+  const losses = totalTrades - wins;
+  
+  if (totalTrades === 0) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <Typography variant="body2" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>No trade data available</Typography>
+      </Box>
+    );
+  }
+
+  const data = [
+    { name: 'Winning Trades', value: wins, color: COLORS.pnlGreen || '#0ECB81' },
+    { name: 'Losing Trades', value: losses, color: COLORS.pnlRed || '#FF4D4D' },
+  ];
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <PieChart>
+        <Pie
+          data={data}
+          cx="50%"
+          cy="45%"
+          innerRadius={50}
+          outerRadius={75}
+          paddingAngle={4}
+          dataKey="value"
+        >
+          {data.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill={entry.color} />
+          ))}
+        </Pie>
+        <Tooltip formatter={(value) => [`${value} trades`, 'Count']} />
+        <Legend verticalAlign="bottom" height={36} iconType="circle" />
+      </PieChart>
+    </ResponsiveContainer>
+  );
 }
 
 function HeroKpiCard({ icon, label, value, subtext, color, glowColor }) {
@@ -262,8 +303,16 @@ function StrategyList() {
                             <TableCell><Chip label={s.target_timeframe} size="small" sx={{ height: 20, fontSize: 11 }} /></TableCell>
                             <TableCell><StatusChip status={s.status} /></TableCell>
                             <TableCell align="right"><Typography variant="body2" sx={{ color: s.net_pnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>${s.net_pnl?.toFixed(0) ?? '—'}</Typography></TableCell>
-                            <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>{s.win_rate != null ? `${(s.win_rate * 100).toFixed(1)}%` : '—'}</Typography></TableCell>
-                            <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>{typeof s.sharpe === 'number' ? s.sharpe.toFixed(2) : (s.sharpe ?? '—')}</Typography></TableCell>
+                            <TableCell align="right">
+                               <Typography variant="body2" sx={{ color: s.win_rate != null ? (s.win_rate >= 0.5 ? COLORS.pnlGreen : COLORS.pnlRed) : 'inherit', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                 {s.win_rate != null ? `${(s.win_rate * 100).toFixed(1)}%` : '—'}
+                               </Typography>
+                             </TableCell>
+                             <TableCell align="right">
+                               <Typography variant="body2" sx={{ color: typeof s.sharpe === 'number' ? (s.sharpe >= 0 ? COLORS.pnlGreen : COLORS.pnlRed) : 'inherit', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                                 {typeof s.sharpe === 'number' ? s.sharpe.toFixed(2) : (s.sharpe ?? '—')}
+                               </Typography>
+                             </TableCell>
                             <TableCell align="right"><Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{s.total_trades != null ? s.total_trades.toLocaleString() : '0'}</Typography></TableCell>
                           </TableRow>
                         ))}
@@ -295,12 +344,60 @@ function StrategyDetailView({ id }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const [ledgerFilters, setLedgerFilters] = useState({ startDate: '', endDate: '', side: 'all', symbol: '' });
+  const [tradeSortField, setTradeSortField] = useState('exit_time');
+  const [tradeSortOrder, setTradeSortOrder] = useState('desc');
+
+  const handleTradeSort = (field) => {
+    if (tradeSortField === field) {
+      setTradeSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setTradeSortField(field);
+      setTradeSortOrder('desc');
+    }
+  };
 
   const { data: strategy, loading, error } = useMockFetch(() => getStrategyById(id), [id]);
   const { data: tradesRes, loading: tradesLoading } = useMockFetch(() => getStrategyTrades(id), [id]);
 
   const rawTrades = tradesRes?.data ?? [];
   const filteredTrades = filterLedgerRows(rawTrades, ledgerFilters);
+
+  const sortedTrades = React.useMemo(() => {
+    const list = [...filteredTrades];
+    if (tradeSortField) {
+      list.sort((a, b) => {
+        let valA = a[tradeSortField];
+        let valB = b[tradeSortField];
+        
+        if (tradeSortField === 'net_pnl') {
+          valA = a.net_pnl ?? a.gross_pnl ?? 0;
+          valB = b.net_pnl ?? b.gross_pnl ?? 0;
+        } else if (tradeSortField === 'return_pct') {
+          valA = a.return_pct ?? 0;
+          valB = b.return_pct ?? 0;
+        } else if (tradeSortField === 'side') {
+          valA = a.side ?? a.direction ?? '';
+          valB = b.side ?? b.direction ?? '';
+        }
+
+        if (typeof valA === 'string' && isNaN(Date.parse(valA))) {
+          valA = valA.toLowerCase();
+          valB = valB.toLowerCase();
+          if (valA < valB) return tradeSortOrder === 'asc' ? -1 : 1;
+          if (valA > valB) return tradeSortOrder === 'asc' ? 1 : -1;
+          return 0;
+        }
+
+        const isDateA = valA && (valA instanceof Date || !isNaN(Date.parse(valA)) && isNaN(Number(valA)));
+        const isDateB = valB && (valB instanceof Date || !isNaN(Date.parse(valB)) && isNaN(Number(valB)));
+        
+        const numA = isDateA ? new Date(valA).getTime() : parseFloat(valA ?? 0);
+        const numB = isDateB ? new Date(valB).getTime() : parseFloat(valB ?? 0);
+        return (numA - numB) * (tradeSortOrder === 'asc' ? 1 : -1);
+      });
+    }
+    return list;
+  }, [filteredTrades, tradeSortField, tradeSortOrder]);
 
   if (loading) return <PageContainer title="Strategy Details"><Box sx={{ pt: 3 }}><LoadingSkeleton variant="detail" /></Box></PageContainer>;
   if (error || !strategy) return (
@@ -659,8 +756,11 @@ function StrategyDetailView({ id }) {
           <ChartCard title="Monthly Returns" height={280}>
             <MonthlyReturnsChart data={strategy.monthly_returns ?? []} height={260} />
           </ChartCard>
-          <ChartCard title="Trade PnL Distribution" height={280} sx={{ gridColumn: { md: '1 / -1' } }}>
+          <ChartCard title="Trade PnL Distribution" height={280}>
             <DistributionChart data={strategy.trade_distribution ?? []} height={260} />
+          </ChartCard>
+          <ChartCard title="Win / Loss Ratio" height={280}>
+            <WinLossDonutChart winRate={strategy.performance?.win_rate ?? strategy.win_rate} totalTrades={strategy.performance?.total_trades ?? strategy.total_trades} />
           </ChartCard>
         </Box>
 
@@ -685,17 +785,73 @@ function StrategyDetailView({ id }) {
                   <TableHead>
                     <TableRow>
                       <TableCell>#</TableCell>
-                      <TableCell>Entry Time</TableCell>
-                      <TableCell>Exit Time</TableCell>
-                      <TableCell>Side</TableCell>
-                      <TableCell align="right">Entry Price</TableCell>
-                      <TableCell align="right">Exit Price</TableCell>
-                      <TableCell align="right">Net PnL</TableCell>
-                      <TableCell align="right">Return %</TableCell>
+                      <TableCell>
+                        <TableSortLabel
+                          active={tradeSortField === 'entry_time'}
+                          direction={tradeSortField === 'entry_time' ? tradeSortOrder : 'asc'}
+                          onClick={() => handleTradeSort('entry_time')}
+                        >
+                          Entry Time
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell>
+                        <TableSortLabel
+                          active={tradeSortField === 'exit_time'}
+                          direction={tradeSortField === 'exit_time' ? tradeSortOrder : 'desc'}
+                          onClick={() => handleTradeSort('exit_time')}
+                        >
+                          Exit Time
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell>
+                        <TableSortLabel
+                          active={tradeSortField === 'side'}
+                          direction={tradeSortField === 'side' ? tradeSortOrder : 'asc'}
+                          onClick={() => handleTradeSort('side')}
+                        >
+                          Side
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel
+                          active={tradeSortField === 'entry_price'}
+                          direction={tradeSortField === 'entry_price' ? tradeSortOrder : 'desc'}
+                          onClick={() => handleTradeSort('entry_price')}
+                        >
+                          Entry Price
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel
+                          active={tradeSortField === 'exit_price'}
+                          direction={tradeSortField === 'exit_price' ? tradeSortOrder : 'desc'}
+                          onClick={() => handleTradeSort('exit_price')}
+                        >
+                          Exit Price
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel
+                          active={tradeSortField === 'net_pnl'}
+                          direction={tradeSortField === 'net_pnl' ? tradeSortOrder : 'desc'}
+                          onClick={() => handleTradeSort('net_pnl')}
+                        >
+                          Net PnL
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel
+                          active={tradeSortField === 'return_pct'}
+                          direction={tradeSortField === 'return_pct' ? tradeSortOrder : 'desc'}
+                          onClick={() => handleTradeSort('return_pct')}
+                        >
+                          Return %
+                        </TableSortLabel>
+                      </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {filteredTrades.map((trade, idx) => (
+                    {sortedTrades.map((trade, idx) => (
                       <TableRow key={trade.trade_id || idx} hover>
                         <TableCell><Typography variant="body2" sx={{ fontWeight: 600, color: theme.palette.text.secondary }}>{idx + 1}</Typography></TableCell>
                         <TableCell><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{formatTs(trade.entry_time)}</Typography></TableCell>

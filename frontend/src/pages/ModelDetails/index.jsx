@@ -194,7 +194,7 @@ function MlPipelineCircularDiagram({ ds = {}, ti = {}, hp = {}, featureList = []
             <Stack spacing={1.25}>
               {Object.entries(hp ?? {}).map(([k, v]) => (
                 <Box key={k} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, pb: 0.75, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}` }}>
-                  <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, fontFamily: 'monospace' }}>{k}</Typography>
+                  <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700 }}>{k}</Typography>
                   <Chip
                     label={String(v)}
                     size="small"
@@ -202,7 +202,6 @@ function MlPipelineCircularDiagram({ ds = {}, ti = {}, hp = {}, featureList = []
                       height: 20,
                       fontWeight: 800,
                       fontSize: 11,
-                      fontFamily: 'monospace',
                       color: COLORS.accent,
                       background: `${COLORS.accent}15`,
                       border: `1px solid ${COLORS.accent}30`,
@@ -263,7 +262,6 @@ function MlPipelineCircularDiagram({ ds = {}, ti = {}, hp = {}, featureList = []
                       height: 20,
                       fontSize: 10,
                       fontWeight: 700,
-                      fontFamily: 'monospace',
                       color: theme.palette.text.primary,
                       borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)',
                     }}
@@ -618,7 +616,7 @@ export default function ModelDetails() {
                       <Grid item xs={6} sm={3}>
                         <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
                           <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, display: 'block', mb: 0.5 }}>Validation R²</Typography>
-                          <Typography variant="h5" sx={{ fontWeight: 800, fontFamily: 'monospace', color: (ev?.val_r2 ?? model.score ?? 0) < 0 ? COLORS.pnlRed : COLORS.accent }}>
+                          <Typography variant="h5" sx={{ fontWeight: 800, color: (ev?.val_r2 ?? model.score ?? 0) < 0 ? COLORS.pnlRed : COLORS.accent }}>
                             {ev?.val_r2 != null ? Number(ev.val_r2).toFixed(4) : Number(model.score ?? 0).toFixed(4)}
                           </Typography>
                         </Paper>
@@ -626,7 +624,7 @@ export default function ModelDetails() {
                       <Grid item xs={6} sm={3}>
                         <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
                           <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, display: 'block', mb: 0.5 }}>Validation RMSE</Typography>
-                          <Typography variant="h5" sx={{ fontWeight: 800, fontFamily: 'monospace', color: COLORS.accent }}>
+                          <Typography variant="h5" sx={{ fontWeight: 800, color: COLORS.accent }}>
                             {ev?.val_rmse != null ? Number(ev.val_rmse).toFixed(5) : '—'}
                           </Typography>
                         </Paper>
@@ -634,7 +632,7 @@ export default function ModelDetails() {
                       <Grid item xs={6} sm={3}>
                         <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
                           <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, display: 'block', mb: 0.5 }}>Validation MAE</Typography>
-                          <Typography variant="h5" sx={{ fontWeight: 800, fontFamily: 'monospace', color: COLORS.pnlGreen }}>
+                          <Typography variant="h5" sx={{ fontWeight: 800, color: COLORS.pnlGreen }}>
                             {ev?.val_mae != null ? Number(ev.val_mae).toFixed(5) : '—'}
                           </Typography>
                         </Paper>
@@ -642,7 +640,7 @@ export default function ModelDetails() {
                       <Grid item xs={6} sm={3}>
                         <Paper elevation={0} sx={{ p: 2, textAlign: 'center', borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
                           <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, display: 'block', mb: 0.5 }}>Test R² Score</Typography>
-                          <Typography variant="h5" sx={{ fontWeight: 800, fontFamily: 'monospace', color: (ev?.test_r2 ?? 0) < 0 ? COLORS.pnlRed : COLORS.accent }}>
+                          <Typography variant="h5" sx={{ fontWeight: 800, color: (ev?.test_r2 ?? 0) < 0 ? COLORS.pnlRed : COLORS.accent }}>
                             {ev?.test_r2 != null ? Number(ev.test_r2).toFixed(4) : '—'}
                           </Typography>
                         </Paper>
@@ -685,42 +683,42 @@ export default function ModelDetails() {
                       <>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
                           <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Validation RMSE</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace', color: COLORS.accent }}>{ev?.val_rmse != null ? Number(ev.val_rmse).toFixed(5) : '—'}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800, color: COLORS.accent }}>{ev?.val_rmse != null ? Number(ev.val_rmse).toFixed(5) : '—'}</Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
                           <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Validation MAE</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace', color: COLORS.pnlGreen }}>{ev?.val_mae != null ? Number(ev.val_mae).toFixed(5) : '—'}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800, color: COLORS.pnlGreen }}>{ev?.val_mae != null ? Number(ev.val_mae).toFixed(5) : '—'}</Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
                           <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Validation R² Score</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>{ev?.val_r2 != null ? Number(ev.val_r2).toFixed(4) : '—'}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800 }}>{ev?.val_r2 != null ? Number(ev.val_r2).toFixed(4) : '—'}</Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
                           <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Test RMSE</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>{ev?.test_rmse != null ? Number(ev.test_rmse).toFixed(5) : '—'}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800 }}>{ev?.test_rmse != null ? Number(ev.test_rmse).toFixed(5) : '—'}</Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                           <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Test MAE</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>{ev?.test_mae != null ? Number(ev.test_mae).toFixed(5) : '—'}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800 }}>{ev?.test_mae != null ? Number(ev.test_mae).toFixed(5) : '—'}</Typography>
                         </Box>
                       </>
                     ) : (
                       <>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
                           <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Train Accuracy</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace', color: COLORS.accent }}>{ev?.train_accuracy != null ? (String(ev.train_accuracy).includes('%') ? ev.train_accuracy : `${(parseFloat(ev.train_accuracy) <= 1 ? parseFloat(ev.train_accuracy) * 100 : parseFloat(ev.train_accuracy)).toFixed(1)}%`) : '—'}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800, color: COLORS.accent }}>{ev?.train_accuracy != null ? (String(ev.train_accuracy).includes('%') ? ev.train_accuracy : `${(parseFloat(ev.train_accuracy) <= 1 ? parseFloat(ev.train_accuracy) * 100 : parseFloat(ev.train_accuracy)).toFixed(1)}%`) : '—'}</Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
                           <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Validation Accuracy</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace', color: COLORS.pnlGreen }}>{ev?.val_accuracy != null ? (String(ev.val_accuracy).includes('%') ? ev.val_accuracy : `${(parseFloat(ev.val_accuracy) <= 1 ? parseFloat(ev.val_accuracy) * 100 : parseFloat(ev.val_accuracy)).toFixed(1)}%`) : '—'}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800, color: COLORS.pnlGreen }}>{ev?.val_accuracy != null ? (String(ev.val_accuracy).includes('%') ? ev.val_accuracy : `${(parseFloat(ev.val_accuracy) <= 1 ? parseFloat(ev.val_accuracy) * 100 : parseFloat(ev.val_accuracy)).toFixed(1)}%`) : '—'}</Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', pb: 1, borderBottom: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }}>
                           <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Test Accuracy</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace', color: COLORS.pnlGreen }}>{ev?.test_accuracy != null ? (String(ev.test_accuracy).includes('%') ? ev.test_accuracy : `${(parseFloat(ev.test_accuracy) <= 1 ? parseFloat(ev.test_accuracy) * 100 : parseFloat(ev.test_accuracy)).toFixed(1)}%`) : '—'}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800, color: COLORS.pnlGreen }}>{ev?.test_accuracy != null ? (String(ev.test_accuracy).includes('%') ? ev.test_accuracy : `${(parseFloat(ev.test_accuracy) <= 1 ? parseFloat(ev.test_accuracy) * 100 : parseFloat(ev.test_accuracy)).toFixed(1)}%`) : '—'}</Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                           <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>Validation Loss</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>{ev?.val_loss != null ? Number(ev.val_loss).toFixed(5) : '—'}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 800 }}>{ev?.val_loss != null ? Number(ev.val_loss).toFixed(5) : '—'}</Typography>
                         </Box>
                       </>
                     )}
@@ -765,7 +763,7 @@ export default function ModelDetails() {
 
                         return (
                           <TableRow key={t.trade_id || idx} hover>
-                            <TableCell sx={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 600 }}>{cleanTime}</TableCell>
+                            <TableCell sx={{ fontSize: 12, fontWeight: 600 }}>{cleanTime}</TableCell>
                             <TableCell>
                               <Chip
                                 label={isLong ? 'Long' : 'Short'}
@@ -778,19 +776,19 @@ export default function ModelDetails() {
                                 }}
                               />
                             </TableCell>
-                            <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace' }}>
+                            <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>
                               ${Number(t.entry_price ?? 0).toFixed(4)}
                             </TableCell>
-                            <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace' }}>
+                            <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>
                               ${Number(t.exit_price ?? 0).toFixed(4)}
                             </TableCell>
-                            <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace' }}>
+                            <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>
                               {Number(t.quantity ?? 0).toFixed(4)}
                             </TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace', color: netPnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed }}>
+                            <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: netPnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed }}>
                               {netPnl >= 0 ? `+$${netPnl.toFixed(4)}` : `-$${Math.abs(netPnl).toFixed(4)}`}
                             </TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace', color: percPnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed }}>
+                            <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: percPnl >= 0 ? COLORS.pnlGreen : COLORS.pnlRed }}>
                               {percPnl >= 0 ? `+${percPnl.toFixed(4)}%` : `${percPnl.toFixed(4)}%`}
                             </TableCell>
                             <TableCell>

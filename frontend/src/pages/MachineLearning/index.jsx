@@ -13,6 +13,7 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TablePagination from '@mui/material/TablePagination';
+import TableSortLabel from '@mui/material/TableSortLabel';
 import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
 
@@ -83,7 +84,6 @@ export default function MachineLearning() {
 
   const [search, setSearch] = useState('');
   const [taskFilter, setTaskFilter] = useState('ALL');
-  const [algoFilter, setAlgoFilter] = useState('ALL');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
@@ -95,17 +95,72 @@ export default function MachineLearning() {
   const kpis = data?.kpis ?? {};
 
   // Filtered models
-  const filteredModels = allModels.filter((m) => {
-    if (taskFilter === 'CLASSIFICATION' && m.type?.toLowerCase() !== 'classification') return false;
-    if (taskFilter === 'REGRESSION' && m.type?.toLowerCase() !== 'regression') return false;
-    if (algoFilter !== 'ALL' && m.type?.toLowerCase() !== algoFilter.toLowerCase()) return false;
-    return true;
-  });
+  const filteredModels = React.useMemo(() => {
+    return allModels.filter((m) => {
+      // Classification/Regression filter
+      if (taskFilter === 'CLASSIFICATION' && m.type?.toLowerCase() !== 'classification') return false;
+      if (taskFilter === 'REGRESSION' && m.type?.toLowerCase() !== 'regression') return false;
+
+      return true;
+    });
+  }, [allModels, taskFilter]);
+
+  const [sortField, setSortField] = useState('updated_at');
+  const [sortOrder, setSortOrder] = useState('desc');
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder('desc');
+    }
+  };
+
+  const sortedModels = React.useMemo(() => {
+    const list = [...filteredModels];
+    if (sortField) {
+      list.sort((a, b) => {
+        let valA = a[sortField];
+        let valB = b[sortField];
+
+        if (sortField === 'return_pct') {
+          valA = a.return_pct ?? a.metrics?.quant_stats?.total_return ?? a.metrics?.quant_stats?.net_pnl_pct ?? a.metrics?.quant_stats?.return_pct ?? -Infinity;
+          valB = b.return_pct ?? b.metrics?.quant_stats?.total_return ?? b.metrics?.quant_stats?.net_pnl_pct ?? b.metrics?.quant_stats?.return_pct ?? -Infinity;
+        } else if (sortField === 'sharpe') {
+          valA = a.sharpe ?? a.metrics?.quant_stats?.sharpe ?? -Infinity;
+          valB = b.sharpe ?? b.metrics?.quant_stats?.sharpe ?? -Infinity;
+        } else if (sortField === 'win_rate') {
+          valA = a.win_rate ?? a.metrics?.quant_stats?.win_rate ?? -Infinity;
+          valB = b.win_rate ?? b.metrics?.quant_stats?.win_rate ?? -Infinity;
+        } else if (sortField === 'updated_at') {
+          valA = a.updated_at ?? a.training_date ?? '';
+          valB = b.updated_at ?? b.training_date ?? '';
+        }
+
+        if (typeof valA === 'string' && isNaN(Date.parse(valA))) {
+          valA = valA.toLowerCase();
+          valB = valB.toLowerCase();
+          if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+          if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+          return 0;
+        }
+
+        const isDateA = valA && (valA instanceof Date || !isNaN(Date.parse(valA)) && isNaN(Number(valA)));
+        const isDateB = valB && (valB instanceof Date || !isNaN(Date.parse(valB)) && isNaN(Number(valB)));
+
+        const numA = isDateA ? new Date(valA).getTime() : parseFloat(valA ?? 0);
+        const numB = isDateB ? new Date(valB).getTime() : parseFloat(valB ?? 0);
+        return (numA - numB) * (sortOrder === 'asc' ? 1 : -1);
+      });
+    }
+    return list;
+  }, [filteredModels, sortField, sortOrder]);
 
   const totalModelsCount = kpis.total_models ?? allModels.length;
   const classificationCount = kpis.classification_models ?? allModels.filter(m => m.type?.toLowerCase() === 'classification').length;
   const regressionCount = kpis.regression_models ?? allModels.filter(m => m.type?.toLowerCase() === 'regression').length;
-  
+
   // Find top performer model by highest return percentage fetched from backend
   const topReturnModel = allModels.reduce((best, cur) => {
     const curRet = cur.return_pct ?? cur.metrics?.quant_stats?.total_return ?? -Infinity;
@@ -156,7 +211,7 @@ export default function MachineLearning() {
             <SearchBar onSearch={setSearch} placeholder="Search models by name or symbol…" />
           </Box>
 
-          <Stack direction="row" spacing={1} sx={{ overflowX: 'auto', pb: 0.5 }}>
+          <Stack direction="row" spacing={1} sx={{ overflowX: 'auto', pb: 0.5, flexShrink: 0 }}>
             {['ALL', 'CLASSIFICATION', 'REGRESSION'].map((t) => (
               <Chip
                 key={t}
@@ -188,19 +243,91 @@ export default function MachineLearning() {
                 <Table size="small" stickyHeader>
                   <TableHead>
                     <TableRow>
-                      <TableCell>Model Name</TableCell>
-                      <TableCell>Algorithm</TableCell>
-                      <TableCell>Symbol</TableCell>
-                      <TableCell>Timeframe</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell align="right">Return (%)</TableCell>
-                      <TableCell align="right">Sharpe</TableCell>
-                      <TableCell align="right">Win Rate</TableCell>
-                      <TableCell>Training Date</TableCell>
+                      <TableCell>
+                        <TableSortLabel
+                          active={sortField === 'name'}
+                          direction={sortField === 'name' ? sortOrder : 'asc'}
+                          onClick={() => handleSort('name')}
+                        >
+                          Model Name
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell>
+                        <TableSortLabel
+                          active={sortField === 'type'}
+                          direction={sortField === 'type' ? sortOrder : 'asc'}
+                          onClick={() => handleSort('type')}
+                        >
+                          Algorithm
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell>
+                        <TableSortLabel
+                          active={sortField === 'symbol'}
+                          direction={sortField === 'symbol' ? sortOrder : 'asc'}
+                          onClick={() => handleSort('symbol')}
+                        >
+                          Symbol
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell>
+                        <TableSortLabel
+                          active={sortField === 'timeframe'}
+                          direction={sortField === 'timeframe' ? sortOrder : 'asc'}
+                          onClick={() => handleSort('timeframe')}
+                        >
+                          Timeframe
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell>
+                        <TableSortLabel
+                          active={sortField === 'status'}
+                          direction={sortField === 'status' ? sortOrder : 'asc'}
+                          onClick={() => handleSort('status')}
+                        >
+                          Status
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel
+                          active={sortField === 'return_pct'}
+                          direction={sortField === 'return_pct' ? sortOrder : 'desc'}
+                          onClick={() => handleSort('return_pct')}
+                        >
+                          Return (%)
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel
+                          active={sortField === 'sharpe'}
+                          direction={sortField === 'sharpe' ? sortOrder : 'desc'}
+                          onClick={() => handleSort('sharpe')}
+                        >
+                          Sharpe
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell align="right">
+                        <TableSortLabel
+                          active={sortField === 'win_rate'}
+                          direction={sortField === 'win_rate' ? sortOrder : 'desc'}
+                          onClick={() => handleSort('win_rate')}
+                        >
+                          Win Rate
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell>
+                        <TableSortLabel
+                          active={sortField === 'updated_at'}
+                          direction={sortField === 'updated_at' ? sortOrder : 'desc'}
+                          onClick={() => handleSort('updated_at')}
+                        >
+                          Training Date
+                        </TableSortLabel>
+                      </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {filteredModels.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((m) => (
+                    {sortedModels.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((m) => (
                       <TableRow
                         key={m.model_id}
                         hover
@@ -275,9 +402,18 @@ export default function MachineLearning() {
                           })()}
                         </TableCell>
                         <TableCell align="right">
-                          <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: COLORS.pnlGreen }}>
-                            {(m.win_rate ?? m.metrics?.quant_stats?.win_rate) != null ? `${Number(m.win_rate ?? m.metrics?.quant_stats?.win_rate).toFixed(1)}%` : '—'}
-                          </Typography>
+                          {(() => {
+                            const wr = m.win_rate ?? m.metrics?.quant_stats?.win_rate;
+                            if (wr == null) return <Typography variant="body2">—</Typography>;
+                            const num = Number(wr);
+                            const pctValue = num <= 1 ? num * 100 : num;
+                            const color = pctValue >= 50 ? COLORS.pnlGreen : COLORS.pnlRed;
+                            return (
+                              <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color }}>
+                                {pctValue.toFixed(1)}%
+                              </Typography>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2" sx={{ fontSize: 12, color: theme.palette.text.secondary }}>
@@ -291,7 +427,7 @@ export default function MachineLearning() {
               </TableContainer>
               <TablePagination
                 component="div"
-                count={filteredModels.length}
+                count={sortedModels.length}
                 page={page}
                 onPageChange={(_, p) => setPage(p)}
                 rowsPerPage={rowsPerPage}
