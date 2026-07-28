@@ -1,5 +1,8 @@
+import warnings
 import json
 import pandas as pd
+warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
+
 from cryptosight.utils.db import get_connection, create_account_api_table, upsert_account_api
 from cryptosight.execution.account_stats import fetch_account_history_data, compute_account_metrics
 from cryptosight.utils.logger import get_logger

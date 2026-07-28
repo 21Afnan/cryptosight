@@ -46,20 +46,6 @@ export async function getBacktestById(id) {
   return json.data;
 }
 
-/** POST /api/v1/backtests — submit a new backtest request to FastAPI backend service */
-export async function submitBacktest(payload) {
-  const res = await fetch(BASE_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    throw new Error(`Failed to submit backtest job to backend service: ${res.statusText}`);
-  }
-  const json = await res.json();
-  return json.data;
-}
-
 /** GET /market-data — 8 Standard Configured Trading Pairs */
 export async function getMarketDataOptions() {
   return {

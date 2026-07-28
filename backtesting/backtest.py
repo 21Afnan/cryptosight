@@ -57,10 +57,12 @@ class BacktestingEngine:
         finally:
             conn.close()
 
-    def run_single_strategy(self, strat_dict: dict) -> pd.DataFrame:
+    def run_single_strategy(self, strat_dict: dict, run_id: int = None) -> pd.DataFrame:
         """
         Runs the backtest pipeline for a single strategy definition dictionary.
         Preserves strategy_name, market parameters, indicators, and TP/SL.
+        run_id: when provided, ledger is stored in backtests.<slug>_run_<run_id>
+        so each request keeps its own isolated trade history.
         """
         import re
         market_cfg = strat_dict.get("market") or {}
@@ -198,6 +200,7 @@ class BacktestingEngine:
                 symbol=symbol,
                 timeframe=base_tf,
                 strategy_id=clean_table,
+                run_id=run_id,
             )
             insert_backtest_ledger(
                 conn,
@@ -206,6 +209,7 @@ class BacktestingEngine:
                 timeframe=base_tf,
                 ledger_df=ledger_df,
                 strategy_id=clean_table,
+                run_id=run_id,
             )
 
             if strat_id_num:

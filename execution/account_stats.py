@@ -5,10 +5,13 @@ computes top-level account metrics (~105 quantitative metrics + JSONB per-symbol
 and dynamically upserts them into `account.stats`.
 """
 
+import warnings
 import json
 import re
 import numpy as np
 import pandas as pd
+warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
+
 from cryptosight.utils.logger import get_logger
 from cryptosight.utils.metadata import fetch_execution_config
 
@@ -74,7 +77,7 @@ def compute_account_metrics(conn, df_exec: pd.DataFrame, df_pnl: pd.DataFrame, d
     """
     Computes ~105 comprehensive account metrics and per-symbol breakdowns.
     """
-    logger.warning("No explicit account_id provided; using fallback account_id 'default_account'.")
+    logger.info("No explicit account_id provided; using account_id 'default_account'.")
     metrics = {
         "account_id": "default_account",
         "total_trades": 0,

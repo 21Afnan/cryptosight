@@ -338,8 +338,6 @@ def upsert_strategy_data(
     Uses `strategy_name` as UNIQUE key to preserve serial integer `strategy_id` (1, 2, 3...).
     Returns the integer `strategy_id`.
     """
-    create_strategy_data(conn)
-
     if not strategy_name:
         strategy_name = generate_strategy_id(exchange, symbol, target_timeframe, indicators_config, strategy_config)
 
@@ -348,27 +346,25 @@ def upsert_strategy_data(
 
     try:
         with conn.cursor() as cursor:
-            # Guard: signals table must already exist
+            # Check if signals table already exists to fetch live signal stats
             cursor.execute(
                 "SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = %s AND tablename = %s);",
                 (schema_name, table_name)
             )
-            if not cursor.fetchone()[0]:
-                logger.warning(
-                    f"Cannot update strategy metadata: Signals table '{full_signals_table}' does not exist yet."
-                )
-                return None
+            signals_table_exists = cursor.fetchone()[0]
 
-            # Auto-fetch live stats from the signals table
-            cursor.execute(f"""
-                SELECT
-                    COUNT(*),
-                    COUNT(*) FILTER (WHERE signal = 1),
-                    COUNT(*) FILTER (WHERE signal = -1),
-                    MAX(timestamp)
-                FROM {full_signals_table};
-            """)
-            total_rows, long_signals, short_signals, last_signal_time = cursor.fetchone()
+            if signals_table_exists:
+                cursor.execute(f"""
+                    SELECT
+                        COUNT(*),
+                        COUNT(*) FILTER (WHERE signal = 1),
+                        COUNT(*) FILTER (WHERE signal = -1),
+                        MAX(timestamp)
+                    FROM {full_signals_table};
+                """)
+                total_rows, long_signals, short_signals, last_signal_time = cursor.fetchone()
+            else:
+                total_rows, long_signals, short_signals, last_signal_time = 0, 0, 0, None
 
             upsert_sql = """
             INSERT INTO metadata.strategy_data (
@@ -497,6 +493,136 @@ def upsert_backtest_data(conn, strategy_id: int, backtest_config: dict, ledger_d
         conn.rollback()
         logger.error(f"Error updating backtest metadata for '{strategy_id}': {error}")
         raise
+
+
+
+def create_backtest_runs_table(conn):
+    """
+    Creates the 'metadata.backtest_runs' table to track backtest job submissions,
+    status lifecycle ('pending' -> 'running' -> 'completed' / 'failed'), error messages, and metrics.
+    """
+    create_metadata_schema(conn)
+
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS metadata.backtest_runs (
+        run_id           BIGSERIAL PRIMARY KEY,
+        strategy_id      BIGINT NOT NULL REFERENCES metadata.strategy_data(strategy_id) ON DELETE CASCADE,
+        status           VARCHAR(32) NOT NULL DEFAULT 'pending',
+        error_message    TEXT,
+        backtest_config  JSONB NOT NULL,
+        metrics          JSONB,
+        submitted_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        started_at       TIMESTAMP WITH TIME ZONE,
+        completed_at     TIMESTAMP WITH TIME ZONE
+    );
+    """
+    create_index_sql = """
+    CREATE INDEX IF NOT EXISTS idx_backtest_runs_status ON metadata.backtest_runs (status);
+    CREATE INDEX IF NOT EXISTS idx_backtest_runs_strategy ON metadata.backtest_runs (strategy_id);
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_table_sql)
+            cursor.execute(create_index_sql)
+            conn.commit()
+            logger.info("Table 'metadata.backtest_runs' verified/created successfully.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating table 'metadata.backtest_runs': {error}")
+        raise
+
+
+def create_backtest_run(conn, strategy_id: int, backtest_config: dict) -> int:
+    """
+    Creates a new backtest run record with status 'pending' in metadata.backtest_runs.
+    Returns the integer run_id.
+    """
+    insert_sql = """
+    INSERT INTO metadata.backtest_runs (strategy_id, status, backtest_config, submitted_at)
+    VALUES (%s, 'pending', %s, CURRENT_TIMESTAMP)
+    RETURNING run_id;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(insert_sql, (strategy_id, json.dumps(backtest_config)))
+            run_id = cursor.fetchone()[0]
+            conn.commit()
+            logger.info(f"Created backtest run #{run_id} (pending) for strategy #{strategy_id}.")
+            return run_id
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating backtest run for strategy #{strategy_id}: {error}")
+        raise
+
+
+def update_backtest_run_status(conn, run_id: int, status: str, error_message: str = None, metrics: dict = None):
+    """
+    Updates the status lifecycle ('running', 'completed', 'failed') and optional error_message / metrics for run_id.
+    """
+    extra_updates = []
+    params = [status]
+
+    if status.lower() == "running":
+        extra_updates.append("started_at = CURRENT_TIMESTAMP")
+    elif status.lower() in ("completed", "failed"):
+        extra_updates.append("completed_at = CURRENT_TIMESTAMP")
+
+    if error_message is not None:
+        extra_updates.append("error_message = %s")
+        params.append(error_message)
+
+    if metrics is not None:
+        extra_updates.append("metrics = %s")
+        params.append(json.dumps(metrics))
+
+    params.append(run_id)
+    updates_str = ", ".join(["status = %s"] + extra_updates)
+
+    update_sql = f"""
+    UPDATE metadata.backtest_runs
+    SET {updates_str}
+    WHERE run_id = %s;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(update_sql, tuple(params))
+            conn.commit()
+            logger.info(f"Updated backtest run #{run_id} status to '{status}'.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error updating backtest run #{run_id} status: {error}")
+        raise
+
+
+def get_backtest_run_by_id(conn, run_id: int) -> dict:
+    """
+    Fetches run record details for run_id from metadata.backtest_runs.
+    """
+    query_sql = """
+    SELECT run_id, strategy_id, status, error_message, backtest_config, metrics, submitted_at, started_at, completed_at
+    FROM metadata.backtest_runs
+    WHERE run_id = %s;
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(query_sql, (run_id,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return {
+                "run_id": row[0],
+                "strategy_id": row[1],
+                "status": row[2],
+                "error_message": row[3],
+                "backtest_config": row[4] if isinstance(row[4], dict) else (json.loads(row[4]) if row[4] else {}),
+                "metrics": row[5] if isinstance(row[5], dict) else (json.loads(row[5]) if row[5] else {}),
+                "submitted_at": row[6].isoformat() if row[6] else None,
+                "started_at": row[7].isoformat() if row[7] else None,
+                "completed_at": row[8].isoformat() if row[8] else None,
+            }
+    except Exception as error:
+        logger.error(f"Error fetching backtest run #{run_id}: {error}")
+        return None
 
 
 def create_simulator_config(conn):

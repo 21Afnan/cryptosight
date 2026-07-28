@@ -14,11 +14,12 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TablePagination from '@mui/material/TablePagination';
+import TableSortLabel from '@mui/material/TableSortLabel';
 import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import FormControl from '@mui/material/FormControl';
-import OutlinedInput from '@mui/material/OutlinedInput';
+import Divider from '@mui/material/Divider';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
 import LinearProgress from '@mui/material/LinearProgress';
@@ -31,11 +32,11 @@ import EmptyState from '../../components/ui/EmptyState';
 import LoadingSkeleton from '../../components/ui/LoadingSkeleton';
 import SearchBar from '../../components/ui/SearchBar';
 import { useMockFetch } from '../../hooks/useMockFetch';
-import { getBacktests, submitBacktest, getMarketDataOptions } from '../../api/backtestsApi';
+import { getBacktests } from '../../api/backtestsApi';
 import { COLORS } from '../../theme/theme';
 
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
-import SendRoundedIcon from '@mui/icons-material/SendRounded';
+
 import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded';
 import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
 
@@ -51,13 +52,30 @@ const PRESET_STRATEGIES = [
       symbol: 'BTC/USDT',
       exchange: 'bybit',
       timeframe: '4h',
-      start_date: '2024-01-01',
-      end_date: '2025-12-31',
+      start_date: '2026-01-01',
+      end_date: '2026-07-27',
       initial_balance: 10000,
-      commission: 0.0006,
+      position_size: { type: 'fixed_percentage', value: 10.0 },
+      commission: 0.0005,
       slippage: 0.0002,
-      take_profit: 0.05,
-      stop_loss: 0.02,
+      allow_long: true,
+      allow_short: true,
+      max_open_positions: 1,
+      take_profit: { type: 'percentage', value: 2.0 },
+      stop_loss: { type: 'percentage', value: 1.0 },
+      entry_price: 'next_open',
+      exit_price: 'next_open',
+      indicators: {
+        RSI: { enabled: true, period: 14 },
+        EMA: { enabled: true, fast_period: 20, slow_period: 50 },
+        MACD: { enabled: false },
+        BB: { enabled: false },
+      },
+      patterns: {
+        ENGULFING: { enabled: true },
+        DOJI: { enabled: false },
+        HAMMER: { enabled: false },
+      },
     },
   },
   {
@@ -69,13 +87,30 @@ const PRESET_STRATEGIES = [
       symbol: 'ETH/USDT',
       exchange: 'bybit',
       timeframe: '1h',
-      start_date: '2024-01-01',
-      end_date: '2025-12-31',
+      start_date: '2026-01-01',
+      end_date: '2026-07-27',
       initial_balance: 15000,
-      commission: 0.0006,
+      position_size: { type: 'fixed_percentage', value: 15.0 },
+      commission: 0.0005,
       slippage: 0.0003,
-      take_profit: 0.04,
-      stop_loss: 0.018,
+      allow_long: true,
+      allow_short: false,
+      max_open_positions: 1,
+      take_profit: { type: 'percentage', value: 3.0 },
+      stop_loss: { type: 'percentage', value: 1.5 },
+      entry_price: 'next_open',
+      exit_price: 'next_open',
+      indicators: {
+        RSI: { enabled: true, period: 14 },
+        EMA: { enabled: false },
+        MACD: { enabled: false },
+        BB: { enabled: true, period: 20 },
+      },
+      patterns: {
+        ENGULFING: { enabled: false },
+        DOJI: { enabled: true },
+        HAMMER: { enabled: false },
+      },
     },
   },
   {
@@ -87,13 +122,30 @@ const PRESET_STRATEGIES = [
       symbol: 'SOL/USDT',
       exchange: 'bybit',
       timeframe: '1d',
-      start_date: '2024-01-01',
-      end_date: '2026-06-30',
+      start_date: '2026-01-01',
+      end_date: '2026-07-27',
       initial_balance: 20000,
-      commission: 0.0006,
+      position_size: { type: 'fixed_percentage', value: 20.0 },
+      commission: 0.0005,
       slippage: 0.0004,
-      take_profit: 0.07,
-      stop_loss: 0.03,
+      allow_long: true,
+      allow_short: true,
+      max_open_positions: 2,
+      take_profit: { type: 'percentage', value: 5.0 },
+      stop_loss: { type: 'percentage', value: 2.0 },
+      entry_price: 'next_open',
+      exit_price: 'next_open',
+      indicators: {
+        RSI: { enabled: true, period: 14 },
+        EMA: { enabled: true, fast_period: 10, slow_period: 30 },
+        MACD: { enabled: true },
+        BB: { enabled: false },
+      },
+      patterns: {
+        ENGULFING: { enabled: true },
+        DOJI: { enabled: false },
+        HAMMER: { enabled: true },
+      },
     },
   },
   {
@@ -105,29 +157,35 @@ const PRESET_STRATEGIES = [
       symbol: 'DOGE/USDT',
       exchange: 'bybit',
       timeframe: '15m',
-      start_date: '2024-06-01',
-      end_date: '2026-06-30',
+      start_date: '2026-06-01',
+      end_date: '2026-07-27',
       initial_balance: 5000,
-      commission: 0.0006,
+      position_size: { type: 'fixed_percentage', value: 25.0 },
+      commission: 0.0005,
       slippage: 0.0003,
-      take_profit: 0.02,
-      stop_loss: 0.008,
+      allow_long: true,
+      allow_short: true,
+      max_open_positions: 1,
+      take_profit: { type: 'percentage', value: 1.5 },
+      stop_loss: { type: 'percentage', value: 0.8 },
+      entry_price: 'next_open',
+      exit_price: 'next_open',
+      indicators: {
+        RSI: { enabled: true, period: 14 },
+        EMA: { enabled: true, fast_period: 9, slow_period: 21 },
+        MACD: { enabled: false },
+        BB: { enabled: false },
+      },
+      patterns: {
+        ENGULFING: { enabled: true },
+        DOJI: { enabled: false },
+        HAMMER: { enabled: false },
+      },
     },
   },
 ];
 
-const DEFAULT_FORM = PRESET_STRATEGIES[0].config;
 
-function FormRow({ label, children }) {
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-        {label}
-      </Typography>
-      {children}
-    </Box>
-  );
-}
 
 function SummaryKpiCard({ icon, label, value, subtext, color }) {
   const theme = useTheme();
@@ -194,45 +252,43 @@ export default function BacktestRequests() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [form, setForm] = useState(DEFAULT_FORM);
-  const [submitting, setSubmitting] = useState(false);
   const [snack, setSnack] = useState(null);
+  const [sortBy, setSortBy] = useState('net_pnl');
+  const [sortDir, setSortDir] = useState('desc');
 
   const activeStatus = STATUS_TABS[tabIdx];
   const filterObj = activeStatus === 'all' ? {} : { status: activeStatus };
 
-  const { data, loading, refetch } = useMockFetch(
+  const { data, loading } = useMockFetch(
     () => getBacktests({ search, filter: filterObj }),
     [search, tabIdx],
   );
-  const { data: mktData } = useMockFetch(getMarketDataOptions);
   const backtests = data?.data ?? [];
-
-  const symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'LTC/USDT', 'DOGE/USDT', 'MINA/USDT', 'SUI/USDT', 'ADA/USDT'];
-  const exchanges = ['bybit', 'binance'];
-  const timeframes = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
 
   const completedList = backtests.filter((b) => b.status === 'completed');
   const avgWinRate = completedList.length
     ? (completedList.reduce((acc, b) => acc + (b.win_rate || 0), 0) / completedList.length * 100).toFixed(1)
-    : '61.4';
+    : '—';
 
   const topStrategy = completedList.length
     ? completedList.reduce((prev, curr) => ((curr.net_pnl || 0) > (prev.net_pnl || 0) ? curr : prev), completedList[0])
     : null;
 
-  const handleSubmit = async () => {
-    setSubmitting(true);
-    try {
-      await submitBacktest(form);
-      setSnack({ severity: 'success', message: 'Backtest request queued successfully!' });
-      refetch();
-    } catch (e) {
-      setSnack({ severity: 'error', message: 'Failed to submit backtest' });
-    } finally {
-      setSubmitting(false);
+  const handleSort = (col) => {
+    if (sortBy === col) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(col);
+      setSortDir('desc');
     }
+    setPage(0);
   };
+
+  const sortedBacktests = [...backtests].sort((a, b) => {
+    const aVal = a[sortBy] ?? -Infinity;
+    const bVal = b[sortBy] ?? -Infinity;
+    return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+  });
 
   return (
     <PageContainer title="Backtest Requests">
@@ -293,8 +349,7 @@ export default function BacktestRequests() {
               <Card
                 key={preset.name}
                 onClick={() => {
-                  setForm(preset.config);
-                  setSnack({ severity: 'success', message: `Loaded preset: ${preset.name}` });
+                  setSnack({ severity: 'info', message: `Preset: ${preset.name}` });
                 }}
                 sx={{
                   p: '14px 18px',
@@ -327,114 +382,6 @@ export default function BacktestRequests() {
           </Box>
         </Box>
 
-        {/* Configuration Form Card */}
-        <Card
-          sx={{
-            background: isDark ? COLORS.darkSurface : '#ffffff',
-            boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.4)' : '0 6px 22px rgba(14, 203, 129, 0.20)',
-            border: `1px solid ${isDark ? theme.palette.divider : 'rgba(34, 197, 94, 0.22)'}`,
-            borderRadius: 2.5,
-          }}
-        >
-          <CardContent sx={{ p: '20px !important' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2.5 }}>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                Configure New Backtest
-              </Typography>
-              <Chip label="Parameter Tuner" size="small" variant="outlined" color="primary" />
-            </Box>
-
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6} md={3}>
-                <FormRow label="Strategy Name">
-                  <OutlinedInput size="small" value={form.strategy_name} onChange={(e) => setForm((f) => ({ ...f, strategy_name: e.target.value }))} placeholder="BTC_EMA_Cross_4H" />
-                </FormRow>
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={3}>
-                <FormRow label="Symbol">
-                  <FormControl size="small" fullWidth>
-                    <Select value={form.symbol} onChange={(e) => setForm((f) => ({ ...f, symbol: e.target.value }))} displayEmpty>
-                      <MenuItem value=""><em>Select symbol</em></MenuItem>
-                      {symbols.map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
-                    </Select>
-                  </FormControl>
-                </FormRow>
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={3}>
-                <FormRow label="Exchange">
-                  <FormControl size="small" fullWidth>
-                    <Select value={form.exchange} onChange={(e) => setForm((f) => ({ ...f, exchange: e.target.value }))} displayEmpty>
-                      <MenuItem value=""><em>Select exchange</em></MenuItem>
-                      {exchanges.map((ex) => <MenuItem key={ex} value={ex}>{ex}</MenuItem>)}
-                    </Select>
-                  </FormControl>
-                </FormRow>
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={3}>
-                <FormRow label="Timeframe">
-                  <FormControl size="small" fullWidth>
-                    <Select value={form.timeframe} onChange={(e) => setForm((f) => ({ ...f, timeframe: e.target.value }))} displayEmpty>
-                      <MenuItem value=""><em>Select timeframe</em></MenuItem>
-                      {timeframes.map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-                    </Select>
-                  </FormControl>
-                </FormRow>
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={3}>
-                <FormRow label="Start Date">
-                  <OutlinedInput size="small" type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} />
-                </FormRow>
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={3}>
-                <FormRow label="End Date">
-                  <OutlinedInput size="small" type="date" value={form.end_date} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} />
-                </FormRow>
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={3}>
-                <FormRow label="Initial Capital ($)">
-                  <OutlinedInput size="small" type="number" value={form.initial_balance} onChange={(e) => setForm((f) => ({ ...f, initial_balance: Number(e.target.value) }))} />
-                </FormRow>
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={3}>
-                <FormRow label="Commission (%)">
-                  <OutlinedInput size="small" type="number" value={(form.commission * 100).toFixed(3)} onChange={(e) => setForm((f) => ({ ...f, commission: Number(e.target.value) / 100 }))} inputProps={{ step: 0.001, min: 0 }} />
-                </FormRow>
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={3}>
-                <FormRow label="Slippage (%)">
-                  <OutlinedInput size="small" type="number" value={(form.slippage * 100).toFixed(3)} onChange={(e) => setForm((f) => ({ ...f, slippage: Number(e.target.value) / 100 }))} inputProps={{ step: 0.001, min: 0 }} />
-                </FormRow>
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={3}>
-                <FormRow label="Take Profit (%)">
-                  <OutlinedInput size="small" type="number" value={(form.take_profit * 100).toFixed(1)} onChange={(e) => setForm((f) => ({ ...f, take_profit: Number(e.target.value) / 100 }))} inputProps={{ step: 0.1, min: 0 }} />
-                </FormRow>
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={3}>
-                <FormRow label="Stop Loss (%)">
-                  <OutlinedInput size="small" type="number" value={(form.stop_loss * 100).toFixed(1)} onChange={(e) => setForm((f) => ({ ...f, stop_loss: Number(e.target.value) / 100 }))} inputProps={{ step: 0.1, min: 0 }} />
-                </FormRow>
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={3} sx={{ display: 'flex', alignItems: 'flex-end' }}>
-                <Button id="submit-backtest-btn" variant="contained" fullWidth startIcon={<SendRoundedIcon />} onClick={handleSubmit} disabled={submitting} sx={{ height: 40, fontWeight: 700 }}>
-                  {submitting ? 'Queuing…' : 'Submit Backtest'}
-                </Button>
-              </Grid>
-            </Grid>
-          </CardContent>
-        </Card>
-
         {/* Tabbed Catalog List Card */}
         <Card
           sx={{
@@ -460,19 +407,58 @@ export default function BacktestRequests() {
                   <Table size="small" stickyHeader>
                     <TableHead>
                       <TableRow>
-                        <TableCell>Strategy</TableCell>
-                        <TableCell>Symbol</TableCell>
-                        <TableCell>Exchange</TableCell>
-                        <TableCell>Timeframe</TableCell>
-                        <TableCell>Status</TableCell>
-                        <TableCell>Submitted</TableCell>
-                        <TableCell align="right">Net PnL</TableCell>
-                        <TableCell align="right">Win Rate</TableCell>
-                        <TableCell align="right">Sharpe</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: 11, letterSpacing: 0.5 }}>Strategy</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: 11, letterSpacing: 0.5 }}>Symbol</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: 11, letterSpacing: 0.5 }}>Exchange</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: 11, letterSpacing: 0.5 }}>Timeframe</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: 11, letterSpacing: 0.5 }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: 11, letterSpacing: 0.5 }}>Submitted</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700, fontSize: 11, letterSpacing: 0.5 }}>
+                          <TableSortLabel
+                            active={sortBy === 'net_pnl'}
+                            direction={sortBy === 'net_pnl' ? sortDir : 'desc'}
+                            onClick={() => handleSort('net_pnl')}
+                            sx={{
+                              '& .MuiTableSortLabel-icon': { opacity: sortBy === 'net_pnl' ? 1 : 0.3 },
+                              color: sortBy === 'net_pnl' ? '#0ECB81 !important' : 'inherit',
+                              '&.Mui-active': { color: '#0ECB81' },
+                            }}
+                          >
+                            Net PnL
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700, fontSize: 11, letterSpacing: 0.5 }}>
+                          <TableSortLabel
+                            active={sortBy === 'win_rate'}
+                            direction={sortBy === 'win_rate' ? sortDir : 'desc'}
+                            onClick={() => handleSort('win_rate')}
+                            sx={{
+                              '& .MuiTableSortLabel-icon': { opacity: sortBy === 'win_rate' ? 1 : 0.3 },
+                              color: sortBy === 'win_rate' ? '#0ECB81 !important' : 'inherit',
+                              '&.Mui-active': { color: '#0ECB81' },
+                            }}
+                          >
+                            Win Rate
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700, fontSize: 11, letterSpacing: 0.5 }}>
+                          <TableSortLabel
+                            active={sortBy === 'sharpe'}
+                            direction={sortBy === 'sharpe' ? sortDir : 'desc'}
+                            onClick={() => handleSort('sharpe')}
+                            sx={{
+                              '& .MuiTableSortLabel-icon': { opacity: sortBy === 'sharpe' ? 1 : 0.3 },
+                              color: sortBy === 'sharpe' ? '#0ECB81 !important' : 'inherit',
+                              '&.Mui-active': { color: '#0ECB81' },
+                            }}
+                          >
+                            Sharpe
+                          </TableSortLabel>
+                        </TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {backtests.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((bt) => {
+                      {sortedBacktests.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((bt) => {
                         const targetId = bt.id || bt.strategy_id || bt.backtest_id;
                         return (
                           <TableRow
@@ -485,6 +471,11 @@ export default function BacktestRequests() {
                               <Typography variant="body2" sx={{ fontWeight: 700 }}>
                                 {bt.strategy_name}
                               </Typography>
+                              {bt.status === 'failed' && bt.error_message && (
+                                <Typography variant="caption" sx={{ color: COLORS.pnlRed, display: 'block', fontSize: 11 }}>
+                                  {bt.error_message}
+                                </Typography>
+                              )}
                             </TableCell>
                             <TableCell>
                               <Chip label={bt.symbol} size="small" sx={{ height: 22, fontSize: 11, fontWeight: 600, background: `${COLORS.accent}15`, color: COLORS.accent }} />
@@ -501,7 +492,7 @@ export default function BacktestRequests() {
                             </TableCell>
                             <TableCell>
                               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                {new Date(bt.submitted_at).toLocaleDateString()}
+                                {bt.submitted_at ? new Date(bt.submitted_at).toLocaleDateString() : '—'}
                               </Typography>
                             </TableCell>
                             <TableCell align="right">
@@ -527,7 +518,7 @@ export default function BacktestRequests() {
                 </TableContainer>
                 <TablePagination
                   component="div"
-                  count={backtests.length}
+                  count={sortedBacktests.length}
                   page={page}
                   onPageChange={(_, p) => setPage(p)}
                   rowsPerPage={rowsPerPage}

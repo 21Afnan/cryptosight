@@ -4,7 +4,8 @@ FastAPI router for Backtest & Strategy endpoints.
 Connects frontend UI components directly to PostgreSQL DB metadata & backtest services.
 """
 
-from fastapi import APIRouter, Query, HTTPException, BackgroundTasks
+import asyncio
+from fastapi import APIRouter, Query, HTTPException
 from cryptosight.backend.services import backtest_service
 
 router = APIRouter()
@@ -33,6 +34,8 @@ def list_backtests(
     try:
         data = backtest_service.get_all_backtests(search=search, status=status)
         return {"status": "success", "count": len(data), "data": data}
+    except (asyncio.CancelledError, GeneratorExit):
+        return {"status": "cancelled", "count": 0, "data": []}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -52,16 +55,3 @@ def get_backtest_details(id: str):
         return {"status": "success", "data": data}
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Backtest details for '{id}' not found: {e}")
-
-
-@router.post("")
-def create_backtest_run(payload: dict, background_tasks: BackgroundTasks):
-    """
-    POST /api/v1/backtests
-    Submits a new strategy backtest job request.
-    """
-    try:
-        result = backtest_service.submit_backtest_request(payload)
-        return {"status": "success", "data": result}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))

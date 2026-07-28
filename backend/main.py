@@ -25,6 +25,17 @@ app.include_router(execution_router.router, prefix="/api/v1/execution",  tags=["
 app.include_router(ml_router.router,        prefix="/api/v1/ml",         tags=["Machine Learning"])
 app.include_router(sentiment_router.router, prefix="/api/v1/sentiment",  tags=["Sentiment"])
 
+@app.on_event("startup")
+def startup_event():
+    try:
+        conn = get_connection()
+        create_strategy_data(conn)
+        create_backtest_stats_table(conn)
+        conn.close()
+        logger.info("Database schemas and tracking tables initialized at startup.")
+    except Exception as e:
+        logger.warning(f"Could not initialize database schemas on startup: {e}")
+
 @app.get("/")
 def root():
     return {"message": "CryptoSight Quant API is running"}

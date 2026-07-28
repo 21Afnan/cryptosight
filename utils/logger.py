@@ -53,6 +53,14 @@ def detect_exchange(name: str) -> str:
     except Exception:
         return "unknown"
 
+class SafeRotatingFileHandler(RotatingFileHandler):
+    def doRollover(self):
+        try:
+            super().doRollover()
+        except Exception:
+            pass
+
+
 def get_logger(name: str) -> logging.Logger:
     """
     Returns a logger that writes to binance.log, bybit.log, or app.log.
@@ -89,12 +97,13 @@ def get_logger(name: str) -> logging.Logger:
             datefmt="%Y-%m-%d %H:%M:%S"
         )
 
-        # File handler — rotates at 5MB, keeps 5 backups
-        file_handler = RotatingFileHandler(
+        # File handler — rotates at 5MB, keeps 5 backups with Windows lock safety
+        file_handler = SafeRotatingFileHandler(
             log_file,
             maxBytes=MAX_BYTES,
             backupCount=5,
-            encoding="utf-8"
+            encoding="utf-8",
+            delay=True
         )
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
