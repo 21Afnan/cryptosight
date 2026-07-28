@@ -5,19 +5,7 @@
  * GET /dashboard/summary endpoint.
  */
 
-function generateSparkline(base, length = 20, drift = 0.005, vol = 0.02) {
-  const data = [];
-  let v = base;
-  for (let i = 0; i < length; i++) {
-    v *= 1 + (Math.random() - 0.5 + drift) * vol;
-    v = Math.max(v, base * 0.5);
-    data.push({ value: parseFloat(v.toFixed(2)) });
-  }
-  return data;
-}
-
 export const DASHBOARD_SUMMARY = {
-  // KPI cards
   total_strategies: 8,
   active_strategies: 5,
   running_executions: 3,
@@ -31,20 +19,6 @@ export const DASHBOARD_SUMMARY = {
   portfolio_change_pct: 0.0243,
   total_return: 0.1843,
   total_return_usd: 12640.80,
-
-  // Sparklines for each KPI (7-day or 20-point trend)
-  sparklines: {
-    portfolio_value: generateSparkline(79000, 20, 0.003, 0.015),
-    todays_pnl: generateSparkline(400, 20, 0.002, 0.08),
-    active_strategies: [5,5,4,5,5,6,6,6,5,5,5,5,5,5,5,5,5,5,5,5].map(v => ({ value: v })),
-    connected_accounts: [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2].map(v => ({ value: v })),
-    total_return: generateSparkline(0.15, 20, 0.005, 0.04),
-    ml_models: [4,4,4,5,5,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6].map(v => ({ value: v })),
-    backtests: [1,2,2,2,3,3,3,3,3,3,3,4,4,4,4,4,4,5,5,5].map(v => ({ value: v })),
-    executions: [2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3].map(v => ({ value: v })),
-    simulations: [1,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3].map(v => ({ value: v })),
-    total_pnl: generateSparkline(12000, 20, 0.004, 0.012),
-  },
 
   // Strategies summary table data (for Dashboard table — minimal fields)
   strategies_summary: [

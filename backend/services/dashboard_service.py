@@ -9,31 +9,6 @@ from cryptosight.utils.db import get_connection
 from cryptosight.backend.services.strategy_service import get_all_strategies
 from cryptosight.execution.bybit_executor import BybitExecutor
 
-def generate_equity_sparkline(start_val, end_val, length=20):
-    if start_val is None or start_val <= 0:
-        start_val = 10000.0
-    if end_val is None:
-        end_val = start_val
-    diff = end_val - start_val
-    data = []
-    for i in range(length):
-        progress = i / float(length - 1)
-        noise = (random.random() - 0.5) * 0.02 * (abs(diff) if diff != 0 else start_val * 0.01)
-        val = start_val + (diff * progress) + noise
-        data.append({"value": round(val, 2)})
-    return data
-
-def generate_sparkline(base, length=20, drift=0.005, vol=0.02):
-    if base is None or base == 0:
-        base = 100.0
-    data = []
-    v = base
-    for _ in range(length):
-        v *= 1 + (random.random() - 0.5 + drift) * vol
-        v = max(v, base * 0.5)
-        data.append({"value": round(v, 2)})
-    return data
-
 def get_dashboard_summary():
     # Fetch real strategies from strategy_service (metadata.strategy_data + simulations.stats)
     real_strategies = get_all_strategies()
@@ -157,17 +132,5 @@ def get_dashboard_summary():
         "portfolio_change_pct": round(portfolio_change_pct, 4),
         "total_return": round(portfolio_change_pct, 4),
         "total_return_usd": round(total_net_pnl, 2),
-        "sparklines": {
-            "portfolio_value": generate_equity_sparkline(sim_initial_balance, sim_initial_balance + total_net_pnl, 20),
-            "todays_pnl": generate_equity_sparkline(0.0, total_net_pnl, 20),
-            "active_strategies": [{"value": v} for v in [5,5,4,5,5,6,6,6,5,5,5,5,5,5,5,5,5,5,5,5]],
-            "connected_accounts": [{"value": connected_accounts} for _ in range(20)],
-            "total_return": generate_equity_sparkline(0.0, portfolio_change_pct, 20),
-            "ml_models": [{"value": v} for v in [4,4,4,5,5,5,5,5,5,5,5,6,6,6,6,6,6,6,6,final_ml_models]],
-            "backtests": [{"value": total_backtests} for _ in range(20)],
-            "executions": [{"value": running_executions} for _ in range(20)],
-            "simulations": [{"value": running_simulations} for _ in range(20)],
-            "total_pnl": generate_equity_sparkline(0.0, total_net_pnl, 20),
-        },
         "strategies_summary": formatted_strategies,
     }

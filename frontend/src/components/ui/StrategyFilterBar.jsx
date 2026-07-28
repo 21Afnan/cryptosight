@@ -99,7 +99,6 @@ export default function StrategyFilterBar({ onChange }) {
           <MenuItem value="all">All Exchanges</MenuItem>
           <MenuItem value="Binance">Binance</MenuItem>
           <MenuItem value="Bybit">Bybit</MenuItem>
-          <MenuItem value="OKX">OKX</MenuItem>
         </Select>
       </FormControl>
 

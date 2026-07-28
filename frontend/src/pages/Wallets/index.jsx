@@ -184,7 +184,7 @@ function AddWalletDialog({ open, onClose, onSuccess }) {
             fullWidth
             size="small"
           >
-            {['Bybit', 'Binance', 'OKX', 'Deribit', 'Coinbase'].map((ex) => (
+            {['Bybit', 'Binance'].map((ex) => (
               <MenuItem key={ex} value={ex}>{ex}</MenuItem>
             ))}
           </TextField>

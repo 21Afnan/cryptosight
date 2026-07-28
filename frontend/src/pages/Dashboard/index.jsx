@@ -247,16 +247,16 @@ export default function Dashboard() {
     if (!data) return [];
     const s = data;
     return [
-      { title: 'Portfolio Value', value: `$${fmt(s.portfolio_value)}`, delta: fmtPct(s.portfolio_change_pct), deltaType: s.portfolio_change_pct >= 0 ? 'positive' : 'negative', icon: <AccountBalanceWalletRoundedIcon />, sparkData: s.sparklines?.portfolio_value, colorIndex: 0 },
-      { title: "Today's PnL", value: fmtCurrency(s.todays_pnl), delta: fmtPct(s.todays_pnl_pct), deltaType: s.todays_pnl >= 0 ? 'positive' : 'negative', icon: <AttachMoneyRoundedIcon />, sparkData: s.sparklines?.todays_pnl, colorIndex: 1 },
-      { title: 'Total Return', value: fmtPct(s.total_return), delta: `$${fmt(s.total_return_usd)}`, deltaType: s.total_return >= 0 ? 'positive' : 'negative', icon: <TrendingUpRoundedIcon />, sparkData: s.sparklines?.total_return, colorIndex: 2 },
-      { title: 'Active Strategies', value: s.active_strategies, delta: `of ${s.total_strategies} total`, deltaType: 'neutral', icon: <ShowChartRoundedIcon />, sparkData: s.sparklines?.active_strategies, colorIndex: 3 },
-      { title: 'Live Executions', value: s.running_executions, delta: null, deltaType: 'neutral', icon: <RocketLaunchRoundedIcon />, sparkData: s.sparklines?.executions, colorIndex: 4 },
-      { title: 'Running Simulations', value: s.running_simulations, delta: null, deltaType: 'neutral', icon: <BarChartRoundedIcon />, sparkData: s.sparklines?.simulations, colorIndex: 3 },
-      { title: 'Connected Accounts', value: s.connected_accounts, delta: null, deltaType: 'neutral', icon: <AccountBalanceWalletRoundedIcon />, sparkData: s.sparklines?.connected_accounts, colorIndex: 0 },
-      { title: 'Trained ML Models', value: s.trained_ml_models, delta: null, deltaType: 'neutral', icon: <PsychologyRoundedIcon />, sparkData: s.sparklines?.ml_models, colorIndex: 1 },
-      { title: 'Total Backtests', value: s.total_backtests, delta: null, deltaType: 'neutral', icon: <HistoryRoundedIcon />, sparkData: s.sparklines?.backtests, colorIndex: 2 },
-      { title: 'Total Return (USD)', value: `$${fmt(s.total_return_usd)}`, delta: fmtPct(s.total_return), deltaType: s.total_return >= 0 ? 'positive' : 'negative', icon: <DashboardRoundedIcon />, sparkData: s.sparklines?.total_pnl, colorIndex: 4 },
+      { title: 'Portfolio Value', value: `$${fmt(s.portfolio_value)}`, delta: fmtPct(s.portfolio_change_pct), deltaType: s.portfolio_change_pct >= 0 ? 'positive' : 'negative', icon: <AccountBalanceWalletRoundedIcon />, colorIndex: 0 },
+      { title: "Today's PnL", value: fmtCurrency(s.todays_pnl), delta: fmtPct(s.todays_pnl_pct), deltaType: s.todays_pnl >= 0 ? 'positive' : 'negative', icon: <AttachMoneyRoundedIcon />, colorIndex: 1 },
+      { title: 'Total Return', value: fmtPct(s.total_return), delta: `$${fmt(s.total_return_usd)}`, deltaType: s.total_return >= 0 ? 'positive' : 'negative', icon: <TrendingUpRoundedIcon />, colorIndex: 2 },
+      { title: 'Active Strategies', value: s.active_strategies, delta: `of ${s.total_strategies} total`, deltaType: 'neutral', icon: <ShowChartRoundedIcon />, colorIndex: 3 },
+      { title: 'Live Executions', value: s.running_executions, delta: null, deltaType: 'neutral', icon: <RocketLaunchRoundedIcon />, colorIndex: 4 },
+      { title: 'Running Simulations', value: s.running_simulations, delta: null, deltaType: 'neutral', icon: <BarChartRoundedIcon />, colorIndex: 3 },
+      { title: 'Connected Accounts', value: s.connected_accounts, delta: null, deltaType: 'neutral', icon: <AccountBalanceWalletRoundedIcon />, colorIndex: 0 },
+      { title: 'Trained ML Models', value: s.trained_ml_models, delta: null, deltaType: 'neutral', icon: <PsychologyRoundedIcon />, colorIndex: 1 },
+      { title: 'Total Backtests', value: s.total_backtests, delta: null, deltaType: 'neutral', icon: <HistoryRoundedIcon />, colorIndex: 2 },
+      { title: 'Total Return (USD)', value: `$${fmt(s.total_return_usd)}`, delta: fmtPct(s.total_return), deltaType: s.total_return >= 0 ? 'positive' : 'negative', icon: <DashboardRoundedIcon />, colorIndex: 4 },
     ];
   }, [data]);
 
@@ -381,8 +381,8 @@ export default function Dashboard() {
                               px: 1,
                               py: 0.25,
                               borderRadius: '999px',
-                              background: COLORS.accentSurface,
-                              color: COLORS.accent,
+                              background: theme.palette.mode === 'dark' ? COLORS.accentSurfaceDark : COLORS.accentSurface,
+                              color: theme.palette.mode === 'dark' ? COLORS.accentLight : COLORS.accent,
                             }}
                           >
                             {row.timeframe}

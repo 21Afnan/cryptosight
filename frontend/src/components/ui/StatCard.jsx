@@ -4,7 +4,6 @@ import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
-import SparklineChart from '../charts/SparklineChart';
 import { COLORS, ICON_BUBBLE_COLORS } from '../../theme/theme';
 
 /**
@@ -161,13 +160,6 @@ export default function StatCard({
             >
               {deltaPrefix}{delta}
             </Typography>
-          )}
-
-          {/* Optional inline sparkline */}
-          {sparkData && sparkData.length > 0 && (
-            <Box sx={{ width: 68, height: 28, flexShrink: 0, ml: 'auto' }}>
-              <SparklineChart data={sparkData} color={lineColor} height={28} />
-            </Box>
           )}
         </Box>
       </CardContent>

@@ -724,7 +724,7 @@ export default function StrategyBuilder() {
                 { label: 'Total Trades', value: backtestResults.totalTrades, color: theme.palette.text.primary },
                 { label: 'Profit Factor', value: backtestResults.profitFactor.toFixed(2), color: backtestResults.profitFactor >= 1.2 ? COLORS.pnlGreen : COLORS.pnlRed },
                 { label: 'Max Drawdown', value: `${backtestResults.maxDrawdown.toFixed(2)}%`, color: COLORS.pnlRed },
-                { label: 'Sharpe Ratio', value: backtestResults.sharpeRatio.toFixed(2), color: backtestResults.sharpeRatio >= 1.0 ? COLORS.pnlGreen : theme.palette.text.primary },
+                { label: 'Sharpe Ratio', value: backtestResults.sharpeRatio.toFixed(2), color: backtestResults.sharpeRatio < 0 ? COLORS.pnlRed : (backtestResults.sharpeRatio > 0 ? COLORS.pnlGreen : theme.palette.text.primary) },
               ].map((kpi) => (
                 <KpiCard key={kpi.label} label={kpi.label} value={kpi.value} color={kpi.color} isDark={isDark} />
               ))}
@@ -792,7 +792,7 @@ export default function StrategyBuilder() {
                       </Typography>
                     </TableCell>
                     <TableCell align="right" sx={{ px: 1.5 }}>
-                      <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: row.sharpeRatio >= 1.0 ? COLORS.pnlGreen : theme.palette.text.primary }}>
+                      <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: row.sharpeRatio < 0 ? COLORS.pnlRed : (row.sharpeRatio > 0 ? COLORS.pnlGreen : theme.palette.text.primary) }}>
                         {row.sharpeRatio.toFixed(2)}
                       </Typography>
                     </TableCell>

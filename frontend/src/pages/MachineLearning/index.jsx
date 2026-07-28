@@ -266,7 +266,7 @@ export default function MachineLearning() {
                             const val = m.sharpe ?? m.metrics?.quant_stats?.sharpe;
                             if (val == null) return <Typography variant="body2">—</Typography>;
                             const num = Number(val);
-                            const color = num < 0 ? COLORS.pnlRed : (num >= 1.0 ? COLORS.pnlGreen : theme.palette.text.primary);
+                            const color = num < 0 ? COLORS.pnlRed : (num > 0 ? COLORS.pnlGreen : theme.palette.text.primary);
                             return (
                               <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color }}>
                                 {num.toFixed(2)}

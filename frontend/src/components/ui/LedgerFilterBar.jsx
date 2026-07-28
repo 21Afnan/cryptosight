@@ -34,6 +34,12 @@ export default function LedgerFilterBar({
   const [pnlFilter, setPnlFilter] = useState('all');
   const [minPnl, setMinPnl] = useState('');
   const [maxPnl, setMaxPnl] = useState('');
+  const [minEntryPrice, setMinEntryPrice] = useState('');
+  const [maxEntryPrice, setMaxEntryPrice] = useState('');
+  const [minExitPrice, setMinExitPrice] = useState('');
+  const [maxExitPrice, setMaxExitPrice] = useState('');
+  const [minReturn, setMinReturn] = useState('');
+  const [maxReturn, setMaxReturn] = useState('');
 
   const handleChange = (field, val) => {
     const updated = {
@@ -44,6 +50,12 @@ export default function LedgerFilterBar({
       pnlFilter: field === 'pnlFilter' ? val : pnlFilter,
       minPnl: field === 'minPnl' ? val : minPnl,
       maxPnl: field === 'maxPnl' ? val : maxPnl,
+      minEntryPrice: field === 'minEntryPrice' ? val : minEntryPrice,
+      maxEntryPrice: field === 'maxEntryPrice' ? val : maxEntryPrice,
+      minExitPrice: field === 'minExitPrice' ? val : minExitPrice,
+      maxExitPrice: field === 'maxExitPrice' ? val : maxExitPrice,
+      minReturn: field === 'minReturn' ? val : minReturn,
+      maxReturn: field === 'maxReturn' ? val : maxReturn,
     };
 
     if (field === 'startDate') setStartDate(val);
@@ -53,6 +65,12 @@ export default function LedgerFilterBar({
     if (field === 'pnlFilter') setPnlFilter(val);
     if (field === 'minPnl') setMinPnl(val);
     if (field === 'maxPnl') setMaxPnl(val);
+    if (field === 'minEntryPrice') setMinEntryPrice(val);
+    if (field === 'maxEntryPrice') setMaxEntryPrice(val);
+    if (field === 'minExitPrice') setMinExitPrice(val);
+    if (field === 'maxExitPrice') setMaxExitPrice(val);
+    if (field === 'minReturn') setMinReturn(val);
+    if (field === 'maxReturn') setMaxReturn(val);
 
     if (onChange) onChange(updated);
   };
@@ -65,12 +83,45 @@ export default function LedgerFilterBar({
     setPnlFilter('all');
     setMinPnl('');
     setMaxPnl('');
+    setMinEntryPrice('');
+    setMaxEntryPrice('');
+    setMinExitPrice('');
+    setMaxExitPrice('');
+    setMinReturn('');
+    setMaxReturn('');
     if (onChange) {
-      onChange({ startDate: '', endDate: '', side: 'all', symbol: '', pnlFilter: 'all', minPnl: '', maxPnl: '' });
+      onChange({
+        startDate: '',
+        endDate: '',
+        side: 'all',
+        symbol: '',
+        pnlFilter: 'all',
+        minPnl: '',
+        maxPnl: '',
+        minEntryPrice: '',
+        maxEntryPrice: '',
+        minExitPrice: '',
+        maxExitPrice: '',
+        minReturn: '',
+        maxReturn: '',
+      });
     }
   };
 
-  const hasActiveFilters = startDate || endDate || side !== 'all' || symbol || pnlFilter !== 'all' || minPnl || maxPnl;
+  const hasActiveFilters =
+    startDate ||
+    endDate ||
+    side !== 'all' ||
+    symbol ||
+    pnlFilter !== 'all' ||
+    minPnl ||
+    maxPnl ||
+    minEntryPrice ||
+    maxEntryPrice ||
+    minExitPrice ||
+    maxExitPrice ||
+    minReturn ||
+    maxReturn;
 
   return (
     <Box
@@ -169,6 +220,75 @@ export default function LedgerFilterBar({
         </Box>
       )}
 
+      {/* Entry Price range */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+        <OutlinedInput
+          size="small"
+          type="number"
+          placeholder="Min Entry ($)"
+          value={minEntryPrice}
+          onChange={(e) => handleChange('minEntryPrice', e.target.value)}
+          sx={{ width: 110, height: 34, fontSize: 12 }}
+        />
+        <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+          -
+        </Typography>
+        <OutlinedInput
+          size="small"
+          type="number"
+          placeholder="Max Entry ($)"
+          value={maxEntryPrice}
+          onChange={(e) => handleChange('maxEntryPrice', e.target.value)}
+          sx={{ width: 110, height: 34, fontSize: 12 }}
+        />
+      </Box>
+
+      {/* Exit Price range */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+        <OutlinedInput
+          size="small"
+          type="number"
+          placeholder="Min Exit ($)"
+          value={minExitPrice}
+          onChange={(e) => handleChange('minExitPrice', e.target.value)}
+          sx={{ width: 110, height: 34, fontSize: 12 }}
+        />
+        <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+          -
+        </Typography>
+        <OutlinedInput
+          size="small"
+          type="number"
+          placeholder="Max Exit ($)"
+          value={maxExitPrice}
+          onChange={(e) => handleChange('maxExitPrice', e.target.value)}
+          sx={{ width: 110, height: 34, fontSize: 12 }}
+        />
+      </Box>
+
+      {/* Return % range */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+        <OutlinedInput
+          size="small"
+          type="number"
+          placeholder="Min Return (%)"
+          value={minReturn}
+          onChange={(e) => handleChange('minReturn', e.target.value)}
+          sx={{ width: 120, height: 34, fontSize: 12 }}
+        />
+        <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+          -
+        </Typography>
+        <OutlinedInput
+          size="small"
+          type="number"
+          placeholder="Max Return (%)"
+          value={maxReturn}
+          onChange={(e) => handleChange('maxReturn', e.target.value)}
+          sx={{ width: 120, height: 34, fontSize: 12 }}
+        />
+      </Box>
+
       {/* Symbol filter */}
       {showSymbolFilter && (
         symbols.length > 0 ? (
@@ -217,7 +337,21 @@ export default function LedgerFilterBar({
  */
 export function filterLedgerRows(rows = [], filters = {}) {
   if (!rows || !rows.length) return [];
-  const { startDate, endDate, side, symbol, pnlFilter, minPnl, maxPnl } = filters;
+  const {
+    startDate,
+    endDate,
+    side,
+    symbol,
+    pnlFilter,
+    minPnl,
+    maxPnl,
+    minEntryPrice,
+    maxEntryPrice,
+    minExitPrice,
+    maxExitPrice,
+    minReturn,
+    maxReturn,
+  } = filters;
 
   return rows.filter((row) => {
     // 1. Side / Direction filter
@@ -264,6 +398,33 @@ export function filterLedgerRows(rows = [], filters = {}) {
     }
     if (maxPnl !== '' && maxPnl != null && pnlVal != null) {
       if (pnlVal > parseFloat(maxPnl)) return false;
+    }
+
+    // 6. Min / Max Entry Price Range Filter
+    const entryPriceVal = row.entry_price ?? row.price;
+    if (minEntryPrice !== '' && minEntryPrice != null && entryPriceVal != null) {
+      if (entryPriceVal < parseFloat(minEntryPrice)) return false;
+    }
+    if (maxEntryPrice !== '' && maxEntryPrice != null && entryPriceVal != null) {
+      if (entryPriceVal > parseFloat(maxEntryPrice)) return false;
+    }
+
+    // 7. Min / Max Exit Price Range Filter
+    const exitPriceVal = row.exit_price;
+    if (minExitPrice !== '' && minExitPrice != null && exitPriceVal != null) {
+      if (exitPriceVal < parseFloat(minExitPrice)) return false;
+    }
+    if (maxExitPrice !== '' && maxExitPrice != null && exitPriceVal != null) {
+      if (exitPriceVal > parseFloat(maxExitPrice)) return false;
+    }
+
+    // 8. Min / Max Return % Range Filter
+    const returnVal = row.return_pct ?? row.perc_pnl ?? row.return_percent;
+    if (minReturn !== '' && minReturn != null && returnVal != null) {
+      if (returnVal < parseFloat(minReturn)) return false;
+    }
+    if (maxReturn !== '' && maxReturn != null && returnVal != null) {
+      if (returnVal > parseFloat(maxReturn)) return false;
     }
 
     return true;
