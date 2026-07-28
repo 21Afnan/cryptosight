@@ -124,6 +124,9 @@ def get_all_ml_models(
 
                 pnl_val = metrics.get("quant_stats", {}).get("net_pnl")
                 ret_val = metrics.get("quant_stats", {}).get("total_return") or metrics.get("quant_stats", {}).get("net_pnl_pct") or metrics.get("quant_stats", {}).get("return_pct")
+                if ret_val is None and metrics.get("quant_stats", {}).get("comp") is not None:
+                    comp_v = float(metrics["quant_stats"]["comp"])
+                    ret_val = comp_v * 100.0 if abs(comp_v) <= 5.0 else comp_v
 
                 # If missing in json metrics, attempt dynamic query from live ml_backtests schema
                 if ret_val is None or pnl_val is None:

@@ -105,16 +105,14 @@ export default function MachineLearning() {
   const totalModelsCount = kpis.total_models ?? allModels.length;
   const classificationCount = kpis.classification_models ?? allModels.filter(m => m.type?.toLowerCase() === 'classification').length;
   const regressionCount = kpis.regression_models ?? allModels.filter(m => m.type?.toLowerCase() === 'regression').length;
-  const topModelName = kpis.top_performer ?? (allModels[0]?.name || 'N/A');
-
-  const formatScore = (m) => {
-    if (!m || m.score == null) return '—';
-    if (m.primary_metric === 'R2 Score' || m.primary_metric === 'R² Score' || m.type?.toLowerCase() === 'regression') {
-      return Number(m.score).toFixed(4);
-    }
-    const scoreNum = Number(m.score);
-    return `${(scoreNum <= 1.0 ? scoreNum * 100 : scoreNum).toFixed(1)}%`;
-  };
+  
+  // Find top performer model by highest return percentage fetched from backend
+  const topReturnModel = allModels.reduce((best, cur) => {
+    const curRet = cur.return_pct ?? cur.metrics?.quant_stats?.total_return ?? -Infinity;
+    const bestRet = best?.return_pct ?? best?.metrics?.quant_stats?.total_return ?? -Infinity;
+    return curRet > bestRet ? cur : best;
+  }, null);
+  const topModelName = topReturnModel?.name || kpis.top_performer || (allModels[0]?.name || 'N/A');
 
   return (
     <PageContainer title="Machine Learning Models" breadcrumbs="Quantitative Catalog">
@@ -145,10 +143,10 @@ export default function MachineLearning() {
           />
           <ExecutiveKpiCard
             title="Top Performer"
-            value={allModels[0] ? (allModels[0].primary_metric === 'Val Loss' ? allModels[0].score?.toFixed(4) : `${(allModels[0].score * 100).toFixed(1)}%`) : '—'}
+            value={topReturnModel && topReturnModel.return_pct != null ? `${topReturnModel.return_pct >= 0 ? '+' : ''}${Number(topReturnModel.return_pct).toFixed(1)}%` : (allModels[0] ? `${(allModels[0].score * 100).toFixed(1)}%` : '—')}
             subtitle={topModelName}
             icon={AutoAwesomeRoundedIcon}
-            color={COLORS.warning}
+            color={topReturnModel && (topReturnModel.return_pct ?? 0) >= 0 ? COLORS.pnlGreen : COLORS.warning}
           />
         </Box>
 
@@ -195,7 +193,7 @@ export default function MachineLearning() {
                       <TableCell>Symbol</TableCell>
                       <TableCell>Timeframe</TableCell>
                       <TableCell>Status</TableCell>
-                      <TableCell align="right">Accuracy (%)</TableCell>
+                      <TableCell align="right">Return (%)</TableCell>
                       <TableCell align="right">Sharpe</TableCell>
                       <TableCell align="right">Win Rate</TableCell>
                       <TableCell>Training Date</TableCell>
@@ -251,12 +249,13 @@ export default function MachineLearning() {
                         </TableCell>
                         <TableCell align="right">
                           {(() => {
-                            const acc = m.accuracy ?? m.evaluation_metrics?.accuracy ?? m.metrics?.ml_accuracy?.accuracy ?? m.score;
-                            if (acc == null) return <Typography variant="body2">—</Typography>;
-                            const num = Number(acc);
-                            const formattedText = m.type?.toLowerCase() === 'regression' ? (num > 1 ? `${num.toFixed(1)}%` : num.toFixed(4)) : `${(num <= 1.0 ? num * 100 : num).toFixed(1)}%`;
+                            const ret = m.return_pct ?? m.metrics?.quant_stats?.total_return ?? m.metrics?.quant_stats?.net_pnl_pct ?? m.metrics?.quant_stats?.return_pct;
+                            if (ret == null) return <Typography variant="body2">—</Typography>;
+                            const num = Number(ret);
+                            const color = num < 0 ? COLORS.pnlRed : (num > 0 ? COLORS.pnlGreen : theme.palette.text.primary);
+                            const formattedText = `${num >= 0 ? '+' : ''}${num.toFixed(1)}%`;
                             return (
-                              <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: COLORS.accent }}>
+                              <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color }}>
                                 {formattedText}
                               </Typography>
                             );
