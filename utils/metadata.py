@@ -231,6 +231,82 @@ def generate_strategy_id(exchange: str, symbol: str, target_timeframe: str, indi
     return f"{exchange.lower()}_{symbol.lower()}_{target_timeframe.lower()}{ind_str}{strat_str}"
 
 
+def create_playbook_table(conn):
+    """
+    Creates the 'metadata.playbook_table' table to store reusable strategy building blocks.
+    playbook_id: BIGSERIAL PRIMARY KEY
+    strategy_id: BIGINT REFERENCES metadata.strategy_data(strategy_id) ON DELETE CASCADE
+    """
+    create_metadata_schema(conn)
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS metadata.playbook_table (
+        playbook_id        BIGSERIAL PRIMARY KEY,
+        strategy_id        BIGINT REFERENCES metadata.strategy_data(strategy_id) ON DELETE CASCADE,
+        strategy_name      VARCHAR(128) UNIQUE NOT NULL,
+        start_time         TIMESTAMP WITH TIME ZONE,
+        end_time           TIMESTAMP WITH TIME ZONE,
+        indicators_config  JSONB,
+        strategy_config    JSONB NOT NULL
+    );
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(create_table_sql)
+            # Run migrations to add columns in case the table already existed
+            cursor.execute("ALTER TABLE metadata.playbook_table ADD COLUMN IF NOT EXISTS strategy_id BIGINT REFERENCES metadata.strategy_data(strategy_id) ON DELETE CASCADE;")
+            cursor.execute("ALTER TABLE metadata.playbook_table ADD COLUMN IF NOT EXISTS start_time TIMESTAMP WITH TIME ZONE;")
+            cursor.execute("ALTER TABLE metadata.playbook_table ADD COLUMN IF NOT EXISTS end_time TIMESTAMP WITH TIME ZONE;")
+            conn.commit()
+            logger.info("Table 'metadata.playbook_table' verified/created successfully.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error creating table 'metadata.playbook_table': {error}")
+        raise
+
+
+def populate_playbook_from_strategy_data(conn):
+    """
+    Upserts strategy configurations from metadata.strategy_data into metadata.playbook_table
+    linking strategy_id and removing coin symbols & timeframe prefixes from strategy_name.
+    """
+    import re
+    create_playbook_table(conn)
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT strategy_id, strategy_name, start_time, end_time, indicators_config, strategy_config
+                FROM metadata.strategy_data
+                WHERE strategy_config IS NOT NULL;
+            """)
+            rows = cursor.fetchall()
+            for s_id, s_name, start_t, end_t, ind_cfg, strat_cfg in rows:
+                clean_name = re.sub(r'\b(BTC|ETH|SOL|LTC|DOGE|MINA|SUI|ADA|USDT)\b', '', s_name, flags=re.IGNORECASE)
+                clean_name = re.sub(r'\b\d+[mhdMHDwW]\b', '', clean_name)
+                clean_name = re.sub(r'\s+', ' ', clean_name).strip()
+                if not clean_name:
+                    clean_name = s_name
+
+                import json
+                ind_str = json.dumps(ind_cfg) if isinstance(ind_cfg, dict) else ind_cfg
+                strat_str = json.dumps(strat_cfg) if isinstance(strat_cfg, dict) else strat_cfg
+
+                cursor.execute("""
+                    INSERT INTO metadata.playbook_table (strategy_id, strategy_name, start_time, end_time, indicators_config, strategy_config)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (strategy_name) DO UPDATE SET
+                        strategy_id = EXCLUDED.strategy_id,
+                        start_time = EXCLUDED.start_time,
+                        end_time = EXCLUDED.end_time,
+                        indicators_config = EXCLUDED.indicators_config,
+                        strategy_config = EXCLUDED.strategy_config;
+                """, (s_id, clean_name, start_t, end_t, ind_str, strat_str))
+            conn.commit()
+            logger.info("Table 'metadata.playbook_table' successfully populated/updated from 'metadata.strategy_data'.")
+    except Exception as error:
+        conn.rollback()
+        logger.error(f"Error populating table 'metadata.playbook_table': {error}")
+        raise
+
 
 def create_strategy_data(conn):
     """

@@ -97,3 +97,27 @@ export async function getStrategyTrades(id, { page = 1, pageSize = 20 } = {}) {
   const start = (page - 1) * pageSize;
   return { data: trades.slice(start, start + pageSize), total: trades.length, page, pageSize };
 }
+
+/** GET /strategy-builder/playbook — fetches playbook templates from metadata.playbook_table */
+export async function getPlaybook() {
+  const res = await axios.get(`${API_BASE_URL}/strategy-builder/playbook`);
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+/** POST /strategy-builder/strategies — saves customized strategy */
+export async function saveStrategy(payload) {
+  const res = await axios.post(`${API_BASE_URL}/strategy-builder/strategies`, payload);
+  return res.data;
+}
+
+/** POST /strategy-builder/run — executes dynamic backtest without saving */
+export async function runDynamicBacktest(payload) {
+  const res = await axios.post(`${API_BASE_URL}/strategy-builder/run`, payload);
+  return res.data;
+}
+
+/** PUT /strategies/:id/toggle-execution — toggles strategy execution state */
+export async function toggleStrategyExecution(strategyId, enabled) {
+  const res = await axios.put(`${API_BASE_URL}/strategies/${strategyId}/toggle-execution`, { enabled });
+  return res.data;
+}

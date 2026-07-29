@@ -7,6 +7,7 @@ from cryptosight.backend.services.strategy_service import (
     get_all_strategies,
     get_strategy_by_id,
     get_strategy_ledgers,
+    toggle_strategy_execution,
 )
 
 router = APIRouter()
@@ -39,3 +40,14 @@ def list_strategy_ledgers(strategy_name: str):
     Returns trade ledger history for a specific strategy from simulation_ledgers schema.
     """
     return get_strategy_ledgers(strategy_name)
+
+
+@router.put("/{strategy_id}/toggle-execution")
+def toggle_execution(strategy_id: int, payload: dict):
+    """
+    PUT /api/v1/strategies/{strategy_id}/toggle-execution
+    Toggles execution_enabled for a strategy.
+    """
+    enabled = payload.get("enabled", False)
+    success = toggle_strategy_execution(strategy_id, enabled)
+    return {"success": success}

@@ -394,3 +394,25 @@ def get_strategy_ledgers(strategy_name: str):
             return trades
     finally:
         conn.close()
+
+def toggle_strategy_execution(strategy_id: int, enabled: bool) -> bool:
+    """
+    Updates the execution_enabled status of a strategy in metadata.strategy_data.
+    """
+    conn = get_connection()
+    if not conn:
+        return False
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                UPDATE metadata.strategy_data
+                SET execution_enabled = %s
+                WHERE strategy_id = %s;
+            """, (enabled, strategy_id))
+            conn.commit()
+            return True
+    except Exception as e:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()

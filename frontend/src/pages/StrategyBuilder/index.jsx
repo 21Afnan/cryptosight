@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getPlaybook, saveStrategy, getStrategies, runDynamicBacktest } from '../../api/strategiesApi';
+import { getBacktests } from '../../api/backtestsApi';
+import { getModels } from '../../api/mlApi';
 import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
@@ -18,6 +21,7 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import TablePagination from '@mui/material/TablePagination';
 import Stack from '@mui/material/Stack';
 import Paper from '@mui/material/Paper';
 import Snackbar from '@mui/material/Snackbar';
@@ -59,29 +63,7 @@ const CATEGORY_COLORS = {
   'Breakout': { bg: 'rgba(244,169,168,0.2)', text: '#D97070' },
 };
 
-const PLAYBOOK_ITEMS = [
-  { id: 'ema_trend', name: 'EMA Trend', category: 'Trend Following', description: 'EMA crossover trend strategy', icon: ShowChartRoundedIcon },
-  { id: 'rsi_reversal', name: 'RSI Mean Reversion', category: 'Mean Reversion', description: 'RSI oversold/overbought reversal', icon: TrendingUpRoundedIcon },
-  { id: 'macd_momentum', name: 'MACD Momentum', category: 'Momentum', description: 'MACD crossover strategy', icon: BarChartRoundedIcon },
-  { id: 'bollinger_breakout', name: 'Bollinger Breakout', category: 'Breakout', description: 'Bollinger Band breakout strategy', icon: ShieldRoundedIcon },
-  { id: 'vwap_pullback', name: 'VWAP Pullback', category: 'Mean Reversion', description: 'Price pullback to VWAP strategy', icon: SpeedRoundedIcon },
-  { id: 'adx_trend', name: 'ADX Trend Following', category: 'Trend Following', description: 'ADX based trend following', icon: ShowChartRoundedIcon },
-  { id: 'donchian_breakout', name: 'Donchian Breakout', category: 'Breakout', description: 'Donchian channel breakout', icon: ShieldRoundedIcon },
-];
 
-const ML_MODELS_LIST = [
-  { id: 'ml_classifier_v2', name: 'ML Classifier Model v2' },
-  { id: 'btc_xgboost_reg', name: 'BTC XGBoost Regressor' },
-  { id: 'lstm_trend_model', name: 'LSTM Trend Model' },
-];
-
-const INITIAL_SAVED_BACKTESTS = [
-  { id: 1, name: 'EMA + RSI Crossover AND', symbol: 'BTCUSDT', timeframe: '1H', period: '2023-01-01 → 2024-12-31', totalReturn: 38.45, winRate: 61.54, totalTrades: 142, profitFactor: 1.78, maxDrawdown: -12.34, sharpeRatio: 1.32, runAt: '2024-12-27 15:30' },
-  { id: 2, name: 'MACD + RSI Momentum OR', symbol: 'BTCUSDT', timeframe: '1H', period: '2023-01-01 → 2024-12-31', totalReturn: 24.18, winRate: 58.21, totalTrades: 187, profitFactor: 1.43, maxDrawdown: -15.21, sharpeRatio: 1.14, runAt: '2024-12-27 14:10' },
-  { id: 3, name: 'EMA + MACD + ML AND', symbol: 'BTCUSDT', timeframe: '1H', period: '2023-01-01 → 2024-12-31', totalReturn: 52.67, winRate: 64.79, totalTrades: 118, profitFactor: 1.95, maxDrawdown: -9.88, sharpeRatio: 1.56, runAt: '2024-12-27 13:05' },
-  { id: 4, name: 'Bollinger Breakout 4H', symbol: 'BTCUSDT', timeframe: '4H', period: '2023-01-01 → 2024-12-31', totalReturn: 17.23, winRate: 55.26, totalTrades: 96, profitFactor: 1.36, maxDrawdown: -14.02, sharpeRatio: 1.08, runAt: '2024-12-27 11:45' },
-  { id: 5, name: 'VWAP Pullback Strategy', symbol: 'BTCUSDT', timeframe: '1H', period: '2023-01-01 → 2024-12-31', totalReturn: 21.34, winRate: 59.17, totalTrades: 131, profitFactor: 1.51, maxDrawdown: -11.76, sharpeRatio: 1.21, runAt: '2024-12-27 10:22' },
-];
 
 // ─── Small reusable Label component ──────────────────────────────────────────
 function FieldLabel({ children }) {
@@ -167,14 +149,16 @@ export default function StrategyBuilder() {
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterSymbol, setFilterSymbol] = useState('ALL');
   const [strategyName, setStrategyName] = useState('');
+  const [isNameEdited, setIsNameEdited] = useState(false);
 
   const [selectedStrategies, setSelectedStrategies] = useState([]);
   const [selectedMlModels, setSelectedMlModels] = useState([]);
   const [combineLogic, setCombineLogic] = useState('AND');
 
-  const [symbol, setSymbol] = useState('BTCUSDT');
-  const [timeframe, setTimeframe] = useState('1H');
+  const [symbol, setSymbol] = useState('BTC');
+  const [timeframe, setTimeframe] = useState('15m');
   const [startDate, setStartDate] = useState('2023-01-01');
   const [endDate, setEndDate] = useState('2024-12-31');
   const [takeProfit, setTakeProfit] = useState('2.00');
@@ -189,15 +173,296 @@ export default function StrategyBuilder() {
     profitFactor: 0, maxDrawdown: 0, sharpeRatio: 0,
   });
 
-  const [savedBacktests, setSavedBacktests] = useState(INITIAL_SAVED_BACKTESTS);
+  const [savedBacktests, setSavedBacktests] = useState([]);
+  const [playbookItems, setPlaybookItems] = useState([]);
+  const [mlModelsList, setMlModelsList] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+
+  // Sorting & Pagination States for Saved Backtests (Section 04)
+  const [tableFilterSymbol, setTableFilterSymbol] = useState('ALL');
+  const [sortField, setSortField] = useState(null);
+  const [sortOrder, setSortOrder] = useState('asc');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+    setPage(0);
+  };
+
+  const filteredTableBacktests = savedBacktests.filter(row => {
+    if (tableFilterSymbol === 'ALL') return true;
+    const baseSym = row.symbol.replace('USDT', '').replace('/', '').trim().toUpperCase();
+    return baseSym === tableFilterSymbol.toUpperCase();
+  });
+
+  const sortedBacktests = [...filteredTableBacktests].sort((a, b) => {
+    if (!sortField) return 0;
+    let aVal = a[sortField];
+    let bVal = b[sortField];
+    if (typeof aVal === 'string') {
+      aVal = aVal.toLowerCase();
+      bVal = bVal.toLowerCase();
+    }
+    if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const startIndex = page * rowsPerPage;
+  const paginatedBacktests = sortedBacktests.slice(startIndex, startIndex + rowsPerPage);
+
+  const reloadSavedStrategies = async () => {
+    try {
+      const savedRes = await getBacktests();
+      const savedData = Array.isArray(savedRes?.data) ? savedRes.data : [];
+      const mappedSaved = savedData.map(item => {
+        let dateStr = 'N/A';
+        if (item.submitted_at) {
+          try {
+            dateStr = new Date(item.submitted_at).toLocaleDateString(undefined, {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric'
+            });
+          } catch (e) {
+            dateStr = String(item.submitted_at).split('T')[0];
+          }
+        }
+        return {
+          id: item.strategy_id,
+          name: item.strategy_name,
+          symbol: item.symbol,
+          timeframe: item.timeframe,
+          period: 'Live / Managed',
+          totalReturn: item.net_pnl || 0.0,
+          winRate: (item.win_rate != null ? item.win_rate * 100 : 0.0),
+          totalTrades: item.total_trades || 0,
+          maxDrawdown: item.max_drawdown || 0.0,
+          runAt: dateStr
+        };
+      });
+      setSavedBacktests(mappedSaved);
+    } catch (err) {
+      console.error("Error refreshing saved strategies:", err);
+    }
+  };
+
+  const reloadPlaybook = async () => {
+    try {
+      const playbookData = await getPlaybook();
+      const resolvedPlaybook = playbookData.map(item => {
+        let category = "Trend Following";
+        const lowerName = item.name.toLowerCase();
+        if (lowerName.includes("rsi") || lowerName.includes("reversion") || lowerName.includes("reversal")) {
+          category = "Mean Reversion";
+        } else if (lowerName.includes("macd") || lowerName.includes("momentum")) {
+          category = "Momentum";
+        } else if (lowerName.includes("breakout") || lowerName.includes("bollinger")) {
+          category = "Breakout";
+        }
+        
+        let icon = ShowChartRoundedIcon;
+        if (category === "Mean Reversion") icon = TrendingUpRoundedIcon;
+        if (category === "Momentum") icon = BarChartRoundedIcon;
+        if (category === "Breakout") icon = ShieldRoundedIcon;
+        
+        return {
+          ...item,
+          category,
+          description: `Configuration from database template`,
+          icon
+        };
+      });
+      setPlaybookItems(resolvedPlaybook);
+    } catch (err) {
+      console.error("Error refreshing playbook:", err);
+    }
+  };
+
+  useEffect(() => {
+    async function loadData() {
+      setLoading(true);
+      try {
+        await reloadPlaybook();
+        
+        const modelsRes = await getModels();
+        const modelsData = Array.isArray(modelsRes?.data) ? modelsRes.data : [];
+        setMlModelsList(modelsData);
+        
+        await reloadSavedStrategies();
+      } catch (err) {
+        console.error("Error loading Strategy Builder data:", err);
+        setSnackbar({ open: true, message: "Error loading strategies from database", severity: "error" });
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
+  // ── Auto-generate Strategy Name ──────────────────────────────────────────
+  useEffect(() => {
+    if (isNameEdited) return;
+
+    if (selectedStrategies.length === 0 && selectedMlModels.length === 0) {
+      setStrategyName('');
+      return;
+    }
+
+    const strategyNames = [];
+    selectedStrategies.forEach(s => {
+      const name = s.name.toUpperCase();
+      let matched = "";
+      if (name.includes("EMA")) matched = "EMA";
+      else if (name.includes("RSI")) matched = "RSI";
+      else if (name.includes("MACD")) matched = "MACD";
+      else if (name.includes("BOLLINGER") || name.includes("BANDS")) matched = "BB";
+      else if (name.includes("VWAP")) matched = "VWAP";
+      else if (name.includes("ADX")) matched = "ADX";
+      else if (name.includes("DONCHIAN")) matched = "DONCHIAN";
+      else {
+        matched = s.name.replace(/BTC|ETH|SOL|LTC|DOGE|MINA|SUI|ADA/gi, '')
+                        .replace(/\d+[mhd]/gi, '')
+                        .trim();
+      }
+      if (matched && !strategyNames.includes(matched)) {
+        strategyNames.push(matched);
+      }
+    });
+
+    const mlNames = [];
+    selectedMlModels.forEach(m => {
+      const name = m.name.toUpperCase();
+      let matched = "";
+      if (name.includes("LSTM")) matched = "LSTM";
+      else if (name.includes("LIGHTGBM") || name.includes("LGBM")) matched = "LGBM";
+      else if (name.includes("XGBOOST") || name.includes("XGB")) matched = "XGB";
+      else if (name.includes("SVM")) matched = "SVM";
+      else if (name.includes("RANDOM FOREST") || name.includes("FOREST")) matched = "RF";
+      else if (name.includes("DECISION TREE") || name.includes("TREE")) matched = "DT";
+      else if (name.includes("LOGISTIC")) matched = "LR";
+      else matched = m.name;
+      
+      if (matched && !mlNames.includes(matched)) {
+        mlNames.push(matched);
+      }
+    });
+
+    const symbolPrefix = symbol.replace("USDT", "");
+    const tfVal = timeframe;
+    
+    const partsList = [
+      symbolPrefix,
+      tfVal,
+      ...strategyNames,
+      ...mlNames
+    ];
+
+    const finalGenerated = partsList.join(" ").replace(/\s+/g, ' ').trim();
+    setStrategyName(finalGenerated);
+  }, [selectedStrategies, selectedMlModels, combineLogic, isNameEdited, symbol, timeframe]);
 
   // ── Playbook handlers ─────────────────────────────────────────────────────
   const handleToggle = (item) => {
-    setSelectedStrategies((prev) => {
-      const exists = prev.some((s) => s.id === item.id);
-      return exists ? prev.filter((s) => s.id !== item.id) : [...prev, { id: item.id, name: item.name, persistBars: 2 }];
-    });
+    const exists = selectedStrategies.some((s) => s.id === item.id);
+    if (!exists) {
+      // Compatibility Check: Only allow combining strategies of the same asset/symbol
+      const extractBaseSymbol = (name) => {
+        const parts = name.toUpperCase().split(" ");
+        const symbols = ['BTC', 'ETH', 'SOL', 'LTC', 'DOGE', 'MINA', 'SUI', 'ADA'];
+        for (const part of parts) {
+          const clean = part.trim();
+          if (symbols.includes(clean)) return clean;
+        }
+        return null;
+      };
+
+      const itemSymbol = extractBaseSymbol(item.name);
+      if (itemSymbol && selectedStrategies.length > 0) {
+        const firstSelected = playbookItems.find(p => p.id === selectedStrategies[0].id);
+        if (firstSelected) {
+          const activeSymbol = extractBaseSymbol(firstSelected.name);
+          if (activeSymbol && activeSymbol !== itemSymbol) {
+            setSnackbar({
+              open: true,
+              message: `Conflict: You can only combine strategies for the same asset. Selected: ${activeSymbol}, tried to add: ${itemSymbol}.`,
+              severity: 'warning'
+            });
+            return;
+          }
+        }
+      }
+
+      setSelectedStrategies((prev) => [...prev, { id: item.id, name: item.name, persistBars: 2 }]);
+      
+      // Auto-prefill parameters with the selected template settings
+      const parts = item.name.split(" ");
+      const symbols = ['BTC', 'ETH', 'SOL', 'LTC', 'DOGE', 'MINA', 'SUI', 'ADA'];
+      const timeframes = ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w', '1H', '4H', '1D', '1W'];
+      
+      let foundSymbol = symbol;
+      let foundTimeframe = timeframe;
+      
+      parts.forEach(p => {
+        const clean = p.toUpperCase().trim();
+        if (symbols.includes(clean)) {
+          foundSymbol = clean;
+        }
+        const cleanTf = p.trim();
+        if (timeframes.includes(cleanTf)) {
+          let normTf = cleanTf;
+          if (normTf.toLowerCase().endsWith('m')) {
+            normTf = normTf.toLowerCase();
+          } else {
+            normTf = normTf.toUpperCase();
+          }
+          foundTimeframe = normTf;
+        }
+      });
+      
+      setSymbol(foundSymbol);
+      setTimeframe(foundTimeframe);
+      
+      // Prefill Start and End dates
+      if (item.start_time) {
+        setStartDate(item.start_time.split("T")[0]);
+      }
+      if (item.end_time) {
+        setEndDate(item.end_time.split("T")[0]);
+      }
+      
+      // Prefill Take Profit & Stop Loss
+      let config = item.strategy_config;
+      if (typeof config === "string") {
+        try {
+          config = JSON.parse(config);
+        } catch (e) {
+          config = {};
+        }
+      }
+      if (config) {
+        const tp = config.take_profit;
+        const sl = config.stop_loss;
+        if (tp != null) setTakeProfit(parseFloat(tp).toFixed(2));
+        if (sl != null) setStopLoss(parseFloat(sl).toFixed(2));
+
+        const pst = config.position_size_type;
+        const psv = config.position_size_value;
+        if (pst) setPositionSizeType(pst);
+        if (psv != null) setPositionSizeValue(psv.toString());
+      }
+      
+      setStrategyName(`${item.name} Custom`);
+    } else {
+      setSelectedStrategies((prev) => prev.filter((s) => s.id !== item.id));
+    }
   };
 
   const handlePersist = (id, delta) =>
@@ -207,65 +472,256 @@ export default function StrategyBuilder() {
     setSelectedMlModels((prev) => prev.map((m) => m.id === id ? { ...m, persistBars: Math.max(1, m.persistBars + delta) } : m));
 
   const handleAddMlModel = () => {
-    const next = ML_MODELS_LIST.find((m) => !selectedMlModels.some((sm) => sm.id === m.id));
-    if (next) setSelectedMlModels((prev) => [...prev, { ...next, persistBars: 1 }]);
-    else setSnackbar({ open: true, message: 'All available ML models are already added.', severity: 'info' });
+    const next = filteredMlModels.find((m) => !selectedMlModels.some((sm) => sm.id === m.model_id));
+    if (next) setSelectedMlModels((prev) => [...prev, { id: next.model_id, name: next.name, persistBars: 1 }]);
+    else setSnackbar({ open: true, message: 'All matching ML models are already added.', severity: 'info' });
   };
 
   // ── Backtest handler ──────────────────────────────────────────────────────
-  const handleRunBacktest = () => {
+  const handleRunBacktest = async () => {
     if (!selectedStrategies.length) {
       setSnackbar({ open: true, message: 'Please select at least one strategy from the playbook.', severity: 'warning' });
       return;
     }
+    
     setIsBacktesting(true);
-    setTimeout(() => {
-      setIsBacktesting(false);
-      setHasResults(true);
-      setBacktestResults({
-        totalReturn: parseFloat((Math.random() * 40 + 12).toFixed(2)),
-        winRate: parseFloat((Math.random() * 14 + 53).toFixed(2)),
-        totalTrades: Math.floor(Math.random() * 80 + 90),
-        profitFactor: parseFloat((Math.random() * 0.8 + 1.3).toFixed(2)),
-        maxDrawdown: parseFloat((-1 * (Math.random() * 8 + 7)).toFixed(2)),
-        sharpeRatio: parseFloat((Math.random() * 0.6 + 1.0).toFixed(2)),
+    setHasResults(false);
+
+    // 1. Build Consolidated Indicators Configuration
+    const consolidatedIndicators = {};
+    selectedStrategies.forEach(s => {
+      const playbookItem = playbookItems.find(p => p.id === s.id);
+      if (playbookItem && playbookItem.indicators_config) {
+        Object.entries(playbookItem.indicators_config).forEach(([indKey, indVal]) => {
+          if (!consolidatedIndicators[indKey]) {
+            consolidatedIndicators[indKey] = [];
+          }
+          const configs = Array.isArray(indVal) ? indVal : [indVal];
+          configs.forEach(cfg => {
+            const alreadyExists = consolidatedIndicators[indKey].some(
+              ex => JSON.stringify(ex) === JSON.stringify(cfg)
+            );
+            if (!alreadyExists) {
+              consolidatedIndicators[indKey].push(cfg);
+            }
+          });
+        });
+      }
+    });
+
+    // 2. Build Long and Short conditions
+    const longConditions = [];
+    const shortConditions = [];
+
+    selectedStrategies.forEach(s => {
+      const playbookItem = playbookItems.find(p => p.id === s.id);
+      if (playbookItem && playbookItem.strategy_config) {
+        const stratCfg = playbookItem.strategy_config;
+        const itemLongConds = stratCfg.long?.conditions || [];
+        const itemShortConds = stratCfg.short?.conditions || [];
+
+        itemLongConds.forEach(c => {
+          longConditions.push({
+            ...c,
+            persist_bars: s.persistBars || 0
+          });
+        });
+        itemShortConds.forEach(c => {
+          shortConditions.push({
+            ...c,
+            persist_bars: s.persistBars || 0
+          });
+        });
+      }
+    });
+
+    selectedMlModels.forEach(m => {
+      longConditions.push({
+        left: `ml_signal_${m.id}`,
+        operator: "==",
+        right: 1,
+        persist_bars: m.persistBars || 0
       });
-      setSnackbar({ open: true, message: 'Backtest executed successfully!', severity: 'success' });
-    }, 1000);
+      shortConditions.push({
+        left: `ml_signal_${m.id}`,
+        operator: "==",
+        right: -1,
+        persist_bars: m.persistBars || 0
+      });
+    });
+
+    const consolidatedStrategy = {
+      long: {
+        rule: combineLogic,
+        conditions: longConditions
+      },
+      short: {
+        rule: combineLogic,
+        conditions: shortConditions
+      },
+      stop_loss: parseFloat(stopLoss),
+      take_profit: parseFloat(takeProfit),
+      position_size_type: positionSizeType,
+      position_size_value: parseFloat(positionSizeValue)
+    };
+
+    try {
+      const payload = {
+        strategy_name: strategyName.trim() || "Dynamic Backtest Run",
+        exchange: 'bybit',
+        symbol: symbol,
+        timeframe,
+        start_date: startDate,
+        end_date: endDate,
+        indicators_config: consolidatedIndicators,
+        strategy_config: consolidatedStrategy
+      };
+
+      const res = await runDynamicBacktest(payload);
+      if (res && res.success) {
+        setBacktestResults({
+          totalReturn: parseFloat((res.metrics.net_pnl / 100).toFixed(2)),
+          winRate: parseFloat((res.metrics.win_rate * 100).toFixed(2)),
+          totalTrades: res.metrics.total_trades,
+          profitFactor: res.metrics.profit_factor || 1.5,
+          maxDrawdown: parseFloat(res.metrics.max_drawdown.toFixed(2)),
+          sharpeRatio: parseFloat(res.metrics.sharpe.toFixed(2)),
+        });
+        setHasResults(true);
+        reloadPlaybook();
+        setSnackbar({ open: true, message: 'Backtest executed successfully & saved to Playbook!', severity: 'success' });
+      } else {
+        setSnackbar({ open: true, message: `Backtest failed: ${res.message || 'Unknown error'}`, severity: 'error' });
+      }
+    } catch (err) {
+      console.error(err);
+      const errMsg = err.response?.data?.detail || err.message || err;
+      setSnackbar({ open: true, message: `Backtest failed: ${errMsg}`, severity: 'error' });
+    } finally {
+      setIsBacktesting(false);
+    }
   };
 
   // ── Save handler ──────────────────────────────────────────────────────────
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedStrategies.length) {
       setSnackbar({ open: true, message: 'Please assemble a strategy before saving.', severity: 'warning' });
       return;
     }
     if (!strategyName.trim()) {
-      setSnackbar({ open: true, message: 'Please enter a Strategy Name before saving.', severity: 'warning' });
+      setSnackbar({ open: true, message: 'Please provide a strategy name.', severity: 'warning' });
       return;
     }
-    const newRecord = {
-      id: savedBacktests.length + 1,
-      name: strategyName.trim(),
-      symbol, timeframe,
-      period: `${startDate} → ${endDate}`,
-      totalReturn: backtestResults.totalReturn,
-      winRate: backtestResults.winRate,
-      totalTrades: backtestResults.totalTrades,
-      profitFactor: backtestResults.profitFactor,
-      maxDrawdown: backtestResults.maxDrawdown,
-      sharpeRatio: backtestResults.sharpeRatio,
-      runAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+
+    // Build indicators config mapping
+    const consolidatedIndicators = {};
+    selectedStrategies.forEach(s => {
+      const playbookItem = playbookItems.find(p => p.id === s.id);
+      if (playbookItem && playbookItem.indicators_config) {
+        Object.entries(playbookItem.indicators_config).forEach(([indKey, indConfigList]) => {
+          if (!consolidatedIndicators[indKey]) {
+            consolidatedIndicators[indKey] = [];
+          }
+          indConfigList.forEach(item => {
+            consolidatedIndicators[indKey].push(item);
+          });
+        });
+      }
+    });
+
+    // Build Long and Short conditions
+    const longConditions = [];
+    const shortConditions = [];
+
+    selectedStrategies.forEach(s => {
+      const playbookItem = playbookItems.find(p => p.id === s.id);
+      if (playbookItem && playbookItem.strategy_config) {
+        const stratCfg = playbookItem.strategy_config;
+        const itemLongConds = stratCfg.long?.conditions || [];
+        const itemShortConds = stratCfg.short?.conditions || [];
+
+        itemLongConds.forEach(c => {
+          longConditions.push({
+            ...c,
+            persist_bars: s.persistBars || 0
+          });
+        });
+        itemShortConds.forEach(c => {
+          shortConditions.push({
+            ...c,
+            persist_bars: s.persistBars || 0
+          });
+        });
+      }
+    });
+
+    selectedMlModels.forEach(m => {
+      longConditions.push({
+        left: `ml_signal_${m.id}`,
+        operator: "==",
+        right: 1,
+        persist_bars: m.persistBars || 0
+      });
+      shortConditions.push({
+        left: `ml_signal_${m.id}`,
+        operator: "==",
+        right: -1,
+        persist_bars: m.persistBars || 0
+      });
+    });
+
+    const consolidatedStrategy = {
+      long: {
+        rule: combineLogic,
+        conditions: longConditions
+      },
+      short: {
+        rule: combineLogic,
+        conditions: shortConditions
+      },
+      stop_loss: parseFloat(stopLoss),
+      take_profit: parseFloat(takeProfit),
+      position_size_type: positionSizeType,
+      position_size_value: parseFloat(positionSizeValue)
     };
-    setSavedBacktests([newRecord, ...savedBacktests]);
-    setSnackbar({ open: true, message: `Strategy "${strategyName.trim()}" saved successfully!`, severity: 'success' });
-    setStrategyName('');
+
+    try {
+      const payload = {
+        strategy_name: strategyName.trim(),
+        exchange: 'bybit',
+        symbol: symbol,
+        timeframe,
+        indicators_config: consolidatedIndicators,
+        strategy_config: consolidatedStrategy
+      };
+
+      const res = await saveStrategy(payload);
+      if (res && res.success) {
+        setSnackbar({ open: true, message: `Strategy "${strategyName.trim()}" saved successfully!`, severity: 'success' });
+        setStrategyName('');
+        setIsNameEdited(false);
+        await reloadSavedStrategies();
+        await reloadPlaybook();
+      } else {
+        setSnackbar({ open: true, message: `Failed to save strategy: ${res.message || 'Unknown error'}`, severity: 'error' });
+      }
+    } catch (err) {
+      console.error(err);
+      const errMsg = err.response?.data?.detail || err.message || err;
+      setSnackbar({ open: true, message: `Failed to save strategy: ${errMsg}`, severity: 'error' });
+    }
   };
 
-  const filteredPlaybook = PLAYBOOK_ITEMS.filter((item) =>
-    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredPlaybook = playbookItems.filter((item) => {
+    return item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.category.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+
+  const filteredMlModels = mlModelsList.filter(model => {
+    const selectedTf = timeframe.toLowerCase();
+    const modelTf = (model.timeframe || "").toLowerCase();
+    return modelTf === selectedTf;
+  });
 
   // ── Shared card sx ────────────────────────────────────────────────────────
   const cardSx = {
@@ -276,6 +732,11 @@ export default function StrategyBuilder() {
     display: 'flex',
     flexDirection: 'column',
     transition: 'box-shadow 0.25s ease',
+  };
+
+  const workspaceCardSx = {
+    ...cardSx,
+    height: '560px',
   };
 
   return (
@@ -317,25 +778,10 @@ export default function StrategyBuilder() {
 
           <Stack direction="row" spacing={1.5} sx={{ zIndex: 1 }}>
             <Button
-              variant="outlined"
-              startIcon={isBacktesting ? <CircularProgress size={15} sx={{ color: '#fff' }} /> : <PlayArrowRoundedIcon />}
+              variant="contained"
+              startIcon={isBacktesting ? <CircularProgress size={15} sx={{ color: COLORS.accentDark }} /> : <PlayArrowRoundedIcon />}
               onClick={handleRunBacktest}
               disabled={isBacktesting}
-              sx={{
-                fontWeight: 700, borderRadius: '12px',
-                borderColor: 'rgba(255,255,255,0.6)',
-                color: '#fff',
-                background: 'rgba(255,255,255,0.12)',
-                backdropFilter: 'blur(6px)',
-                '&:hover': { borderColor: '#fff', background: 'rgba(255,255,255,0.22)' },
-              }}
-            >
-              {isBacktesting ? 'Running…' : 'Run Backtest'}
-            </Button>
-            <Button
-              variant="contained"
-              startIcon={<SaveRoundedIcon />}
-              onClick={handleSave}
               sx={{
                 fontWeight: 700, borderRadius: '12px',
                 background: '#ffffff',
@@ -344,7 +790,7 @@ export default function StrategyBuilder() {
                 '&:hover': { background: 'rgba(255,255,255,0.9)', boxShadow: '0 6px 22px rgba(0,0,0,0.3)' },
               }}
             >
-              Save Strategy
+              {isBacktesting ? 'Running…' : 'Run Backtest'}
             </Button>
           </Stack>
         </Box>
@@ -357,7 +803,10 @@ export default function StrategyBuilder() {
           </Box>
           <TextField
             value={strategyName}
-            onChange={(e) => setStrategyName(e.target.value)}
+            onChange={(e) => {
+              setStrategyName(e.target.value);
+              setIsNameEdited(e.target.value !== '');
+            }}
             placeholder="e.g. BTC EMA + RSI Confluence AND"
             size="small"
             sx={{ flex: 1, minWidth: 280 }}
@@ -380,32 +829,38 @@ export default function StrategyBuilder() {
           {/* ╔═══════════════════════════════════════════════════╗
               ║  COL 1 — PLAYBOOK                                ║
               ╚═══════════════════════════════════════════════════╝ */}
-          <Box sx={cardSx}>
+          <Box sx={workspaceCardSx}>
             <Box sx={{ p: '20px 20px 16px' }}>
               <SectionHeader step="01" title="Playbook Library" isDark={isDark} />
-              {/* Search */}
-              <Box sx={{
-                display: 'flex', alignItems: 'center', gap: 1,
-                background: surfaceAlt,
-                border: `1px solid ${border}`,
-                borderRadius: '12px',
-                px: 1.5, py: 0.75,
-              }}>
-                <SearchRoundedIcon sx={{ fontSize: 16, color: theme.palette.text.secondary }} />
-                <input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search strategies…"
-                  style={{
-                    background: 'transparent', border: 'none', outline: 'none',
-                    fontSize: '0.8125rem', color: theme.palette.text.primary,
-                    width: '100%', fontFamily: 'inherit',
-                  }}
-                />
-              </Box>
+                {/* Search */}
+                <Box sx={{ display: 'flex', gap: 1.25, width: '100%' }}>
+                  <Box sx={{
+                    display: 'flex', alignItems: 'center', gap: 1, flex: 1,
+                    background: surfaceAlt,
+                    border: `1px solid ${border}`,
+                    borderRadius: '12px',
+                    px: 1.5, py: 0.75,
+                  }}>
+                    <SearchRoundedIcon sx={{ fontSize: 16, color: theme.palette.text.secondary }} />
+                    <input
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search…"
+                      style={{
+                        background: 'transparent', border: 'none', outline: 'none',
+                        fontSize: '0.8125rem', color: theme.palette.text.primary,
+                        width: '100%', fontFamily: 'inherit',
+                      }}
+                    />
+                  </Box>
+                </Box>
             </Box>
 
-            <Box sx={{ px: 1.5, pb: 2, display: 'flex', flexDirection: 'column', gap: 0.75, maxHeight: 440, overflowY: 'auto' }}>
+            <Box sx={{
+              px: 1.5, pb: 2, display: 'flex', flexDirection: 'column', gap: 0.75, flex: 1, overflowY: 'auto',
+              '&::-webkit-scrollbar': { width: '5px' },
+              '&::-webkit-scrollbar-thumb': { background: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.15)', borderRadius: '4px' }
+            }}>
               {filteredPlaybook.map((item) => {
                 const isSelected = selectedStrategies.some((s) => s.id === item.id);
                 const ItemIcon = item.icon;
@@ -465,7 +920,7 @@ export default function StrategyBuilder() {
 
             <Box sx={{ px: 2.5, py: 1.5, borderTop: `1px solid ${border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Typography sx={{ fontSize: '0.6875rem', color: theme.palette.text.secondary }}>
-                {filteredPlaybook.length} / {PLAYBOOK_ITEMS.length} strategies
+                {filteredPlaybook.length} / {playbookItems.length}
               </Typography>
               <Chip
                 label={`${selectedStrategies.length} selected`}
@@ -478,7 +933,7 @@ export default function StrategyBuilder() {
           {/* ╔═══════════════════════════════════════════════════╗
               ║  COL 2 — BUILD STRATEGY                          ║
               ╚═══════════════════════════════════════════════════╝ */}
-          <Box sx={cardSx}>
+          <Box sx={workspaceCardSx}>
             <Box sx={{ p: '20px 20px 0' }}>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 0 }}>
                 <SectionHeader step="02" title="Build Strategy" isDark={isDark} />
@@ -490,7 +945,11 @@ export default function StrategyBuilder() {
               </Box>
             </Box>
 
-            <Box sx={{ px: 2, pb: 2, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{
+              px: 2, pb: 2, flex: 1, display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto',
+              '&::-webkit-scrollbar': { width: '5px' },
+              '&::-webkit-scrollbar-thumb': { background: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.15)', borderRadius: '4px' }
+            }}>
 
               {/* Selected Strategies */}
               <Box>
@@ -538,7 +997,7 @@ export default function StrategyBuilder() {
 
               {/* ML Models */}
               <Box>
-                <FieldLabel>Optional — ML Model (same timeframe)</FieldLabel>
+                <FieldLabel>ML Model (same timeframe)</FieldLabel>
                 <Stack spacing={1}>
                   {selectedMlModels.map((ml) => (
                     <Box key={ml.id} sx={{
@@ -568,16 +1027,52 @@ export default function StrategyBuilder() {
                       </Box>
                     </Box>
                   ))}
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    startIcon={<AddRoundedIcon />}
-                    onClick={handleAddMlModel}
-                    fullWidth
-                    sx={{ borderRadius: '12px', fontWeight: 700, fontSize: '0.75rem', borderColor: alpha(COLORS.accent, 0.4), color: COLORS.accent, py: 0.75, '&:hover': { borderColor: COLORS.accent, background: alpha(COLORS.accent, 0.08) } }}
-                  >
-                    Add Another ML Model
-                  </Button>
+                  {selectedMlModels.length === 0 && (
+                    <Select
+                      value=""
+                      onChange={(e) => {
+                        const modelId = e.target.value;
+                        if (!modelId) return;
+                        const next = mlModelsList.find((m) => m.model_id === modelId);
+                        if (next) {
+                          setSelectedMlModels((prev) => [...prev, { id: next.model_id, name: next.name, persistBars: 1 }]);
+                        }
+                      }}
+                      displayEmpty
+                      size="small"
+                      fullWidth
+                      sx={{
+                        borderRadius: '12px',
+                        fontSize: '0.75rem',
+                        color: COLORS.accent,
+                        background: surfaceAlt,
+                        height: 38,
+                        '& .MuiOutlinedInput-notchedOutline': {
+                          borderColor: alpha(COLORS.accent, 0.3)
+                        },
+                        '&:hover .MuiOutlinedInput-notchedOutline': {
+                          borderColor: COLORS.accent
+                        }
+                      }}
+                    >
+                      <MenuItem value="" disabled sx={{ fontSize: '0.75rem' }}>
+                        + Add ML Model (Timeframe: {timeframe})
+                      </MenuItem>
+                      {filteredMlModels.filter((m) => !selectedMlModels.some((sm) => sm.id === m.model_id)).length === 0 ? (
+                        <MenuItem value="" disabled sx={{ fontSize: '0.75rem' }}>
+                          No models available
+                        </MenuItem>
+                      ) : (
+                        filteredMlModels
+                          .filter((m) => !selectedMlModels.some((sm) => sm.id === m.model_id))
+                          .map((m) => (
+                            <MenuItem key={m.model_id} value={m.model_id} sx={{ fontSize: '0.75rem' }}>
+                              {m.name} ({m.timeframe})
+                            </MenuItem>
+                          ))
+                      )}
+                    </Select>
+                  )}
                 </Stack>
               </Box>
 
@@ -620,12 +1115,17 @@ export default function StrategyBuilder() {
           {/* ╔═══════════════════════════════════════════════════╗
               ║  COL 3 — BACKTEST CONFIGURATION                  ║
               ╚═══════════════════════════════════════════════════╝ */}
-          <Box sx={cardSx}>
+          <Box sx={workspaceCardSx}>
             <Box sx={{ p: '20px 20px 16px' }}>
               <SectionHeader step="03" title="Backtest Configuration" isDark={isDark} />
             </Box>
 
-            <Box sx={{ px: 2, pb: 2.5, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ px: 2, pb: 2.5, flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minHeight: 0 }}>
+              <Box sx={{
+                flex: 1, display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto', pr: 0.5,
+                '&::-webkit-scrollbar': { width: '5px' },
+                '&::-webkit-scrollbar-thumb': { background: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.15)', borderRadius: '4px' }
+              }}>
 
               {/* Symbol & Timeframe */}
               <Box>
@@ -634,13 +1134,13 @@ export default function StrategyBuilder() {
                   <Grid item xs={6}>
                     <Typography sx={{ fontSize: '0.6875rem', color: theme.palette.text.secondary, mb: 0.5 }}>Symbol</Typography>
                     <Select value={symbol} onChange={(e) => setSymbol(e.target.value)} fullWidth size="small">
-                      {['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'LTCUSDT', 'DOGEUSDT', 'MINAUSDT', 'SUIUSDT', 'ADAUSDT'].map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+                      {['BTC', 'ETH', 'SOL', 'LTC', 'DOGE', 'MINA', 'SUI', 'ADA'].map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
                     </Select>
                   </Grid>
                   <Grid item xs={6}>
-                    <Typography sx={{ fontSize: '0.6875rem', color: theme.palette.text.secondary, mb: 0.5 }}>Timeframe</Typography>
+                    <Typography sx={{ fontSize: '0.6875rem', color: theme.palette.text.secondary, mb: 0.5 }}>Target Timeframe</Typography>
                     <Select value={timeframe} onChange={(e) => setTimeframe(e.target.value)} fullWidth size="small">
-                      {['1m', '5m', '15m', '30m', '1H', '4H', '1D', '1W'].map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+                      {['1m', '5m', '15m', '30m', '1h', '4h', '1D', '1W'].map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
                     </Select>
                   </Grid>
                   <Grid item xs={6}>
@@ -680,6 +1180,7 @@ export default function StrategyBuilder() {
                     <TextField type="number" value={positionSizeValue} onChange={(e) => setPositionSizeValue(e.target.value)} fullWidth size="small" />
                   </Grid>
                 </Grid>
+              </Box>
               </Box>
 
               {/* Run Backtest */}
@@ -741,7 +1242,36 @@ export default function StrategyBuilder() {
               </Box>
               <Typography variant="h6" sx={{ fontWeight: 800, fontSize: '0.875rem' }}>Saved Backtests & Strategies</Typography>
             </Box>
-            <Chip label={`${savedBacktests.length} records`} size="small" sx={{ height: 22, fontSize: '0.625rem', fontWeight: 800, background: surfaceAlt, color: theme.palette.text.secondary }} />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Select
+                value={tableFilterSymbol}
+                onChange={(e) => { setTableFilterSymbol(e.target.value); setPage(0); }}
+                size="small"
+                sx={{
+                  height: 22,
+                  fontSize: '0.625rem',
+                  fontWeight: 800,
+                  minWidth: 100,
+                  color: theme.palette.text.secondary,
+                  background: surfaceAlt,
+                  borderRadius: '10px',
+                  '.MuiOutlinedInput-notchedOutline': { borderColor: 'transparent' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'transparent' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'transparent' },
+                  '.MuiSelect-select': { py: 0, display: 'flex', alignItems: 'center' }
+                }}
+              >
+                <MenuItem value="ALL" sx={{ fontSize: '0.75rem', fontWeight: 700 }}>All Coins</MenuItem>
+                <MenuItem value="BTC" sx={{ fontSize: '0.75rem', fontWeight: 700 }}>BTC</MenuItem>
+                <MenuItem value="ETH" sx={{ fontSize: '0.75rem', fontWeight: 700 }}>ETH</MenuItem>
+                <MenuItem value="SOL" sx={{ fontSize: '0.75rem', fontWeight: 700 }}>SOL</MenuItem>
+                <MenuItem value="LTC" sx={{ fontSize: '0.75rem', fontWeight: 700 }}>LTC</MenuItem>
+                <MenuItem value="DOGE" sx={{ fontSize: '0.75rem', fontWeight: 700 }}>DOGE</MenuItem>
+                <MenuItem value="SUI" sx={{ fontSize: '0.75rem', fontWeight: 700 }}>SUI</MenuItem>
+                <MenuItem value="ADA" sx={{ fontSize: '0.75rem', fontWeight: 700 }}>ADA</MenuItem>
+              </Select>
+              <Chip label={`${filteredTableBacktests.length} records`} size="small" sx={{ height: 22, fontSize: '0.625rem', fontWeight: 800, background: surfaceAlt, color: theme.palette.text.secondary }} />
+            </Box>
           </Box>
 
           <TableContainer sx={{ borderRadius: '0 0 20px 20px' }}>
@@ -749,27 +1279,66 @@ export default function StrategyBuilder() {
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ width: '4%', px: 1.5 }}>#</TableCell>
-                  <TableCell sx={{ width: '24%', px: 1.5 }}>Strategy Name</TableCell>
-                  <TableCell sx={{ width: '8%', px: 1 }}>Symbol</TableCell>
-                  <TableCell sx={{ width: '6%', px: 1 }}>TF</TableCell>
-                  <TableCell sx={{ width: '10%', px: 1.5 }} align="right">Return</TableCell>
-                  <TableCell sx={{ width: '10%', px: 1.5 }} align="right">Win Rate</TableCell>
-                  <TableCell sx={{ width: '8%', px: 1.5 }} align="right">Trades</TableCell>
-                  <TableCell sx={{ width: '10%', px: 1.5 }} align="right">P.Factor</TableCell>
-                  <TableCell sx={{ width: '10%', px: 1.5 }} align="right">Max DD</TableCell>
-                  <TableCell sx={{ width: '9%', px: 1.5 }} align="right">Sharpe</TableCell>
-                  <TableCell sx={{ width: '8%', px: 0.5 }} align="center">Action</TableCell>
+                  <TableCell
+                    sx={{ width: '25%', px: 1.5, cursor: 'pointer', '&:hover': { color: COLORS.accent }, userSelect: 'none' }}
+                    onClick={() => handleSort('name')}
+                  >
+                    {sortField === 'name' ? (sortOrder === 'asc' ? '↑ ' : '↓ ') : ''}Strategy Name
+                  </TableCell>
+                  <TableCell
+                    sx={{ width: '8%', px: 1, cursor: 'pointer', '&:hover': { color: COLORS.accent }, userSelect: 'none' }}
+                    onClick={() => handleSort('symbol')}
+                  >
+                    {sortField === 'symbol' ? (sortOrder === 'asc' ? '↑ ' : '↓ ') : ''}Symbol
+                  </TableCell>
+                  <TableCell
+                    sx={{ width: '8%', px: 1, cursor: 'pointer', '&:hover': { color: COLORS.accent }, userSelect: 'none' }}
+                    onClick={() => handleSort('timeframe')}
+                  >
+                    {sortField === 'timeframe' ? (sortOrder === 'asc' ? '↑ ' : '↓ ') : ''}TF
+                  </TableCell>
+                  <TableCell
+                    sx={{ width: '11%', px: 1.5, cursor: 'pointer', '&:hover': { color: COLORS.accent }, userSelect: 'none' }}
+                    align="right"
+                    onClick={() => handleSort('totalReturn')}
+                  >
+                    {sortField === 'totalReturn' ? (sortOrder === 'asc' ? '↑ ' : '↓ ') : ''}Return
+                  </TableCell>
+                  <TableCell
+                    sx={{ width: '11%', px: 1.5, cursor: 'pointer', '&:hover': { color: COLORS.accent }, userSelect: 'none' }}
+                    align="right"
+                    onClick={() => handleSort('winRate')}
+                  >
+                    {sortField === 'winRate' ? (sortOrder === 'asc' ? '↑ ' : '↓ ') : ''}Win Rate
+                  </TableCell>
+                  <TableCell
+                    sx={{ width: '10%', px: 1.5, cursor: 'pointer', '&:hover': { color: COLORS.accent }, userSelect: 'none' }}
+                    align="right"
+                    onClick={() => handleSort('totalTrades')}
+                  >
+                    {sortField === 'totalTrades' ? (sortOrder === 'asc' ? '↑ ' : '↓ ') : ''}Trades
+                  </TableCell>
+                  <TableCell
+                    sx={{ width: '10%', px: 1.5, cursor: 'pointer', '&:hover': { color: COLORS.accent }, userSelect: 'none' }}
+                    align="right"
+                    onClick={() => handleSort('runAt')}
+                  >
+                    {sortField === 'runAt' ? (sortOrder === 'asc' ? '↑ ' : '↓ ') : ''}Date
+                  </TableCell>
+                  <TableCell sx={{ width: '13%', px: 0.5 }} align="center">Action</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {savedBacktests.map((row, idx) => (
+                {paginatedBacktests.map((row, idx) => (
                   <TableRow key={row.id} hover>
-                    <TableCell sx={{ color: theme.palette.text.secondary, fontSize: '0.75rem', px: 1.5 }}>{idx + 1}</TableCell>
+                    <TableCell sx={{ color: theme.palette.text.secondary, fontSize: '0.75rem', px: 1.5 }}>
+                      {startIndex + idx + 1}
+                    </TableCell>
                     <TableCell sx={{ px: 1.5 }}>
                       <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name}</Typography>
                     </TableCell>
                     <TableCell sx={{ px: 1 }}>
-                      <Chip label={row.symbol.replace('USDT', '')} size="small" sx={{ height: 19, fontSize: '0.5625rem', fontWeight: 800, background: alpha(COLORS.accent, 0.14), color: COLORS.accent }} />
+                      <Chip label={row.symbol.replace('USDT', '').replace('/', '')} size="small" sx={{ height: 19, fontSize: '0.5625rem', fontWeight: 800, background: alpha(COLORS.accent, 0.14), color: COLORS.accent }} />
                     </TableCell>
                     <TableCell sx={{ px: 1 }}>
                       <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: theme.palette.text.secondary }}>{row.timeframe}</Typography>
@@ -785,15 +1354,9 @@ export default function StrategyBuilder() {
                       </Typography>
                     </TableCell>
                     <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', px: 1.5 }}>{row.totalTrades}</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', px: 1.5 }}>{row.profitFactor.toFixed(2)}</TableCell>
                     <TableCell align="right" sx={{ px: 1.5 }}>
-                      <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: COLORS.pnlRed }}>
-                        {row.maxDrawdown.toFixed(2)}%
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right" sx={{ px: 1.5 }}>
-                      <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: row.sharpeRatio < 0 ? COLORS.pnlRed : (row.sharpeRatio > 0 ? COLORS.pnlGreen : theme.palette.text.primary) }}>
-                        {row.sharpeRatio.toFixed(2)}
+                      <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: theme.palette.text.secondary }}>
+                        {row.runAt}
                       </Typography>
                     </TableCell>
                     <TableCell align="center" sx={{ px: 0.5 }}>
@@ -811,6 +1374,33 @@ export default function StrategyBuilder() {
               </TableBody>
             </Table>
           </TableContainer>
+
+          <TablePagination
+            component="div"
+            count={sortedBacktests.length}
+            page={page}
+            onPageChange={(_, p) => setPage(p)}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(e) => {
+              setRowsPerPage(parseInt(e.target.value, 10));
+              setPage(0);
+            }}
+            rowsPerPageOptions={[5, 10, 25]}
+            sx={{
+              borderTop: `1px solid ${border}`,
+              color: theme.palette.text.secondary,
+              '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+                fontSize: '0.75rem',
+              },
+              '.MuiTablePagination-select': {
+                fontSize: '0.75rem',
+                fontWeight: 700,
+              },
+              '.MuiTablePagination-actions svg': {
+                color: theme.palette.text.primary,
+              }
+            }}
+          />
         </Box>
 
         {/* ── Toast ──────────────────────────────────────────────────────── */}

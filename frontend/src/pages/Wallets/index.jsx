@@ -41,6 +41,7 @@ import SearchBar from '../../components/ui/SearchBar';
 import EquityCurveChart from '../../components/charts/EquityCurveChart';
 import { useMockFetch } from '../../hooks/useMockFetch';
 import { getWallets, deleteWallet, toggleWalletStatus, addWallet } from '../../api/walletsApi';
+import { toggleStrategyExecution } from '../../api/strategiesApi';
 import { COLORS } from '../../theme/theme';
 
 import AccountBalanceWalletRoundedIcon from '@mui/icons-material/AccountBalanceWalletRounded';
@@ -499,6 +500,34 @@ export default function Wallets() {
     refetch();
   };
 
+  const handleToggleExecution = async (strategyId, enabled) => {
+    try {
+      const res = await toggleStrategyExecution(strategyId, enabled);
+      if (res && res.success) {
+        setSnack(enabled ? 'Strategy activated successfully!' : 'Strategy deactivated successfully!');
+        
+        // Update selectedWallet's assigned_strategies state locally to reflect the change instantly
+        setSelectedWallet(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            assigned_strategies: prev.assigned_strategies.map(s => 
+              (s.strategy_id === strategyId || s.id === strategyId) ? { ...s, execution_enabled: enabled } : s
+            )
+          };
+        });
+        
+        // Refetch backend wallets list
+        refetch();
+      } else {
+        setSnack('Failed to toggle strategy execution.');
+      }
+    } catch (err) {
+      console.error(err);
+      setSnack('Error toggling strategy execution.');
+    }
+  };
+
   return (
     <PageContainer title="Wallet Management">
       <Box sx={{ pt: 2 }}>
@@ -802,7 +831,7 @@ export default function Wallets() {
               >
                 <Tab label={`Active Positions (${selectedWallet.active_positions?.length ?? 0})`} sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
                 <Tab label={`Open Orders (${selectedWallet.open_orders?.length ?? 0})`} sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
-                <Tab label={`Assigned Strategies (${selectedWallet.assigned_strategies?.length ?? 0})`} sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
+                <Tab label={`Assigned Strategies (${selectedWallet.assigned_strategies?.filter(s => s.execution_enabled).length ?? 0})`} sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
               </Tabs>
 
               {detailTab === 0 && (
@@ -940,12 +969,13 @@ export default function Wallets() {
                         <TableCell sx={{ fontWeight: 700 }}>Symbol</TableCell>
                         <TableCell sx={{ fontWeight: 700 }}>Exchange</TableCell>
                         <TableCell sx={{ fontWeight: 700 }}>Timeframe</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }} align="center">Execution Status</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {(!selectedWallet.assigned_strategies || selectedWallet.assigned_strategies.length === 0) ? (
                         <TableRow>
-                          <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
+                          <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
                             <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
                               No assigned strategies found for this wallet.
                             </Typography>
@@ -964,6 +994,21 @@ export default function Wallets() {
                             </TableCell>
                             <TableCell><Typography variant="body2" sx={{ textTransform: 'capitalize' }}>{s.exchange}</Typography></TableCell>
                             <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{s.timeframe}</Typography></TableCell>
+                            <TableCell align="center">
+                              <Switch
+                                size="small"
+                                checked={s.execution_enabled}
+                                onChange={(e) => handleToggleExecution(s.strategy_id || s.id, e.target.checked)}
+                                sx={{
+                                  '& .MuiSwitch-switchBase.Mui-checked': {
+                                    color: COLORS.accent,
+                                  },
+                                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                                    backgroundColor: COLORS.accent,
+                                  },
+                                }}
+                              />
+                            </TableCell>
                           </TableRow>
                         ))
                       )}

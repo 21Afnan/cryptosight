@@ -37,6 +37,13 @@ import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
 import ShowChartRoundedIcon from '@mui/icons-material/ShowChartRounded';
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
+import LocalAtmRoundedIcon from '@mui/icons-material/LocalAtmRounded';
+import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded';
+import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded';
+import BarChartRoundedIcon from '@mui/icons-material/BarChartRounded';
+import ShieldRoundedIcon from '@mui/icons-material/ShieldRounded';
+import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
+import SensorsRoundedIcon from '@mui/icons-material/SensorsRounded';
 
 function safeCurrency(val, fallback = '—') {
   if (val === null || val === undefined) return fallback;
@@ -97,6 +104,76 @@ function ChartCard({ title, children, height = 240 }) {
   );
 }
 
+function HeroKpiCard({ icon, label, value, subtext, color, glowColor }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+
+  const activeColor = color || '#0ECB81';
+  const activeGlow = glowColor || activeColor;
+
+  const cardBg = isDark ? COLORS.darkSurface : '#ffffff';
+
+  const cardShadow = isDark
+    ? `0 6px 22px ${activeGlow ? activeGlow + '30' : 'rgba(0,0,0,0.4)'}`
+    : `0 8px 26px ${activeGlow ? activeGlow + '35' : 'rgba(14, 203, 129, 0.28)'}`;
+
+  const hoverShadow = isDark
+    ? `0 10px 32px ${activeGlow ? activeGlow + '45' : 'rgba(0,0,0,0.6)'}`
+    : `0 14px 36px ${activeGlow ? activeGlow + '50' : 'rgba(14, 203, 129, 0.40)'}`;
+
+  return (
+    <Card
+      sx={{
+        background: cardBg,
+        border: 'none',
+        borderRadius: 3.5, // 28px rounded for beautiful pill-like cards
+        boxShadow: cardShadow,
+        width: '100%',
+        height: '115px',
+        boxSizing: 'border-box',
+        display: 'flex',
+        alignItems: 'center',
+        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        '&:hover': {
+          transform: 'translateY(-3px)',
+          boxShadow: hoverShadow,
+        },
+      }}
+    >
+      <CardContent sx={{ p: '16px 20px !important', width: '100%', boxSizing: 'border-box' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.75, width: '100%' }}>
+          <Box
+            sx={{
+              width: 46,
+              height: 46,
+              borderRadius: '50%', // Circle icons exactly as shown in screenshot
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: activeGlow ? `${activeGlow}18` : 'rgba(140, 150, 170, 0.12)',
+              color: activeColor,
+            }}
+          >
+            {icon}
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {label}
+            </Typography>
+            <Typography variant="h4" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: activeColor, lineHeight: 1.15, fontSize: '1.45rem', my: 0.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {value}
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11, fontWeight: 500, display: 'block', height: 16, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {subtext || ' '}
+            </Typography>
+          </Box>
+        </Box>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ExecutionDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -137,13 +214,13 @@ export default function ExecutionDetails() {
   const positionSizeData = exec.position_size_history?.length
     ? exec.position_size_history
     : (exec.trades ?? []).map((t, idx) => {
-        const rawVal = t.quantity && t.entry_price ? (t.quantity * t.entry_price) : (t.quantity || 1000);
-        return {
-          trade: t.trade_id || `#${idx + 1}`,
-          size: Math.round(Number(rawVal) || 1000),
-          side: (t.side || 'LONG').toLowerCase(),
-        };
-      });
+      const rawVal = t.quantity && t.entry_price ? (t.quantity * t.entry_price) : (t.quantity || 1000);
+      return {
+        trade: t.trade_id || `#${idx + 1}`,
+        size: Math.round(Number(rawVal) || 1000),
+        side: (t.side || 'LONG').toLowerCase(),
+      };
+    });
 
   // Build trade markers for TradeHistoryChart directly from real DB trades or signals
   const tradeMarkers = (exec.trades?.length ? exec.trades : (exec.signal_history ?? []))
@@ -187,20 +264,72 @@ export default function ExecutionDetails() {
           }}
         >
           {[
-            { label: 'Current PnL', value: safeCurrency(exec.current_pnl ?? exec.net_pnl), color: (exec.current_pnl ?? exec.net_pnl ?? 0) >= 0 ? COLORS.pnlGreen : COLORS.pnlRed },
-            { label: 'PnL %', value: safePercent(exec.current_pnl_pct), color: (exec.current_pnl_pct ?? 0) >= 0 ? COLORS.pnlGreen : COLORS.pnlRed },
-            { label: 'Win Rate', value: safePercent(exec.win_rate), color: (exec.win_rate ?? 0) >= 0.5 ? COLORS.pnlGreen : theme.palette.text.primary, sub: exec.winning_trades != null ? `${exec.winning_trades}W / ${exec.losing_trades ?? 0}L` : '' },
-            { label: 'Profit Factor', value: exec.profit_factor ? Number(exec.profit_factor).toFixed(2) : '—', color: (exec.profit_factor ?? 0) >= 1.2 ? COLORS.pnlGreen : theme.palette.text.primary },
-            { label: 'Total Trades', value: exec.total_trades != null ? `${exec.total_trades} trades` : '—' },
-            { label: 'Max Drawdown', value: safePercent(exec.max_drawdown), color: (exec.max_drawdown ?? 0) < 0 ? COLORS.pnlRed : theme.palette.text.primary },
-            { label: 'Last Signal', value: exec.last_signal ? String(exec.last_signal).toUpperCase() : '—' },
-            { label: 'Last Execution', value: safeDate(exec.last_execution_time) },
-          ].map(({ label, value, color, sub }) => (
-            <Card key={label} sx={{ textAlign: 'center', p: 2, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 6px 20px rgba(0,0,0,0.06)' }}>
-              <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 10, display: 'block' }}>{label}</Typography>
-              <Typography variant="h5" sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: color || theme.palette.text.primary, fontSize: '1.05rem', mt: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</Typography>
-              {sub && <Typography variant="caption" sx={{ color: theme.palette.text.secondary, fontSize: 10, mt: 0.25 }}>{sub}</Typography>}
-            </Card>
+            {
+              label: 'Current PnL',
+              value: safeCurrency(exec.current_pnl ?? exec.net_pnl),
+              color: (exec.current_pnl ?? exec.net_pnl ?? 0) >= 0 ? COLORS.pnlGreen : COLORS.pnlRed,
+              subtext: (exec.current_pnl ?? exec.net_pnl ?? 0) >= 0 ? 'Total dollar gain' : 'Total dollar loss',
+              icon: <LocalAtmRoundedIcon />,
+            },
+            {
+              label: 'PnL %',
+              value: safePercent(exec.current_pnl_pct),
+              color: (exec.current_pnl_pct ?? 0) >= 0 ? COLORS.pnlGreen : COLORS.pnlRed,
+              subtext: 'Percentage gain/loss',
+              icon: <TrendingUpRoundedIcon />,
+            },
+            {
+              label: 'Win Rate',
+              value: safePercent(exec.win_rate),
+              color: (exec.win_rate ?? 0) >= 0.5 ? COLORS.pnlGreen : COLORS.pnlRed,
+              subtext: exec.winning_trades != null ? `${exec.winning_trades}W / ${exec.losing_trades ?? 0}L` : 'Win/loss ratio',
+              icon: <SpeedRoundedIcon />,
+            },
+            {
+              label: 'Profit Factor',
+              value: exec.profit_factor ? Number(exec.profit_factor).toFixed(2) : '—',
+              color: (exec.profit_factor ?? 0) >= 1.2 ? COLORS.pnlGreen : theme.palette.text.primary,
+              subtext: 'Gross profit/loss ratio',
+              icon: <BarChartRoundedIcon />,
+            },
+            {
+              label: 'Total Trades',
+              value: exec.total_trades != null ? String(exec.total_trades) : '—',
+              color: theme.palette.text.primary,
+              subtext: 'Executed trades count',
+              icon: <BarChartRoundedIcon />,
+            },
+            {
+              label: 'Max Drawdown',
+              value: safePercent(exec.max_drawdown),
+              color: COLORS.pnlRed,
+              subtext: 'Peak-to-trough decline',
+              icon: <ShieldRoundedIcon />,
+            },
+            {
+              label: 'Last Signal',
+              value: exec.last_signal ? String(exec.last_signal).toUpperCase() : '—',
+              color: exec.last_signal?.toLowerCase() === 'buy' || exec.last_signal?.toLowerCase() === 'long' ? COLORS.pnlGreen : (exec.last_signal?.toLowerCase() === 'sell' || exec.last_signal?.toLowerCase() === 'short' ? COLORS.pnlRed : theme.palette.text.primary),
+              subtext: 'Most recent signal type',
+              icon: <SensorsRoundedIcon />,
+            },
+            {
+              label: 'Last Execution',
+              value: safeDate(exec.last_execution_time),
+              color: theme.palette.text.primary,
+              subtext: 'Last trade execution time',
+              icon: <AccessTimeRoundedIcon />,
+            },
+          ].map(({ label, value, color, subtext, icon }) => (
+            <HeroKpiCard
+              key={label}
+              label={label}
+              value={value}
+              subtext={subtext}
+              icon={icon}
+              color={color}
+              glowColor={color}
+            />
           ))}
         </Box>
 

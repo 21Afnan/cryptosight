@@ -79,18 +79,14 @@ class BacktestingEngine:
 
         self.logger.info(f"=== Backtesting Strategy: '{strategy_name}' [{str(exchange).upper()} {str(symbol).upper()} {target_tf}] ===")
 
-        # 1. Fetch OHLCV price candles
+        # 1. Try fetching target OHLCV price candles directly from DB
         conn = get_connection()
         try:
             ohlcv_df = fetch_ohlcv(conn, exchange, symbol, base_tf, start_time, end_time)
         finally:
             conn.close()
 
-        if ohlcv_df.empty:
-            self.logger.warning(f"No OHLCV candles found for strategy '{strategy_name}'. Skipping.")
-            return pd.DataFrame()
-
-        # 2. Run signals pipeline for this strategy dictionary
+        # 2. Run signals pipeline for this strategy dictionary (uses Downloader to resample 1m candles if target table is missing)
         full_df = run_signals_pipeline(strat_dict=strat_dict)
         if full_df.empty or "signal" not in full_df.columns:
             self.logger.warning(f"No signals generated for strategy '{strategy_name}'. Skipping.")
@@ -119,10 +115,17 @@ class BacktestingEngine:
         except Exception as e:
             self.logger.warning(f"Could not save strategy metadata to DB for '{strategy_name}': {e}")
 
-        signals_df = full_df[["signal"]]
-
-        # 3. Merge candles with signals
-        merged_df = self.merge_data(ohlcv_df, signals_df)
+        # 3. Merge candles with signals (fallback to resampled candles if direct table query was empty)
+        if ohlcv_df.empty:
+            if not full_df.empty and all(c in full_df.columns for c in ["open", "high", "low", "close", "volume", "signal"]):
+                self.logger.info("Using resampled candles from signals pipeline since direct TF table does not exist.")
+                merged_df = full_df[["open", "high", "low", "close", "volume", "signal"]].copy()
+            else:
+                self.logger.warning(f"No OHLCV candles found for strategy '{strategy_name}'. Skipping.")
+                return pd.DataFrame()
+        else:
+            signals_df = full_df[["signal"]]
+            merged_df = self.merge_data(ohlcv_df, signals_df)
 
         # 4. Locate trade entries and execution prices
         entries_df = self.determine_entries(merged_df)
@@ -200,7 +203,6 @@ class BacktestingEngine:
                 symbol=symbol,
                 timeframe=base_tf,
                 strategy_id=clean_table,
-                run_id=run_id,
             )
             insert_backtest_ledger(
                 conn,
@@ -209,7 +211,6 @@ class BacktestingEngine:
                 timeframe=base_tf,
                 ledger_df=ledger_df,
                 strategy_id=clean_table,
-                run_id=run_id,
             )
 
             if strat_id_num:

@@ -6,6 +6,7 @@ No fake fallback datasets or hardcoded defaults are used.
 """
 
 import json
+import math
 import re
 from datetime import datetime, timedelta
 import numpy as np
@@ -312,7 +313,7 @@ def get_backtest_by_id(identifier: str) -> dict:
                 cursor.execute("""
                     SELECT s.strategy_id, s.strategy_name, s.exchange, s.symbol, s.target_timeframe,
                            COALESCE(bs.status, 'completed'), bs.metrics, bs.charts, s.strategy_config,
-                           bd.backtest_config
+                           bd.backtest_config, bd.net_pnl, bd.win_rate, bd.total_trades
                     FROM metadata.strategy_data s
                     LEFT JOIN backtests.stats bs ON s.strategy_id = bs.strategy_id
                     LEFT JOIN metadata.backtest_data bd ON s.strategy_id = bd.strategy_id
@@ -322,7 +323,7 @@ def get_backtest_by_id(identifier: str) -> dict:
                 cursor.execute("""
                     SELECT s.strategy_id, s.strategy_name, s.exchange, s.symbol, s.target_timeframe,
                            COALESCE(bs.status, 'completed'), bs.metrics, bs.charts, s.strategy_config,
-                           bd.backtest_config
+                           bd.backtest_config, bd.net_pnl, bd.win_rate, bd.total_trades
                     FROM metadata.strategy_data s
                     LEFT JOIN backtests.stats bs ON s.strategy_id = bs.strategy_id
                     LEFT JOIN metadata.backtest_data bd ON s.strategy_id = bd.strategy_id
@@ -339,6 +340,9 @@ def get_backtest_by_id(identifier: str) -> dict:
                 status = str(row[5]) if row[5] else "completed"
                 raw_m, raw_c = row[6], row[7]
                 raw_strat_cfg, raw_bt_cfg = row[8], row[9]
+                bd_net_pnl = float(row[10] or 0.0) if (len(row) > 10 and row[10] is not None) else 0.0
+                bd_win_rate = float(row[11] or 0.0) if (len(row) > 11 and row[11] is not None) else 0.0
+                bd_total_trades = int(row[12] or 0) if (len(row) > 12 and row[12] is not None) else 0
 
                 if raw_m:
                     metrics = raw_m if isinstance(raw_m, dict) else json.loads(raw_m)
@@ -360,6 +364,9 @@ def get_backtest_by_id(identifier: str) -> dict:
                     "table_name": table_name,
                     "status": status,
                     "error_message": None,
+                    "net_pnl": bd_net_pnl,
+                    "win_rate": bd_win_rate,
+                    "total_trades": bd_total_trades,
                 }
 
             if strat_meta:
@@ -430,8 +437,9 @@ def get_backtest_by_id(identifier: str) -> dict:
     rolling_metrics = _extract_list(charts.get("rolling_metrics"))
     pnl_per_trade = _extract_list(charts.get("pnl_per_trade"))
 
+    initial_balance = float(run_cfg.get("initial_balance", 10000.0))
     if (not equity_curve or not drawdown_curve or not monthly_returns or not rolling_metrics or not pnl_per_trade) and trades:
-        gen_charts = generate_charts_from_trades(trades, initial_balance=float(run_cfg.get("initial_balance", 10000.0)))
+        gen_charts = generate_charts_from_trades(trades, initial_balance=initial_balance)
         if not equity_curve:
             equity_curve = gen_charts["equity_curve"]
         if not drawdown_curve:
@@ -451,28 +459,107 @@ def get_backtest_by_id(identifier: str) -> dict:
             "side": str(t.get("side") or t.get("direction") or "LONG").upper(),
         } for i, t in enumerate(trades)]
 
+    # Compute fallback stats directly from trades ledger if QuantStats is empty/NaN
+    calc_win_rate = 0.0
+    calc_net_pnl = 0.0
+    calc_sharpe = 0.0
+    calc_sortino = 0.0
+    calc_calmar = 0.0
+    calc_max_dd = 0.0
+    calc_cagr = 0.0
+    calc_pf = 0.0
+
+    if trades:
+        tot_tr = len(trades)
+        wins = sum(1 for t in trades if float(t.get("net_pnl", 0.0)) > 0)
+        calc_win_rate = wins / tot_tr if tot_tr > 0 else 0.0
+        calc_net_pnl = sum(float(t.get("net_pnl", 0.0)) for t in trades)
+        
+        current_bal = initial_balance
+        peak_bal = initial_balance
+        min_dd = 0.0
+        pnl_history = []
+        
+        for t in trades:
+            p = float(t.get("net_pnl", 0.0))
+            pnl_history.append(p)
+            current_bal += p
+            if current_bal > peak_bal:
+                peak_bal = current_bal
+            dd_val = (current_bal - peak_bal) / peak_bal if peak_bal > 0 else 0.0
+            if dd_val < min_dd:
+                min_dd = dd_val
+        
+        calc_max_dd = min_dd
+        
+        if len(pnl_history) > 0:
+            arr = np.array(pnl_history)
+            mean_pnl = float(np.mean(arr))
+            std_pnl = float(np.std(arr))
+            calc_sharpe = float((mean_pnl / std_pnl * np.sqrt(252)) if std_pnl > 0 else 0.0)
+            
+            downside = arr[arr < 0]
+            downside_std = float(np.std(downside)) if len(downside) > 0 else (std_pnl if std_pnl > 0 else 0.0)
+            calc_sortino = float((mean_pnl / downside_std * np.sqrt(252)) if downside_std > 0 else 0.0)
+            
+            calc_calmar = float(abs((current_bal - initial_balance) / initial_balance / min_dd) if min_dd < 0 else 0.0)
+            
+            gross_profits = sum(p for p in pnl_history if p > 0)
+            gross_losses = sum(abs(p) for p in pnl_history if p < 0)
+            calc_pf = gross_profits / gross_losses if gross_losses > 0 else (1.5 if gross_profits > 0 else 0.0)
+            
+            # CAGR
+            days = 1
+            if len(trades) >= 2:
+                try:
+                    from datetime import datetime
+                    t1 = datetime.strptime(trades[0]["entry_time"][:10], "%Y-%m-%d")
+                    t2 = datetime.strptime(trades[-1]["exit_time"][:10], "%Y-%m-%d")
+                    days = max(1, (t2 - t1).days)
+                except Exception:
+                    days = 1
+            calc_cagr = ((current_bal / initial_balance) ** (365.0 / days) - 1.0) if initial_balance > 0 else 0.0
+
     raw_win_rate = metrics.get("win_rate")
-    if raw_win_rate is None:
-        raw_win_rate = strat_meta.get("win_rate", 0.0)
+    if raw_win_rate is None or raw_win_rate == 0.0:
+        raw_win_rate = strat_meta.get("win_rate") if (strat_meta.get("win_rate") is not None and strat_meta.get("win_rate") != 0.0) else calc_win_rate
     win_rate = safe_float(raw_win_rate, 0.0)
     if win_rate > 1.0:
         win_rate = win_rate / 100.0
 
     raw_net_pnl = metrics.get("net_pnl")
-    if raw_net_pnl is None:
-        raw_net_pnl = strat_meta.get("net_pnl", 0.0)
+    if raw_net_pnl is None or raw_net_pnl == 0.0:
+        raw_net_pnl = strat_meta.get("net_pnl") if (strat_meta.get("net_pnl") is not None and strat_meta.get("net_pnl") != 0.0) else calc_net_pnl
     net_pnl = safe_float(raw_net_pnl, 0.0)
 
     raw_sharpe = metrics.get("sharpe")
-    if raw_sharpe is None:
-        raw_sharpe = strat_meta.get("sharpe")
+    if raw_sharpe is None or raw_sharpe == 0.0 or math.isnan(safe_float(raw_sharpe, 0.0)) or abs(safe_float(raw_sharpe, 0.0)) > 1000:
+        raw_sharpe = calc_sharpe
     sharpe = safe_float(raw_sharpe, 0.0) if raw_sharpe is not None else None
 
     raw_max_dd = metrics.get("max_drawdown")
-    if raw_max_dd is None:
-        raw_max_dd = strat_meta.get("max_drawdown", 0.0)
+    if raw_max_dd is None or raw_max_dd == 0.0 or math.isnan(safe_float(raw_max_dd, 0.0)):
+        raw_max_dd = calc_max_dd
 
     raw_trades_cnt = metrics.get("total_trades")
+    if raw_trades_cnt is None or raw_trades_cnt == 0:
+        raw_trades_cnt = strat_meta.get("total_trades") if strat_meta.get("total_trades") is not None else len(trades)
+
+    cagr_val = metrics.get("cagr")
+    if cagr_val is None or cagr_val == 0.0 or math.isnan(safe_float(cagr_val, 0.0)):
+        cagr_val = calc_cagr
+
+    sortino_val = metrics.get("sortino")
+    if sortino_val is None or sortino_val == 0.0 or math.isnan(safe_float(sortino_val, 0.0)):
+        sortino_val = calc_sortino
+
+    calmar_val = metrics.get("calmar")
+    if calmar_val is None or calmar_val == 0.0 or math.isnan(safe_float(calmar_val, 0.0)):
+        calmar_val = calc_calmar
+
+    pf_val = metrics.get("profit_factor")
+    if pf_val is None or pf_val == 0.0 or math.isnan(safe_float(pf_val, 0.0)):
+        pf_val = calc_pf
     if raw_trades_cnt is None:
         raw_trades_cnt = strat_meta.get("total_trades", len(trades))
 
@@ -490,11 +577,11 @@ def get_backtest_by_id(identifier: str) -> dict:
         "net_pnl": net_pnl,
         "win_rate": win_rate,
         "sharpe": sharpe,
-        "sortino": safe_float(metrics.get("sortino"), 0.0),
-        "cagr": safe_float(metrics.get("cagr"), 0.0),
-        "calmar": safe_float(metrics.get("calmar"), 0.0),
+        "sortino": safe_float(sortino_val, 0.0),
+        "cagr": safe_float(cagr_val, 0.0),
+        "calmar": safe_float(calmar_val, 0.0),
         "max_drawdown": safe_float(raw_max_dd, 0.0),
-        "profit_factor": safe_float(metrics.get("profit_factor"), 0.0),
+        "profit_factor": safe_float(pf_val, 0.0),
         "total_trades": safe_int(raw_trades_cnt, len(trades)),
         "backtest_config": run_cfg,
         "equity_curve": equity_curve,

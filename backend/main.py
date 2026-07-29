@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from cryptosight.backend.routers import dashboard_router, strategy_router, backtest_router, wallet_router, ml_router, sentiment_router, execution_router
+from cryptosight.backend.routers import dashboard_router, strategy_router, backtest_router, wallet_router, ml_router, sentiment_router, execution_router, strategy_builder_router
 from cryptosight.utils.db import get_connection, create_backtest_stats_table
-from cryptosight.utils.metadata import create_strategy_data
+from cryptosight.utils.metadata import create_strategy_data, create_playbook_table, populate_playbook_from_strategy_data
 from cryptosight.utils.logger import get_logger
 
 logger = get_logger("Main")
@@ -19,6 +19,7 @@ app.add_middleware(
 
 app.include_router(dashboard_router.router, prefix="/api/v1/dashboard",  tags=["Dashboard"])
 app.include_router(strategy_router.router,  prefix="/api/v1/strategies", tags=["Strategies"])
+app.include_router(strategy_builder_router.router, prefix="/api/v1/strategy-builder", tags=["Strategy Builder"])
 app.include_router(backtest_router.router,  prefix="/api/v1/backtests",  tags=["Backtests"])
 app.include_router(wallet_router.router,    prefix="/api/v1/wallets",    tags=["Wallets"])
 app.include_router(execution_router.router, prefix="/api/v1/execution",  tags=["Execution"])
@@ -30,6 +31,8 @@ def startup_event():
     try:
         conn = get_connection()
         create_strategy_data(conn)
+        create_playbook_table(conn)
+        populate_playbook_from_strategy_data(conn)
         create_backtest_stats_table(conn)
         conn.close()
         logger.info("Database schemas and tracking tables initialized at startup.")

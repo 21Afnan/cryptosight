@@ -64,21 +64,23 @@ def get_wallets_data(search: str = "", filter_status: str = "") -> dict:
         except Exception as e:
             logger.warning(f"execution.active_positions read skipped: {e}")
 
-        # 4. Fetch assigned enabled strategies from metadata.strategy_data
+        # 4. Fetch all assigned strategies from metadata.strategy_data (active & disabled)
         assigned_strategies = []
         try:
             df_strats = pd.read_sql_query(
-                "SELECT strategy_id, strategy_name, symbol, timeframe, exchange FROM metadata.strategy_data WHERE execution_enabled = TRUE;",
+                "SELECT strategy_id, strategy_name, symbol, timeframe, exchange, execution_enabled FROM metadata.strategy_data;",
                 conn
             )
             if not df_strats.empty:
                 for _, r in df_strats.iterrows():
                     assigned_strategies.append({
                         "id": int(r.get("strategy_id")),
+                        "strategy_id": int(r.get("strategy_id")),
                         "name": str(r.get("strategy_name")),
                         "symbol": str(r.get("symbol")).upper(),
                         "timeframe": str(r.get("timeframe")),
                         "exchange": str(r.get("exchange")).capitalize(),
+                        "execution_enabled": bool(r.get("execution_enabled") if r.get("execution_enabled") is not None else True),
                     })
         except Exception as e:
             logger.warning(f"metadata.strategy_data read skipped: {e}")
