@@ -241,7 +241,7 @@ export default function StrategyBuilder() {
           symbol: item.symbol,
           timeframe: item.timeframe,
           period: 'Live / Managed',
-          totalReturn: item.net_pnl || 0.0,
+          totalReturn: (item.net_pnl || 0.0) / 100,
           winRate: (item.win_rate != null ? item.win_rate * 100 : 0.0),
           totalTrades: item.total_trades || 0,
           maxDrawdown: item.max_drawdown || 0.0,
@@ -992,91 +992,6 @@ export default function StrategyBuilder() {
                   )}
                 </Stack>
               </Box>
-
-              <Divider sx={{ borderColor: border }} />
-
-              {/* ML Models */}
-              <Box>
-                <FieldLabel>ML Model (same timeframe)</FieldLabel>
-                <Stack spacing={1}>
-                  {selectedMlModels.map((ml) => (
-                    <Box key={ml.id} sx={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1,
-                      px: 1.25, py: 1, borderRadius: '14px',
-                      background: isDark ? 'rgba(94,139,110,0.1)' : 'rgba(94,139,110,0.07)',
-                      border: `1px solid ${alpha(COLORS.accent, 0.3)}`,
-                    }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                        <PsychologyRoundedIcon sx={{ fontSize: 17, color: COLORS.accent }} />
-                        <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, color: COLORS.accent }}>{ml.name}</Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                          <Typography sx={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.palette.text.secondary }}>
-                            Persist
-                          </Typography>
-                          <PersistStepper
-                            value={ml.persistBars}
-                            onDecrement={() => handleMlPersist(ml.id, -1)}
-                            onIncrement={() => handleMlPersist(ml.id, +1)}
-                          />
-                        </Box>
-                        <IconButton size="small" onClick={() => setSelectedMlModels((p) => p.filter((m) => m.id !== ml.id))} sx={{ color: theme.palette.text.secondary, '&:hover': { color: COLORS.pnlRed } }}>
-                          <DeleteOutlineRoundedIcon sx={{ fontSize: 17 }} />
-                        </IconButton>
-                      </Box>
-                    </Box>
-                  ))}
-                  {selectedMlModels.length === 0 && (
-                    <Select
-                      value=""
-                      onChange={(e) => {
-                        const modelId = e.target.value;
-                        if (!modelId) return;
-                        const next = mlModelsList.find((m) => m.model_id === modelId);
-                        if (next) {
-                          setSelectedMlModels((prev) => [...prev, { id: next.model_id, name: next.name, persistBars: 1 }]);
-                        }
-                      }}
-                      displayEmpty
-                      size="small"
-                      fullWidth
-                      sx={{
-                        borderRadius: '12px',
-                        fontSize: '0.75rem',
-                        color: COLORS.accent,
-                        background: surfaceAlt,
-                        height: 38,
-                        '& .MuiOutlinedInput-notchedOutline': {
-                          borderColor: alpha(COLORS.accent, 0.3)
-                        },
-                        '&:hover .MuiOutlinedInput-notchedOutline': {
-                          borderColor: COLORS.accent
-                        }
-                      }}
-                    >
-                      <MenuItem value="" disabled sx={{ fontSize: '0.75rem' }}>
-                        + Add ML Model (Timeframe: {timeframe})
-                      </MenuItem>
-                      {filteredMlModels.filter((m) => !selectedMlModels.some((sm) => sm.id === m.model_id)).length === 0 ? (
-                        <MenuItem value="" disabled sx={{ fontSize: '0.75rem' }}>
-                          No models available
-                        </MenuItem>
-                      ) : (
-                        filteredMlModels
-                          .filter((m) => !selectedMlModels.some((sm) => sm.id === m.model_id))
-                          .map((m) => (
-                            <MenuItem key={m.model_id} value={m.model_id} sx={{ fontSize: '0.75rem' }}>
-                              {m.name} ({m.timeframe})
-                            </MenuItem>
-                          ))
-                      )}
-                    </Select>
-                  )}
-                </Stack>
-              </Box>
-
-              <Divider sx={{ borderColor: border }} />
 
               {/* Combine Logic */}
               <Box>

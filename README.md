@@ -31,12 +31,18 @@
 | 🟢 **COMPLETED** | **2. TA Engine** | `cryptosight.tal_Indicators` | **Dynamic 158 TA-Lib Wrapper** utilizing Python `__getattr__` interception with parameter hierarchy & Plotly visual rendering. |
 | 🟢 **COMPLETED** | **3. Signals** | `cryptosight.signals` | **YAML-Driven Signal Pipeline** with multi-crossover conditions and automatic `.shift(1)` look-ahead bias prevention. |
 | 🟢 **COMPLETED** | **4. Simulator Engine**| `cryptosight.simulator` | **Event-Driven Simulation Engine** maintaining live active positions (`simulations.active_positions`), trade ledgers (`simulation_ledgers`), and dynamic performance metrics (`simulations.stats`). |
-| 🟢 **COMPLETED** | **5. Backtester** | `cryptosight.backtesting` | **Vectorized 10-Step Backtesting Engine** simulating realistic commissions (`0.05%`), slippage (`0.02%`), dynamic TP/SL, and SQL ledger exports. |
+| 🟢 **COMPLETED** | **5. Backtester** | `cryptosight.backtesting` | **Vectorized 10-Step Backtesting Engine** simulating realistic commissions (`0.05%`), slippage (`0.02%`), dynamic TP/SL, clean single strategy slug table mapping, and automatic 0-trade fallback safety. |
 | 🟢 **COMPLETED** | **6. Sentiment** | `cryptosight.sentiment` | **Reddit NLP Pipeline** with PRAW scraping, text cleaning, and **Hugging Face FinBERT** chunk-averaged classification. |
 | 🟢 **COMPLETED** | **7. ML Ecosystem** | `cryptosight.ml` | **Quant ML Engine** with lag-free feature extraction (`.shift(1)`), stationarity scaling, XGBoost/LightGBM/LSTM models, and out-of-sample forward inference. |
 | 🟢 **COMPLETED** | **8. Analytics** | `cryptosight.stats` | **Institutional QuantStats Suite** computing 59+ financial performance ratios (`CAGR, Sharpe, Sortino, Calmar`) embedded as dynamic PostgreSQL tabular columns. |
-| 🟢 **COMPLETED** | **9. Terminal Platform** | `cryptosight.backend` & `frontend` | **FastAPI REST API & React Dashboard** with live PostgreSQL trade ledger chart generation (`generate_charts_from_trades`), topbar health polling (`● DB Active`), interactive Up/Down table header sorting, and soft eye-friendly red design system. |
-| 🟢 **COMPLETED** | **10. Live Execution** | `cryptosight.execution` | **Automated Bybit Live Execution Engine** managing live positions (`execution.active_positions`), strategy ledgers (`execution_ledgers`), exchange history sync (`account_history.*`), TP/SL/Reversal reconciliation, and real-time execution stats (`execution.stats` & `account.stats`). |
+| 🟢 **COMPLETED** | **9. Terminal Platform** | `cryptosight.backend` & `frontend` | **FastAPI REST API & React Dashboard** with clean strategy name stripping, dynamic Avg Win Rate dashboard card, 4-column balanced layout, database active polling, and soft matte red status design system. |
+| 🟢 **COMPLETED** | **10. Live Execution** | `cryptosight.execution` | **Automated Bybit Live Execution Engine** managing live positions (`execution.active_positions`), strategy ledgers (`execution_ledgers`), exchange history sync (`account_history.*`), TP/SL/Reversal reconciliation, and real-time execution stats (`execution.stats` & `account.stats`) with strict single active strategy per symbol limits. |
+
+> [!TIP]
+> **Platform Upgrades (July 29, 2026)**:
+> * **Symbol Guardrails**: Toggle switch checks enforce that **only one strategy can be active per symbol** at any time. Activating a conflict triggers a warning toast: *"You can activate just 1 strategy for this symbol, another is already activated."*
+> * **Dashboard Refactoring**: Portfolio Value card swapped for a dynamically calculated **Average Win Rate** across active strategies, redundant PnL cards removed, and layout organized into a balanced 4-column grid.
+> * **Backtester Recovery**: Implemented fallback schema mapping for empty simulations, logging a completed status with zeroed statistics rather than raising server-side exceptions.
 
 > [!IMPORTANT]
 > **Zero Data Leakage Guarantee (`.shift(1)`)**: Every single technical indicator, moving average, and pattern calculated inside CryptoSight is explicitly shifted forward by 1 period (`Bar T -> Bar T+1`) before generating target labels or execution signals. This mathematically prevents future look-ahead bias during historical backtests and ML cross-validation.

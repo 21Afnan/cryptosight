@@ -398,12 +398,36 @@ def get_strategy_ledgers(strategy_name: str):
 def toggle_strategy_execution(strategy_id: int, enabled: bool) -> bool:
     """
     Updates the execution_enabled status of a strategy in metadata.strategy_data.
+    Enforces a business constraint: Only ONE strategy can be active per symbol at a time.
+    Returns False if another strategy is already active for the same symbol.
     """
     conn = get_connection()
     if not conn:
         return False
     try:
         with conn.cursor() as cursor:
+            if enabled:
+                # 1. Fetch the symbol of the strategy being activated
+                cursor.execute("""
+                    SELECT symbol 
+                    FROM metadata.strategy_data 
+                    WHERE strategy_id = %s;
+                """, (strategy_id,))
+                row = cursor.fetchone()
+                if row:
+                    symbol = row[0]
+                    # 2. Check if any other strategy for the same symbol is already active
+                    cursor.execute("""
+                        SELECT count(*) 
+                        FROM metadata.strategy_data
+                        WHERE symbol = %s AND strategy_id != %s AND execution_enabled = TRUE;
+                    """, (symbol, strategy_id))
+                    active_count = cursor.fetchone()[0]
+                    if active_count > 0:
+                        # Reject activation
+                        return False
+            
+            # 3. Toggle the chosen strategy execution status
             cursor.execute("""
                 UPDATE metadata.strategy_data
                 SET execution_enabled = %s

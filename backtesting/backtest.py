@@ -135,15 +135,56 @@ class BacktestingEngine:
                 try:
                     conn = get_connection()
                     from cryptosight.utils.metadata import upsert_backtest_data
+                    from cryptosight.utils.db import upsert_backtest_stats, create_backtest_stats_table
+                    
+                    # 1. Upsert backtest metadata
                     upsert_backtest_data(
                         conn=conn,
                         strategy_id=strat_id_num,
                         backtest_config=self.config,
                         ledger_df=pd.DataFrame(),
                     )
+                    
+                    # 2. Create the empty ledger table
+                    clean_table = re.sub(r'[^a-zA-Z0-9_]', '_', str(strategy_name)).lower()
+                    clean_table = re.sub(r'_+', '_', clean_table).strip('_')
+                    create_backtest_schema_and_table(
+                        conn,
+                        exchange=exchange,
+                        symbol=symbol,
+                        timeframe=base_tf,
+                        strategy_id=clean_table,
+                    )
+                    
+                    # 3. Create backtest stats with 0 metrics
+                    create_backtest_stats_table(conn)
+                    initial_bal = float(self.config.get("initial_balance", 10000.0))
+                    metrics_dict = {
+                        "total_trades": 0,
+                        "win_rate": 0.0,
+                        "net_pnl": 0.0,
+                        "final_balance": initial_bal,
+                        "profit_factor": 0.0,
+                        "sharpe": 0.0,
+                        "max_drawdown": 0.0,
+                    }
+                    charts_dict = {
+                        "equity_curve": [],
+                        "drawdown_curve": [],
+                        "monthly_returns": [],
+                        "rolling_metrics": [],
+                        "pnl_per_trade": [],
+                    }
+                    upsert_backtest_stats(
+                        conn,
+                        strategy_id=strat_id_num,
+                        status="completed",
+                        metrics=metrics_dict,
+                        charts=charts_dict,
+                    )
                     conn.close()
                 except Exception as meta_err:
-                    self.logger.warning(f"Could not save empty backtest metadata for '{strategy_name}': {meta_err}")
+                    self.logger.warning(f"Could not save empty backtest stats/metadata for '{strategy_name}': {meta_err}")
             return pd.DataFrame()
 
         # 5. Position sizing

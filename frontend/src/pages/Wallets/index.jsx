@@ -501,6 +501,21 @@ export default function Wallets() {
   };
 
   const handleToggleExecution = async (strategyId, enabled) => {
+    // 1. Find the symbol of the toggled strategy
+    const toggledStrat = selectedWallet?.assigned_strategies?.find(s => (s.strategy_id === strategyId || s.id === strategyId));
+    const symbol = toggledStrat?.symbol;
+
+    if (enabled && symbol) {
+      // 2. Check if another strategy for the same symbol is already active
+      const anotherActive = selectedWallet?.assigned_strategies?.some(s => 
+        (s.strategy_id !== strategyId && s.id !== strategyId) && s.symbol === symbol && s.execution_enabled
+      );
+      if (anotherActive) {
+        setSnack("You can activate just 1 strategy for this symbol, another is already activated.");
+        return;
+      }
+    }
+
     try {
       const res = await toggleStrategyExecution(strategyId, enabled);
       if (res && res.success) {
@@ -511,9 +526,12 @@ export default function Wallets() {
           if (!prev) return prev;
           return {
             ...prev,
-            assigned_strategies: prev.assigned_strategies.map(s => 
-              (s.strategy_id === strategyId || s.id === strategyId) ? { ...s, execution_enabled: enabled } : s
-            )
+            assigned_strategies: prev.assigned_strategies.map(s => {
+              if (s.strategy_id === strategyId || s.id === strategyId) {
+                return { ...s, execution_enabled: enabled };
+              }
+              return s;
+            })
           };
         });
         

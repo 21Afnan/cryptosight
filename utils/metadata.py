@@ -345,7 +345,7 @@ def create_strategy_data(conn):
                 end_time          TIMESTAMP WITH TIME ZONE,
                 max_retries       INT,
                 retry_delay       INT,
-                execution_enabled BOOLEAN DEFAULT TRUE,
+                execution_enabled BOOLEAN DEFAULT FALSE,
 
                 indicators_config JSONB,
                 strategy_config   JSONB,
@@ -364,7 +364,7 @@ def create_strategy_data(conn):
                 "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS end_time          TIMESTAMP WITH TIME ZONE;",
                 "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS max_retries       INT;",
                 "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS retry_delay       INT;",
-                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS execution_enabled BOOLEAN DEFAULT TRUE;",
+                "ALTER TABLE metadata.strategy_data ADD COLUMN IF NOT EXISTS execution_enabled BOOLEAN DEFAULT FALSE;",
             ]
             create_index_sql = """
             CREATE INDEX IF NOT EXISTS idx_strategy_data_lookup

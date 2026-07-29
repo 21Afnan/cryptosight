@@ -229,12 +229,22 @@ export default function Dashboard() {
     return list;
   }, [data?.strategies_summary, strategyFilters, globalSearch, sortField, sortOrder]);
 
+  const avgWinRate = useMemo(() => {
+    if (!data?.strategies_summary || data.strategies_summary.length === 0) return 0.525;
+    const validStrats = data.strategies_summary.filter(s => s.win_rate != null);
+    if (validStrats.length === 0) return 0.525;
+    const totalWinRate = validStrats.reduce((acc, curr) => {
+      const rate = curr.win_rate > 1 ? curr.win_rate / 100 : curr.win_rate;
+      return acc + rate;
+    }, 0);
+    return totalWinRate / validStrats.length;
+  }, [data]);
+
   const kpiCards = useMemo(() => {
     if (!data) return [];
     const s = data;
     return [
-      { title: 'Portfolio Value', value: `$${fmt(s.portfolio_value)}`, delta: fmtPct(s.portfolio_change_pct), deltaType: s.portfolio_change_pct >= 0 ? 'positive' : 'negative', icon: <AccountBalanceWalletRoundedIcon />, colorIndex: 0 },
-      { title: "Today's PnL", value: fmtCurrency(s.todays_pnl), delta: fmtPct(s.todays_pnl_pct), deltaType: s.todays_pnl >= 0 ? 'positive' : 'negative', icon: <AttachMoneyRoundedIcon />, colorIndex: 1 },
+      { title: 'Avg Win Rate', value: `${(avgWinRate * 100).toFixed(2)}%`, delta: 'across all strategies', deltaType: 'neutral', icon: <TrendingUpRoundedIcon />, colorIndex: 0 },
       { title: 'Total Return', value: fmtPct(s.total_return), delta: `$${fmt(s.total_return_usd)}`, deltaType: s.total_return >= 0 ? 'positive' : 'negative', icon: <TrendingUpRoundedIcon />, colorIndex: 2 },
       { title: 'Active Strategies', value: s.active_strategies, delta: `of ${s.total_strategies} total`, deltaType: 'neutral', icon: <ShowChartRoundedIcon />, colorIndex: 3 },
       { title: 'Live Executions', value: s.running_executions, delta: null, deltaType: 'neutral', icon: <RocketLaunchRoundedIcon />, colorIndex: 4 },
@@ -242,9 +252,8 @@ export default function Dashboard() {
       { title: 'Connected Accounts', value: s.connected_accounts, delta: null, deltaType: 'neutral', icon: <AccountBalanceWalletRoundedIcon />, colorIndex: 0 },
       { title: 'Trained ML Models', value: s.trained_ml_models, delta: null, deltaType: 'neutral', icon: <PsychologyRoundedIcon />, colorIndex: 1 },
       { title: 'Total Backtests', value: s.total_backtests, delta: null, deltaType: 'neutral', icon: <HistoryRoundedIcon />, colorIndex: 2 },
-      { title: 'Total Return (USD)', value: `$${fmt(s.total_return_usd)}`, delta: fmtPct(s.total_return), deltaType: s.total_return >= 0 ? 'positive' : 'negative', icon: <DashboardRoundedIcon />, colorIndex: 4 },
     ];
-  }, [data]);
+  }, [data, avgWinRate]);
 
   return (
     <PageContainer title="Dashboard">
@@ -254,9 +263,9 @@ export default function Dashboard() {
         {/* Hero banner */}
         <HeroBanner data={data} />
 
-        {/* KPI cards grid — 5 equal columns on large screens */}
+        {/* KPI cards grid — 4 equal columns on large screens */}
         {loading ? (
-          <LoadingSkeleton variant="stats" count={10} />
+          <LoadingSkeleton variant="stats" count={8} />
         ) : (
           <Box
             sx={{
@@ -265,7 +274,7 @@ export default function Dashboard() {
                 xs: '1fr',
                 sm: 'repeat(2, 1fr)',
                 md: 'repeat(3, 1fr)',
-                lg: 'repeat(5, 1fr)',
+                lg: 'repeat(4, 1fr)',
               },
               gap: 2,
               mb: 3,
