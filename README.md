@@ -41,8 +41,12 @@
 > [!TIP]
 > **Platform Upgrades (July 29, 2026)**:
 > * **Symbol Guardrails**: Toggle switch checks enforce that **only one strategy can be active per symbol** at any time. Activating a conflict triggers a warning toast: *"You can activate just 1 strategy for this symbol, another is already activated."*
-> * **Dashboard Refactoring**: Portfolio Value card swapped for a dynamically calculated **Average Win Rate** across active strategies, redundant PnL cards removed, and layout organized into a balanced 4-column grid.
-> * **Backtester Recovery**: Implemented fallback schema mapping for empty simulations, logging a completed status with zeroed statistics rather than raising server-side exceptions.
+> * **Dashboard Refactoring & Equal Heights**: Portfolio Value card swapped for a dynamically calculated **Average Win Rate** across active strategies. Swapped green shadows for a subtle, premium neutral gray shadow and enforced equal heights for all dashboard card slots.
+> * **Visual Confluence Flow**: Integrated a flowchart workspace diagram in Column 2 (`Build Strategy`) of the Strategy Builder page to explain logical expressions dynamically and eliminate empty screen spaces.
+> * **Daily Returns Timeline**: Replaced the sparse, empty Trade PnL Distribution histogram with a rich, continuous `Daily Returns (%)` chart on the Strategy Details page.
+> * **Position Liquidation Tracking**: Replaced the redundant `Mark Price` column in the Live Wallet Positions table with `Liq. Price` (Liquidation Price) styled in red.
+> * **Model Details Optimization**: Automatically hide classification evaluation charts when viewing regression models, and removed the empty `ROC-AUC` bar from classification charts to clean up ML model performance views.
+> * **Topbar Cleanup**: Removed the database health checking state and status pill (`● DB Active`) from the header Topbar to clean up the navigation layout.
 
 > [!IMPORTANT]
 > **Zero Data Leakage Guarantee (`.shift(1)`)**: Every single technical indicator, moving average, and pattern calculated inside CryptoSight is explicitly shifted forward by 1 period (`Bar T -> Bar T+1`) before generating target labels or execution signals. This mathematically prevents future look-ahead bias during historical backtests and ML cross-validation.

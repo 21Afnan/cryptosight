@@ -57,6 +57,7 @@ def get_wallets_data(search: str = "", filter_status: str = "") -> dict:
                         "quantity": float(r.get("quantity", 0.0)),
                         "entry_price": float(r.get("entry_price", 0.0)),
                         "mark_price": float(r.get("mark_price", 0.0)),
+                        "liq_price": float(r.get("liq_price", 0.0)) if pd.notna(r.get("liq_price")) else None,
                         "unrealized_pnl": float(r.get("unrealized_pnl", 0.0)),
                         "status": str(r.get("status", "OPEN")),
                         "strategy_name": str(r.get("strategy_name")) if pd.notna(r.get("strategy_name")) else f"Strategy {r.get('strategy_id')}",

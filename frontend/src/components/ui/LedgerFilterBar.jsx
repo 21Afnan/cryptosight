@@ -195,30 +195,6 @@ export default function LedgerFilterBar({
         </FormControl>
       )}
 
-      {/* PnL Min / Max Range Inputs */}
-      {showPnlFilter && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-          <OutlinedInput
-            size="small"
-            type="number"
-            placeholder="Min PnL ($)"
-            value={minPnl}
-            onChange={(e) => handleChange('minPnl', e.target.value)}
-            sx={{ width: 110, height: 34, fontSize: 12 }}
-          />
-          <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
-            -
-          </Typography>
-          <OutlinedInput
-            size="small"
-            type="number"
-            placeholder="Max PnL ($)"
-            value={maxPnl}
-            onChange={(e) => handleChange('maxPnl', e.target.value)}
-            sx={{ width: 110, height: 34, fontSize: 12 }}
-          />
-        </Box>
-      )}
 
 
       {/* Symbol filter */}

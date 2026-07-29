@@ -1024,6 +1024,94 @@ export default function StrategyBuilder() {
                   </Box>
                 </Box>
               </Box>
+
+              {/* Visual Confluence Flow */}
+              <Box sx={{ mt: 'auto', pt: 1, borderTop: `1px dashed ${border}` }}>
+                <FieldLabel>Visual Confluence Flow</FieldLabel>
+                {selectedStrategies.length === 0 ? (
+                  <Box sx={{
+                    p: 2, borderRadius: '14px', background: isDark ? 'rgba(94,139,110,0.05)' : 'rgba(94,139,110,0.03)',
+                    border: `1px solid ${alpha(COLORS.accent, 0.15)}`, display: 'flex', flexDirection: 'column', gap: 1.25
+                  }}>
+                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: COLORS.accent }}>
+                      💡 Quantitative Strategy Design Tip
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.6875rem', color: theme.palette.text.secondary, lineHeight: 1.6 }}>
+                      Combine multiple uncorrelated models to build a powerful confluence-based system.
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, mt: 0.5 }}>
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                        <Box sx={{ width: 6, height: 6, borderRadius: '50%', background: COLORS.accent, mt: 0.75, flexShrink: 0 }} />
+                        <Typography sx={{ fontSize: '0.65rem', color: theme.palette.text.secondary }}>
+                          <strong>AND Logic</strong>: Increases win rate by filtering noise, but reduces trading frequency.
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                        <Box sx={{ width: 6, height: 6, borderRadius: '50%', background: COLORS.accent, mt: 0.75, flexShrink: 0 }} />
+                        <Typography sx={{ fontSize: '0.65rem', color: theme.palette.text.secondary }}>
+                          <strong>OR Logic</strong>: Increases trade opportunities, but may suffer from lower win rates.
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Box sx={{
+                    p: 2, borderRadius: '14px', background: surfaceAlt, border: `1px solid ${border}`,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5
+                  }}>
+                    <Box sx={{
+                      width: '100%', display: 'flex', flexDirection: combineLogic === 'AND' ? 'row' : 'column',
+                      alignItems: 'center', justifyContent: 'center', gap: 1, flexWrap: 'wrap'
+                    }}>
+                      {selectedStrategies.map((strat, idx) => (
+                        <React.Fragment key={strat.id}>
+                          {idx > 0 && (
+                            <Box sx={{
+                              px: 0.75, py: 0.25, borderRadius: '4px', background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                              border: `1px solid ${border}`
+                            }}>
+                              <Typography sx={{ fontSize: '0.55rem', fontWeight: 800, color: COLORS.accent }}>
+                                {combineLogic}
+                              </Typography>
+                            </Box>
+                          )}
+                          <Box sx={{
+                            px: 1.5, py: 0.75, borderRadius: '10px', background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.9)',
+                            border: `1px solid ${alpha(COLORS.accent, 0.35)}`, display: 'flex', alignItems: 'center', gap: 0.75,
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
+                          }}>
+                            <Typography sx={{ fontSize: '0.6875rem', fontWeight: 700 }}>
+                              {strat.name.split(' ')[0]}
+                            </Typography>
+                          </Box>
+                        </React.Fragment>
+                      ))}
+                    </Box>
+
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
+                      <Box sx={{ width: 2, height: 16, background: `linear-gradient(to bottom, ${COLORS.accent} 0%, ${COLORS.accentLight} 100%)` }} />
+                      <Typography sx={{ fontSize: '0.6rem', color: theme.palette.text.secondary, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        Result
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{
+                      px: 2.5, py: 1, borderRadius: '12px',
+                      background: `linear-gradient(135deg, ${COLORS.accent} 0%, ${COLORS.accentLight} 100%)`,
+                      color: '#ffffff', boxShadow: `0 4px 14px ${alpha(COLORS.accent, 0.35)}`,
+                      display: 'flex', alignItems: 'center', gap: 1
+                    }}>
+                      <Typography sx={{ fontSize: '0.75rem', fontWeight: 800, letterSpacing: '0.04em' }}>
+                        {combineLogic === 'AND' ? 'CONFLUENT TRIGGER' : 'MULTI-WAY TRIGGER'}
+                      </Typography>
+                    </Box>
+
+                    <Typography sx={{ fontSize: '0.625rem', color: theme.palette.text.secondary, textAlign: 'center', mt: 0.5 }}>
+                      Estimated Signal Frequency: <strong>{combineLogic === 'AND' ? 'Conservative / High Quality' : 'Aggressive / High Frequency'}</strong>
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
             </Box>
           </Box>
 

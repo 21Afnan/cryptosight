@@ -554,54 +554,54 @@ export default function ModelDetails() {
         {tabIndex === 1 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mb: 3, width: '100%' }}>
 
-            {/* Full-Width Interactive Bar Chart Card */}
-            <Card sx={{ p: 3, width: '100%' }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 1 }}>
-                <Box>
-                  <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                    Model Accuracy & Evaluation Performance
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
-                    Comparative breakdown of predictive accuracy metrics across test evaluation split
-                  </Typography>
+            {/* Full-Width Interactive Bar Chart Card (Classification Only) */}
+            {model.type?.toLowerCase() !== 'regression' && (
+              <Card sx={{ p: 3, width: '100%' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 1 }}>
+                  <Box>
+                    <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                      Model Accuracy & Evaluation Performance
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+                      Comparative breakdown of predictive accuracy metrics across test evaluation split
+                    </Typography>
+                  </Box>
+                  <Chip
+                    label={`Primary Metric Score (${model.primary_metric === 'Val Loss' ? 'R2 Score' : (model.primary_metric || 'Score')}): ${model.type?.toLowerCase() === 'regression' || model.primary_metric?.includes('R2') ? Number(model.score ?? 0).toFixed(4) : `${((model.score ?? 0) * 100).toFixed(1)}%`}`}
+                    sx={{ fontWeight: 800, color: (model.score ?? 0) < 0 ? COLORS.pnlRed : COLORS.accent, background: (model.score ?? 0) < 0 ? `${COLORS.pnlRed}15` : `${COLORS.accent}15`, border: `1px solid ${(model.score ?? 0) < 0 ? COLORS.pnlRed : COLORS.accent}30` }}
+                  />
                 </Box>
-                <Chip
-                  label={`Primary Metric Score (${model.primary_metric === 'Val Loss' ? 'R2 Score' : (model.primary_metric || 'Score')}): ${model.type?.toLowerCase() === 'regression' || model.primary_metric?.includes('R2') ? Number(model.score ?? 0).toFixed(4) : `${((model.score ?? 0) * 100).toFixed(1)}%`}`}
-                  sx={{ fontWeight: 800, color: (model.score ?? 0) < 0 ? COLORS.pnlRed : COLORS.accent, background: (model.score ?? 0) < 0 ? `${COLORS.pnlRed}15` : `${COLORS.accent}15`, border: `1px solid ${(model.score ?? 0) < 0 ? COLORS.pnlRed : COLORS.accent}30` }}
-                />
-              </Box>
 
-              <Box sx={{ height: 320, width: '100%' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={[
-                      { metric: 'Accuracy', value: parseFloat((parseScoreValue(ev?.val_accuracy ?? ev?.test_accuracy ?? ev?.accuracy ?? model.score) * 100).toFixed(1)), fill: COLORS.accent },
-                      { metric: 'Precision', value: parseFloat((parseScoreValue(ev?.val_precision ?? ev?.test_precision ?? ev?.precision) * 100).toFixed(1)), fill: COLORS.pnlRed },
-                      { metric: 'Recall', value: parseFloat((parseScoreValue(ev?.val_recall ?? ev?.test_recall ?? ev?.recall) * 100).toFixed(1)), fill: '#F87171' },
-                      { metric: 'F1-Score', value: parseFloat((parseScoreValue(ev?.val_f1_score ?? ev?.test_f1_score ?? ev?.f1_score ?? ev?.f1) * 100).toFixed(1)), fill: '#DC2626' },
-                      { metric: 'ROC-AUC', value: parseFloat((parseScoreValue(ev?.auc ?? ev?.roc_auc) * 100).toFixed(1)), fill: COLORS.warning },
-                    ]}
-                    margin={{ top: 20, right: 30, left: 10, bottom: 20 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? COLORS.chartGridDark : COLORS.chartGridLight} vertical={false} />
-                    <XAxis dataKey="metric" tick={{ fontSize: 13, fontWeight: 700, fill: isDark ? '#E5E7EB' : '#374151' }} />
-                    <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: isDark ? COLORS.darkTextSecondary : '#6B7280' }} />
-                    <Tooltip formatter={(v) => [`${v}%`, 'Performance Score']} contentStyle={{ background: isDark ? '#1F2937' : '#FFFFFF', borderRadius: 8, border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }} />
-                    <Bar dataKey="value" radius={[8, 8, 0, 0]} barSize={65}>
-                      {[
-                        COLORS.accent,
-                        COLORS.pnlRed,
-                        '#F87171',
-                        '#DC2626',
-                        COLORS.warning,
-                      ].map((fillColor, index) => (
-                        <Cell key={`bar-cell-${index}`} fill={fillColor} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </Box>
-            </Card>
+                <Box sx={{ height: 320, width: '100%' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={[
+                        { metric: 'Accuracy', value: parseFloat((parseScoreValue(ev?.val_accuracy ?? ev?.test_accuracy ?? ev?.accuracy ?? model.score) * 100).toFixed(1)), fill: COLORS.accent },
+                        { metric: 'Precision', value: parseFloat((parseScoreValue(ev?.val_precision ?? ev?.test_precision ?? ev?.precision) * 100).toFixed(1)), fill: COLORS.pnlRed },
+                        { metric: 'Recall', value: parseFloat((parseScoreValue(ev?.val_recall ?? ev?.test_recall ?? ev?.recall) * 100).toFixed(1)), fill: '#F87171' },
+                        { metric: 'F1-Score', value: parseFloat((parseScoreValue(ev?.val_f1_score ?? ev?.test_f1_score ?? ev?.f1_score ?? ev?.f1) * 100).toFixed(1)), fill: '#DC2626' },
+                      ]}
+                      margin={{ top: 20, right: 30, left: 10, bottom: 20 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke={isDark ? COLORS.chartGridDark : COLORS.chartGridLight} vertical={false} />
+                      <XAxis dataKey="metric" tick={{ fontSize: 13, fontWeight: 700, fill: isDark ? '#E5E7EB' : '#374151' }} />
+                      <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: isDark ? COLORS.darkTextSecondary : '#6B7280' }} />
+                      <Tooltip formatter={(v) => [`${v}%`, 'Performance Score']} contentStyle={{ background: isDark ? '#1F2937' : '#FFFFFF', borderRadius: 8, border: `1px solid ${isDark ? COLORS.darkBorder : COLORS.lightBorder}` }} />
+                      <Bar dataKey="value" radius={[8, 8, 0, 0]} barSize={65}>
+                        {[
+                          COLORS.accent,
+                          COLORS.pnlRed,
+                          '#F87171',
+                          '#DC2626',
+                        ].map((fillColor, index) => (
+                          <Cell key={`bar-cell-${index}`} fill={fillColor} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Box>
+              </Card>
+            )}
 
             {/* Score Gauges & Detailed Metrics Grid */}
             <Grid container spacing={3}>

@@ -26,6 +26,7 @@ import EquityCurveChart from '../../components/charts/EquityCurveChart';
 import DrawdownChart from '../../components/charts/DrawdownChart';
 import MonthlyReturnsChart from '../../components/charts/MonthlyReturnsChart';
 import DistributionChart from '../../components/charts/DistributionChart';
+import DailyReturnsChart from '../../components/charts/DailyReturnsChart';
 import TradePnlChart from '../../components/charts/TradePnlChart';
 import LedgerFilterBar, { filterLedgerRows } from '../../components/ui/LedgerFilterBar';
 import StrategyFilterBar, { filterStrategies } from '../../components/ui/StrategyFilterBar';
@@ -399,6 +400,14 @@ function StrategyDetailView({ id }) {
     return list;
   }, [filteredTrades, tradeSortField, tradeSortOrder]);
 
+  const dailyReturnsData = React.useMemo(() => {
+    const raw = strategy?.charts?.daily_returns?.raw_values ?? [];
+    return raw.map((item) => ({
+      date: item.time,
+      value: item.value,
+    }));
+  }, [strategy]);
+
   if (loading) return <PageContainer title="Strategy Details"><Box sx={{ pt: 3 }}><LoadingSkeleton variant="detail" /></Box></PageContainer>;
   if (error || !strategy) return (
     <PageContainer title="Strategy Details">
@@ -756,8 +765,8 @@ function StrategyDetailView({ id }) {
           <ChartCard title="Monthly Returns" height={280}>
             <MonthlyReturnsChart data={strategy.monthly_returns ?? []} height={260} />
           </ChartCard>
-          <ChartCard title="Trade PnL Distribution" height={280}>
-            <DistributionChart data={strategy.trade_distribution ?? []} height={260} />
+          <ChartCard title="Daily Returns (%)" height={280}>
+            <DailyReturnsChart data={dailyReturnsData} height={260} formatType="percent" />
           </ChartCard>
           <ChartCard title="Win / Loss Ratio" height={280}>
             <WinLossDonutChart winRate={strategy.performance?.win_rate ?? strategy.win_rate} totalTrades={strategy.performance?.total_trades ?? strategy.total_trades} />

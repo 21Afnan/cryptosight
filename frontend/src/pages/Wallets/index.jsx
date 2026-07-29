@@ -507,7 +507,7 @@ export default function Wallets() {
 
     if (enabled && symbol) {
       // 2. Check if another strategy for the same symbol is already active
-      const anotherActive = selectedWallet?.assigned_strategies?.some(s => 
+      const anotherActive = selectedWallet?.assigned_strategies?.some(s =>
         (s.strategy_id !== strategyId && s.id !== strategyId) && s.symbol === symbol && s.execution_enabled
       );
       if (anotherActive) {
@@ -520,7 +520,7 @@ export default function Wallets() {
       const res = await toggleStrategyExecution(strategyId, enabled);
       if (res && res.success) {
         setSnack(enabled ? 'Strategy activated successfully!' : 'Strategy deactivated successfully!');
-        
+
         // Update selectedWallet's assigned_strategies state locally to reflect the change instantly
         setSelectedWallet(prev => {
           if (!prev) return prev;
@@ -534,7 +534,7 @@ export default function Wallets() {
             })
           };
         });
-        
+
         // Refetch backend wallets list
         refetch();
       } else {
@@ -862,7 +862,7 @@ export default function Wallets() {
                         <TableCell sx={{ fontWeight: 700 }}>Direction</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 700 }}>Quantity</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 700 }}>Entry Price</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 700 }}>Mark Price</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700 }}>Liq. Price</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 700 }}>Unrealized PnL</TableCell>
                       </TableRow>
                     </TableHead>
@@ -902,7 +902,7 @@ export default function Wallets() {
                               </TableCell>
                               <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>{p.quantity}</Typography></TableCell>
                               <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${p.entry_price != null ? Number(p.entry_price).toFixed(2) : '—'}</Typography></TableCell>
-                              <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>${p.mark_price != null ? Number(p.mark_price).toFixed(2) : '—'}</Typography></TableCell>
+                              <TableCell align="right"><Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', color: p.liq_price != null ? COLORS.pnlRed : 'inherit' }}>{p.liq_price != null ? `$${Number(p.liq_price).toFixed(2)}` : '—'}</Typography></TableCell>
                               <TableCell align="right">
                                 <Typography
                                   variant="body2"

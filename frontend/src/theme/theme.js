@@ -133,7 +133,7 @@ const buildComponents = (mode) => {
   const isDark = mode === 'dark';
   const cardShadow = isDark
     ? '0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04)'
-    : '0 6px 22px rgba(14, 203, 129, 0.25)';
+    : '0 4px 18px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.02)';
 
   return {
     MuiCssBaseline: {
@@ -166,7 +166,7 @@ const buildComponents = (mode) => {
             transform: 'translateY(-2px)',
             boxShadow: isDark
               ? '0 8px 36px rgba(0,0,0,0.5), 0 0 0 1px rgba(94,139,110,0.12)'
-              : '0 14px 36px rgba(14, 203, 129, 0.38)',
+              : '0 10px 30px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(94,139,110,0.15)',
           },
         },
       },

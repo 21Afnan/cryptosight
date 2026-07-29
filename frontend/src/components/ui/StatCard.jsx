@@ -27,11 +27,13 @@ export default function StatCard({
   sparkData,
   color,
   colorIndex = 0,
+  subtitle,
 }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
   const bubble = ICON_BUBBLE_COLORS[colorIndex % ICON_BUBBLE_COLORS.length];
+  const displayDelta = delta || subtitle;
 
   const deltaColor =
     deltaType === 'positive'
@@ -43,12 +45,12 @@ export default function StatCard({
   const deltaPrefix =
     deltaType === 'positive' ? '↑ ' : deltaType === 'negative' ? '↓ ' : '';
 
-  const lineColor = color ?? (deltaType === 'positive' ? COLORS.pnlGreen : deltaType === 'negative' ? COLORS.pnlRed : COLORS.accent);
-
   return (
     <Card
       sx={{
         height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
         position: 'relative',
         overflow: 'hidden',
         cursor: 'pointer',
@@ -57,7 +59,7 @@ export default function StatCard({
           transform: 'translateY(-4px)',
           boxShadow: isDark
             ? '0 16px 36px rgba(0,0,0,0.5), 0 0 0 1px rgba(94,139,110,0.25)'
-            : '0 16px 36px rgba(94,139,110,0.18), 0 0 0 1px rgba(94,139,110,0.25)',
+            : '0 16px 36px rgba(0,0,0,0.08), 0 0 0 1px rgba(94,139,110,0.2)',
           '& .stat-icon-bubble': {
             transform: 'scale(1.08) rotate(4deg)',
             boxShadow: `0 6px 16px ${bubble.icon}35`,
@@ -88,7 +90,7 @@ export default function StatCard({
           flexDirection: 'column',
           justify: 'space-between',
           gap: 1.5,
-          height: '100%',
+          flexGrow: 1,
         }}
       >
         {/* Top row: title + icon bubble */}
@@ -146,21 +148,19 @@ export default function StatCard({
           )}
         </Box>
 
-        {/* Bottom row: delta text + sparkline */}
+        {/* Bottom row: delta text + sparkline (Always rendered to enforce equal height) */}
         <Box sx={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', mt: 'auto' }}>
-          {delta && (
-            <Typography
-              variant="body2"
-              sx={{
-                color: deltaColor,
-                fontWeight: 600,
-                fontSize: '0.75rem',
-                lineHeight: 1.2,
-              }}
-            >
-              {deltaPrefix}{delta}
-            </Typography>
-          )}
+          <Typography
+            variant="body2"
+            sx={{
+              color: displayDelta ? deltaColor : 'transparent',
+              fontWeight: 600,
+              fontSize: '0.75rem',
+              lineHeight: 1.2,
+            }}
+          >
+            {displayDelta ? `${deltaPrefix}${displayDelta}` : '\u00A0'}
+          </Typography>
         </Box>
       </CardContent>
     </Card>

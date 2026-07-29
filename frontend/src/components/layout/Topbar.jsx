@@ -17,7 +17,6 @@ import { useSearch } from '../../context/SearchContext';
 import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded';
 import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
-import StorageRoundedIcon from '@mui/icons-material/StorageRounded';
 
 const PAGE_TITLES = {
   '/': 'Dashboard',
@@ -54,51 +53,7 @@ export default function Topbar({ title }) {
 
   const pageTitle = getRouteTitle(location.pathname, title);
 
-  // Real Database Health Connection State (NO fake static defaults)
-  const [dbStatus, setDbStatus] = useState({ connected: false, loading: true });
 
-  useEffect(() => {
-    let isMounted = true;
-    const fetchDbHealth = async () => {
-      try {
-        const res = await fetch('http://localhost:8000/api/v1/backtests/health');
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted) {
-            setDbStatus({
-              connected: data.status === 'active' || data.connected === true,
-              loading: false,
-            });
-          }
-        } else {
-          if (isMounted) setDbStatus({ connected: false, loading: false });
-        }
-      } catch (err) {
-        if (isMounted) setDbStatus({ connected: false, loading: false });
-      }
-    };
-
-    fetchDbHealth();
-    const interval = setInterval(fetchDbHealth, 15000); // refresh every 15s
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, []);
-
-  const isDbActive = dbStatus.connected;
-  const chipBg = isDbActive
-    ? (isDark ? 'rgba(125, 173, 140, 0.22)' : 'rgba(94, 139, 110, 0.18)')
-    : (isDark ? 'rgba(246, 70, 93, 0.22)' : 'rgba(246, 70, 93, 0.14)');
-  const chipColor = isDbActive
-    ? (isDark ? '#7DAD8C' : '#4A7A5A')
-    : '#F6465D';
-  const chipBorder = isDbActive
-    ? (isDark ? '1px solid rgba(125, 173, 140, 0.4)' : '1px solid rgba(94, 139, 110, 0.35)')
-    : (isDark ? '1px solid rgba(246, 70, 93, 0.4)' : '1px solid rgba(246, 70, 93, 0.35)');
-  const chipShadow = isDbActive
-    ? '0 4px 14px rgba(94, 139, 110, 0.25)'
-    : '0 4px 14px rgba(246, 70, 93, 0.25)';
 
   return (
     <AppBar
@@ -143,30 +98,7 @@ export default function Topbar({ title }) {
           </Typography>
         </Box>
 
-        {/* Real PostgreSQL Database Connection Health Status Sign (Navbar Mounted) */}
-        <Tooltip title={isDbActive ? 'PostgreSQL Database: Connected & Active' : 'PostgreSQL Database: Connection Offline'}>
-          <Chip
-            icon={<StorageRoundedIcon sx={{ fontSize: 16, color: `${chipColor} !important` }} />}
-            label={dbStatus.loading ? 'DB Checking…' : isDbActive ? '● DB Active' : '● DB Inactive'}
-            size="small"
-            sx={{
-              height: 32,
-              px: 1,
-              borderRadius: '999px',
-              fontWeight: 800,
-              fontSize: '0.75rem',
-              background: chipBg,
-              color: chipColor,
-              border: chipBorder,
-              boxShadow: chipShadow,
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                transform: 'scale(1.04)',
-                boxShadow: chipShadow,
-              },
-            }}
-          />
-        </Tooltip>
+
 
         {/* Global Search Bar */}
         <Box
