@@ -1,7 +1,7 @@
 <div id="top"></div>
 <div align="center">
 
-# ⚡ CryptoSight — Institutional Quantitative Trading Terminal & Algorithmic Engine
+# ⚡ CryptoSight: Institutional Quantitative Trading Terminal & Algorithmic Engine
 
 > **Enterprise Financial Data Ingestion, 158 Dynamic Technical Indicators, Zero-Leakage ML Signal Generation, FinBERT NLP Sentiment Analysis, Vectorized Backtesting, Bybit V5 Automated Live Execution & Real-Time React Dashboard.**
 
@@ -107,17 +107,13 @@ flowchart LR
     C --> D["4️⃣ Strategy & ML\n(Signals + Backtester)"]
     D --> E["5️⃣ Live Trading & UI\n(Bybit V5 + React Terminal)"]
 
-    classDef step1 fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
-    classDef step2 fill:#0f172a,stroke:#2dd4bf,stroke-width:2px,color:#f8fafc;
-    classDef step3 fill:#0f172a,stroke:#c084fc,stroke-width:2px,color:#f8fafc;
-    classDef step4 fill:#0f172a,stroke:#f472b6,stroke-width:2px,color:#f8fafc;
-    classDef step5 fill:#0f172a,stroke:#34d399,stroke-width:2px,color:#f8fafc;
+    classDef neutral fill:#0f172a,stroke:#fbbf24,stroke-width:2px,color:#f8fafc;
+    classDef warning fill:#0f172a,stroke:#f87171,stroke-width:2px,color:#f8fafc;
+    classDef success fill:#0f172a,stroke:#4ade80,stroke-width:2px,color:#f8fafc;
 
-    class A step1;
-    class B step2;
-    class C step3;
-    class D step4;
-    class E step5;
+    class A,B,C neutral;
+    class D warning;
+    class E success;
 ```
 
 ---
@@ -130,15 +126,13 @@ flowchart LR
     B --> C["3. Shift(1) Guardrail\n(Prevent Data Leakage)"]
     C --> D["4. Order Executes\n(Bar T+1 Open Price)"]
 
-    classDef stepA fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
-    classDef stepB fill:#0f172a,stroke:#c084fc,stroke-width:2px,color:#f8fafc;
-    classDef stepC fill:#0f172a,stroke:#f87171,stroke-width:2px,color:#f8fafc;
-    classDef stepD fill:#0f172a,stroke:#34d399,stroke-width:2px,color:#f8fafc;
+    classDef neutral fill:#0f172a,stroke:#fbbf24,stroke-width:2px,color:#f8fafc;
+    classDef warning fill:#0f172a,stroke:#f87171,stroke-width:2px,color:#f8fafc;
+    classDef success fill:#0f172a,stroke:#4ade80,stroke-width:2px,color:#f8fafc;
 
-    class A stepA;
-    class B stepB;
-    class C stepC;
-    class D stepD;
+    class A,B neutral;
+    class C warning;
+    class D success;
 ```
 
 ---
@@ -153,17 +147,13 @@ flowchart TD
     D --> E["3. Track Position & TP/SL in DB"]
     E --> F["4. Sync History & Update Live Account Stats"]
 
-    classDef startNode fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
-    classDef decision fill:#0f172a,stroke:#c084fc,stroke-width:2px,color:#f8fafc;
+    classDef neutral fill:#0f172a,stroke:#fbbf24,stroke-width:2px,color:#f8fafc;
     classDef warning fill:#0f172a,stroke:#f87171,stroke-width:2px,color:#f8fafc;
-    classDef success fill:#0f172a,stroke:#34d399,stroke-width:2px,color:#f8fafc;
-    classDef stepNode fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef success fill:#0f172a,stroke:#4ade80,stroke-width:2px,color:#f8fafc;
 
-    class A startNode;
-    class B decision;
+    class A,B neutral;
     class C warning;
-    class D success;
-    class E,F stepNode;
+    class D,E,F success;
 ```
 
 <div align="right"><a href="#top">⬆️ Back to Top</a></div>
