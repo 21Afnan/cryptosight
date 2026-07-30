@@ -147,6 +147,35 @@ flowchart TD
 
 ---
 
+## 🖼️ Dashboard & Trading Terminal Showcase
+
+<div align="center">
+
+| Executive Dashboard | Quant Backtest Analytics |
+| :---: | :---: |
+| ![Executive Dashboard](docs/screenshots/Dashboard.png) | ![Quant Backtest Analytics](docs/screenshots/backtest_02.png) |
+| *Portfolio KPIs, Win Rate & Strategy Leaderboard* | *Lightweight Charts v5 & 59+ QuantStats Ratios* |
+
+<br/>
+
+| Machine Learning Inspector | Bybit Live Execution Terminal |
+| :---: | :---: |
+| ![ML Model Inspector](docs/screenshots/ML.png) | ![Live Execution Terminal](docs/screenshots/execution.png) |
+| *Feature Importances & Out-of-Sample Inference* | *Bybit UTA V5 Position Reconciliation & Live PnL* |
+
+<br/>
+
+| FinBERT Social Sentiment | Exchange & Wallet Integration |
+| :---: | :---: |
+| ![FinBERT Social Sentiment](docs/screenshots/sentiment.png) | ![Exchange & Wallet Integration](docs/screenshots/exchange_bybit.png) |
+| *Reddit PRAW Scraping & FinBERT Classification* | *Bybit UTA V5 API Wallet Balance & Equity Curve* |
+
+</div>
+
+<div align="right"><a href="#top">⬆️ Back to Top</a></div>
+
+---
+
 ## ⚙️ Core Quantitative Engines & Zero-Leakage Guarantee
 
 ### 🛡️ Zero Look-Ahead Bias ($\mathbf{\text{Shift}(1)}$ Protection)
