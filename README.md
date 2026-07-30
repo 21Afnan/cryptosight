@@ -107,11 +107,11 @@ flowchart LR
     C --> D["4️⃣ Strategy & ML\n(Signals + Backtester)"]
     D --> E["5️⃣ Live Trading & UI\n(Bybit V5 + React Terminal)"]
 
-    classDef step1 fill:#00b0ff,stroke:#80d8ff,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef step2 fill:#00e676,stroke:#b9f6ca,stroke-width:2px,color:#000000,font-weight:bold;
-    classDef step3 fill:#7c3aed,stroke:#b388ff,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef step4 fill:#ff4081,stroke:#ff80ab,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef step5 fill:#00E676,stroke:#69f0ae,stroke-width:2px,color:#000000,font-weight:bold;
+    classDef step1 fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef step2 fill:#0f172a,stroke:#2dd4bf,stroke-width:2px,color:#f8fafc;
+    classDef step3 fill:#0f172a,stroke:#c084fc,stroke-width:2px,color:#f8fafc;
+    classDef step4 fill:#0f172a,stroke:#f472b6,stroke-width:2px,color:#f8fafc;
+    classDef step5 fill:#0f172a,stroke:#34d399,stroke-width:2px,color:#f8fafc;
 
     class A step1;
     class B step2;
@@ -130,10 +130,10 @@ flowchart LR
     B --> C["3. Shift(1) Guardrail\n(Prevent Data Leakage)"]
     C --> D["4. Order Executes\n(Bar T+1 Open Price)"]
 
-    classDef stepA fill:#00b0ff,stroke:#80d8ff,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef stepB fill:#7c3aed,stroke:#b388ff,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef stepC fill:#EE5D5D,stroke:#ff8a80,stroke-width:3px,color:#ffffff,font-weight:bold;
-    classDef stepD fill:#00E676,stroke:#69f0ae,stroke-width:2px,color:#000000,font-weight:bold;
+    classDef stepA fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef stepB fill:#0f172a,stroke:#c084fc,stroke-width:2px,color:#f8fafc;
+    classDef stepC fill:#0f172a,stroke:#f87171,stroke-width:2px,color:#f8fafc;
+    classDef stepD fill:#0f172a,stroke:#34d399,stroke-width:2px,color:#f8fafc;
 
     class A stepA;
     class B stepB;
@@ -153,11 +153,11 @@ flowchart TD
     D --> E["3. Track Position & TP/SL in DB"]
     E --> F["4. Sync History & Update Live Account Stats"]
 
-    classDef startNode fill:#00b0ff,stroke:#80d8ff,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef decision fill:#7c3aed,stroke:#b388ff,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef warning fill:#EE5D5D,stroke:#ff8a80,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef success fill:#00E676,stroke:#69f0ae,stroke-width:2px,color:#000000,font-weight:bold;
-    classDef stepNode fill:#00b0ff,stroke:#80d8ff,stroke-width:2px,color:#ffffff,font-weight:bold;
+    classDef startNode fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef decision fill:#0f172a,stroke:#c084fc,stroke-width:2px,color:#f8fafc;
+    classDef warning fill:#0f172a,stroke:#f87171,stroke-width:2px,color:#f8fafc;
+    classDef success fill:#0f172a,stroke:#34d399,stroke-width:2px,color:#f8fafc;
+    classDef stepNode fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
 
     class A startNode;
     class B decision;
