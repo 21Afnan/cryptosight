@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 import pandas as pd
 import numpy as np
+import math
 
 # Add project root to sys.path
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
@@ -66,6 +67,20 @@ def _sanitize_for_json(obj):
             return str(obj)
         except Exception:
             return None
+
+
+def get_ml_dataset(config_path: str | Path = None) -> dict:
+    """
+    Helper function to load the ML configuration, build the dataset features and target,
+    and return a dictionary of raw/engineered datasets for the benchmark.
+    """
+    from cryptosight.utils.config import load_config
+    from cryptosight.ml.preprocessing.features import MLFeatureBuilder
+    if config_path is None:
+        config_path = Path(__file__).resolve().parent / "ml_config.yaml"
+    config = load_config(config_path)
+    builder = MLFeatureBuilder(config=config)
+    return builder.build_dataset()
 
 
 def ingest_ml_artifacts_to_db(conn, config_path: Path):

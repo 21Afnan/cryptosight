@@ -12,15 +12,15 @@ def evaluate_classification(model, X_train, y_train, X_val, y_val, X_test, y_tes
     test_preds = model.predict(X_test)
 
     # Probabilities
-    try:
+    if hasattr(model, "predict_proba") and callable(getattr(model, "predict_proba")):
         train_proba = model.predict_proba(X_train)
         val_proba = model.predict_proba(X_val)
         test_proba = model.predict_proba(X_test)
         train_loss = float(log_loss(y_train, train_proba))
         val_loss = float(log_loss(y_val, val_proba))
         test_loss = float(log_loss(y_test, test_proba))
-    except Exception:
-        train_loss, val_loss, test_loss = 0.0, 0.0, 0.0
+    else:
+        train_loss, val_loss, test_loss = None, None, None
         val_proba = None
 
     # Accuracies

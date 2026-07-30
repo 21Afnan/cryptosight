@@ -6,7 +6,7 @@
         "target_timeframe": "15m",
         "start_date": "2026-01-01",
         "end_date": "now",
-        "total_dataset_rows": 19856,
+        "total_dataset_rows": 20131,
         "features_generated_count": 13,
         "features_summary": {
             "ohlcv": "enabled",
@@ -67,19 +67,19 @@
         },
         "chronological_splits": {
             "train": {
-                "rows": 13899,
+                "rows": 14091,
                 "start_timestamp": "2026-01-01 12:30:00+00:00",
-                "end_timestamp": "2026-05-26 07:00:00+00:00"
+                "end_timestamp": "2026-05-28 07:00:00+00:00"
             },
             "validation": {
-                "rows": 2978,
-                "start_timestamp": "2026-05-26 07:15:00+00:00",
-                "end_timestamp": "2026-06-26 07:30:00+00:00"
+                "rows": 3020,
+                "start_timestamp": "2026-05-28 07:15:00+00:00",
+                "end_timestamp": "2026-06-28 18:00:00+00:00"
             },
             "test": {
-                "rows": 2979,
-                "start_timestamp": "2026-06-26 07:45:00+00:00",
-                "end_timestamp": "2026-07-27 08:15:00+00:00"
+                "rows": 3020,
+                "start_timestamp": "2026-06-28 18:15:00+00:00",
+                "end_timestamp": "2026-07-30 05:00:00+00:00"
             }
         },
         "preprocessor_parameters": {
@@ -117,48 +117,48 @@
             },
             "winsor_bounds": {
                 "open": [
-                    31763.457697892678,
-                    51514.65540318002
+                    31768.905125443078,
+                    51363.58962318526
                 ],
                 "high": [
-                    31859.694137038005,
-                    51522.11866354599
+                    31890.500918293237,
+                    51391.18365056129
                 ],
                 "low": [
-                    31656.006611339337,
-                    51418.76253643434
+                    31659.122024284618,
+                    51358.57463387731
                 ],
                 "close": [
-                    31763.457697892678,
-                    51421.84891132822
+                    31768.905125443078,
+                    51390.937837472935
                 ],
                 "volume": [
-                    60.297180000000004,
-                    4855.898680000007
+                    60.5852,
+                    4857.121400000005
                 ],
                 "ind_EMA_20": [
-                    31877.0923524406,
-                    51530.19487094171
+                    31890.677874398196,
+                    51439.78233489491
                 ],
                 "ind_EMA_50": [
-                    31972.323751270073,
-                    51407.17735576716
+                    31982.96753108792,
+                    51338.48400521436
                 ],
                 "ind_RSI_14": [
-                    23.431463595720462,
-                    76.64281373540686
+                    23.309799819851406,
+                    76.59477583658509
                 ],
                 "ind_MACD_12_26_9": [
-                    -624.3659533878459,
-                    576.3606992604917
+                    -619.1430154081463,
+                    571.2896844072733
                 ],
                 "ind_MACD_SIGNAL_12_26_9": [
-                    -582.4352397948363,
-                    548.7819274642014
+                    -575.944747342992,
+                    547.0147293521048
                 ],
                 "ind_MACD_HIST_12_26_9": [
-                    -162.23617562328823,
-                    167.76580456899816
+                    -160.85654665008715,
+                    167.64324514545288
                 ],
                 "pat_DOJI": [
                     0.0,
@@ -176,20 +176,30 @@
             {
                 "model": "linear_regression",
                 "hyperparameters": {},
-                "trading_metrics": {},
+                "trading_metrics": {
+                    "cagr": -0.746054,
+                    "calmar": -2.722638,
+                    "max_drawdown": -0.274019,
+                    "profit_factor": 0.405088,
+                    "recovery_factor": 1.113769,
+                    "risk_of_ruin": 0.0,
+                    "sharpe": -7.098527,
+                    "sortino": -8.391152,
+                    "win_rate": 0.210526
+                },
                 "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\bybit_BTC_15m_regression_linear_regression.joblib",
-                "train_rmse": 0.002577,
-                "train_mae": 0.001643,
-                "train_r2": 0.002,
-                "train_total": 13899,
-                "val_rmse": 0.002724,
-                "val_mae": 0.001787,
-                "val_r2": -0.0006,
-                "val_total": 2978,
-                "test_rmse": 0.001866,
-                "test_mae": 0.001263,
-                "test_r2": 0.0001,
-                "test_total": 2979
+                "train_rmse": 0.002571,
+                "train_mae": 0.001639,
+                "train_r2": 0.0019,
+                "train_total": 14091,
+                "val_rmse": 0.002714,
+                "val_mae": 0.001781,
+                "val_r2": 0.0007,
+                "val_total": 3020,
+                "test_rmse": 0.001862,
+                "test_mae": 0.001266,
+                "test_r2": -0.0022,
+                "test_total": 3020
             },
             {
                 "model": "random_forest_regressor",
@@ -197,20 +207,30 @@
                     "max_depth": 5,
                     "n_estimators": 100
                 },
-                "trading_metrics": {},
+                "trading_metrics": {
+                    "cagr": -0.39364,
+                    "calmar": -3.89707,
+                    "max_drawdown": -0.101009,
+                    "profit_factor": 0.753766,
+                    "recovery_factor": 0.972266,
+                    "risk_of_ruin": 0.0,
+                    "sharpe": -2.152162,
+                    "sortino": -3.20687,
+                    "win_rate": 0.326923
+                },
                 "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\bybit_BTC_15m_regression_random_forest_regressor.joblib",
-                "train_rmse": 0.00248,
-                "train_mae": 0.00162,
-                "train_r2": 0.0756,
-                "train_total": 13899,
-                "val_rmse": 0.002855,
-                "val_mae": 0.001882,
-                "val_r2": -0.0985,
-                "val_total": 2978,
-                "test_rmse": 0.001964,
-                "test_mae": 0.001364,
-                "test_r2": -0.1078,
-                "test_total": 2979
+                "train_rmse": 0.002475,
+                "train_mae": 0.001617,
+                "train_r2": 0.0755,
+                "train_total": 14091,
+                "val_rmse": 0.002866,
+                "val_mae": 0.001895,
+                "val_r2": -0.1139,
+                "val_total": 3020,
+                "test_rmse": 0.001943,
+                "test_mae": 0.001353,
+                "test_r2": -0.0912,
+                "test_total": 3020
             },
             {
                 "model": "lightgbm_regressor",
@@ -218,20 +238,30 @@
                     "learning_rate": 0.05,
                     "n_estimators": 100
                 },
-                "trading_metrics": {},
+                "trading_metrics": {
+                    "cagr": -0.090918,
+                    "calmar": -0.856737,
+                    "max_drawdown": -0.106121,
+                    "profit_factor": 0.960736,
+                    "recovery_factor": 0.122286,
+                    "risk_of_ruin": 0.0,
+                    "sharpe": -0.30276,
+                    "sortino": -0.489604,
+                    "win_rate": 0.382979
+                },
                 "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\bybit_BTC_15m_regression_lightgbm_regressor.joblib",
-                "train_rmse": 0.002347,
-                "train_mae": 0.001542,
-                "train_r2": 0.1719,
-                "train_total": 13899,
-                "val_rmse": 0.002986,
-                "val_mae": 0.002016,
-                "val_r2": -0.2024,
-                "val_total": 2978,
-                "test_rmse": 0.002064,
-                "test_mae": 0.001479,
-                "test_r2": -0.2238,
-                "test_total": 2979
+                "train_rmse": 0.002335,
+                "train_mae": 0.001538,
+                "train_r2": 0.1769,
+                "train_total": 14091,
+                "val_rmse": 0.003057,
+                "val_mae": 0.002092,
+                "val_r2": -0.2673,
+                "val_total": 3020,
+                "test_rmse": 0.002092,
+                "test_mae": 0.001493,
+                "test_r2": -0.2646,
+                "test_total": 3020
             },
             {
                 "model": "xgboost_regressor",
@@ -240,20 +270,30 @@
                     "max_depth": null,
                     "n_estimators": null
                 },
-                "trading_metrics": {},
+                "trading_metrics": {
+                    "cagr": -0.732649,
+                    "calmar": -2.848673,
+                    "max_drawdown": -0.25719,
+                    "profit_factor": 0.422275,
+                    "recovery_factor": 1.101215,
+                    "risk_of_ruin": 0.0,
+                    "sharpe": -6.740725,
+                    "sortino": -8.10913,
+                    "win_rate": 0.218182
+                },
                 "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\bybit_BTC_15m_regression_xgboost_regressor.joblib",
-                "train_rmse": 0.001594,
-                "train_mae": 0.001135,
-                "train_r2": 0.6181,
-                "train_total": 13899,
-                "val_rmse": 0.003438,
-                "val_mae": 0.002382,
-                "val_r2": -0.5937,
-                "val_total": 2978,
-                "test_rmse": 0.002882,
-                "test_mae": 0.002144,
-                "test_r2": -1.3865,
-                "test_total": 2979
+                "train_rmse": 0.001631,
+                "train_mae": 0.001152,
+                "train_r2": 0.5985,
+                "train_total": 14091,
+                "val_rmse": 0.003388,
+                "val_mae": 0.00231,
+                "val_r2": -0.5571,
+                "val_total": 3020,
+                "test_rmse": 0.002514,
+                "test_mae": 0.001807,
+                "test_r2": -0.8269,
+                "test_total": 3020
             },
             {
                 "model": "lstm_regressor",
@@ -266,41 +306,62 @@
                     "dropout": 0.0,
                     "lookback_window": 15
                 },
-                "trading_metrics": {},
+                "trading_metrics": {
+                    "cagr": -0.351837,
+                    "calmar": -1.853975,
+                    "max_drawdown": -0.189775,
+                    "profit_factor": 0.786408,
+                    "recovery_factor": 0.461797,
+                    "risk_of_ruin": 0.0,
+                    "sharpe": -1.834438,
+                    "sortino": -2.768474,
+                    "win_rate": 0.333333
+                },
                 "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\bybit_BTC_15m_regression_lstm_regressor.pt",
-                "train_rmse": 0.004257,
-                "train_mae": 0.003075,
-                "train_r2": -1.721,
-                "train_total": 13884,
-                "val_rmse": 0.005012,
-                "val_mae": 0.00366,
-                "val_r2": -2.3803,
-                "val_total": 2963,
-                "test_rmse": 0.004576,
-                "test_mae": 0.003551,
-                "test_r2": -5.0319,
-                "test_total": 2964
+                "train_rmse": 0.004477,
+                "train_mae": 0.003239,
+                "train_r2": -2.0218,
+                "train_total": 14076,
+                "val_rmse": 0.006533,
+                "val_mae": 0.005186,
+                "val_r2": -4.7671,
+                "val_total": 3005,
+                "test_rmse": 0.006504,
+                "test_mae": 0.005337,
+                "test_r2": -11.2148,
+                "test_total": 3005
             }
         ],
         "models": {
             "linear_regression": {
                 "hyperparameters": {},
                 "accuracy_metrics": {
-                    "train_rmse": 0.002577,
-                    "train_mae": 0.001643,
-                    "train_r2": 0.002,
-                    "train_total": 13899,
-                    "val_rmse": 0.002724,
-                    "val_mae": 0.001787,
-                    "val_r2": -0.0006,
-                    "val_total": 2978,
-                    "test_rmse": 0.001866,
-                    "test_mae": 0.001263,
-                    "test_r2": 0.0001,
-                    "test_total": 2979
+                    "train_rmse": 0.002571,
+                    "train_mae": 0.001639,
+                    "train_r2": 0.0019,
+                    "train_total": 14091,
+                    "val_rmse": 0.002714,
+                    "val_mae": 0.001781,
+                    "val_r2": 0.0007,
+                    "val_total": 3020,
+                    "test_rmse": 0.001862,
+                    "test_mae": 0.001266,
+                    "test_r2": -0.0022,
+                    "test_total": 3020
                 },
                 "artifacts": {
                     "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\bybit_BTC_15m_regression_linear_regression.joblib"
+                },
+                "trading_metrics": {
+                    "cagr": -0.746054,
+                    "calmar": -2.722638,
+                    "max_drawdown": -0.274019,
+                    "profit_factor": 0.405088,
+                    "recovery_factor": 1.113769,
+                    "risk_of_ruin": 0.0,
+                    "sharpe": -7.098527,
+                    "sortino": -8.391152,
+                    "win_rate": 0.210526
                 }
             },
             "random_forest_regressor": {
@@ -309,21 +370,32 @@
                     "n_estimators": 100
                 },
                 "accuracy_metrics": {
-                    "train_rmse": 0.00248,
-                    "train_mae": 0.00162,
-                    "train_r2": 0.0756,
-                    "train_total": 13899,
-                    "val_rmse": 0.002855,
-                    "val_mae": 0.001882,
-                    "val_r2": -0.0985,
-                    "val_total": 2978,
-                    "test_rmse": 0.001964,
-                    "test_mae": 0.001364,
-                    "test_r2": -0.1078,
-                    "test_total": 2979
+                    "train_rmse": 0.002475,
+                    "train_mae": 0.001617,
+                    "train_r2": 0.0755,
+                    "train_total": 14091,
+                    "val_rmse": 0.002866,
+                    "val_mae": 0.001895,
+                    "val_r2": -0.1139,
+                    "val_total": 3020,
+                    "test_rmse": 0.001943,
+                    "test_mae": 0.001353,
+                    "test_r2": -0.0912,
+                    "test_total": 3020
                 },
                 "artifacts": {
                     "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\bybit_BTC_15m_regression_random_forest_regressor.joblib"
+                },
+                "trading_metrics": {
+                    "cagr": -0.39364,
+                    "calmar": -3.89707,
+                    "max_drawdown": -0.101009,
+                    "profit_factor": 0.753766,
+                    "recovery_factor": 0.972266,
+                    "risk_of_ruin": 0.0,
+                    "sharpe": -2.152162,
+                    "sortino": -3.20687,
+                    "win_rate": 0.326923
                 }
             },
             "lightgbm_regressor": {
@@ -332,21 +404,32 @@
                     "n_estimators": 100
                 },
                 "accuracy_metrics": {
-                    "train_rmse": 0.002347,
-                    "train_mae": 0.001542,
-                    "train_r2": 0.1719,
-                    "train_total": 13899,
-                    "val_rmse": 0.002986,
-                    "val_mae": 0.002016,
-                    "val_r2": -0.2024,
-                    "val_total": 2978,
-                    "test_rmse": 0.002064,
-                    "test_mae": 0.001479,
-                    "test_r2": -0.2238,
-                    "test_total": 2979
+                    "train_rmse": 0.002335,
+                    "train_mae": 0.001538,
+                    "train_r2": 0.1769,
+                    "train_total": 14091,
+                    "val_rmse": 0.003057,
+                    "val_mae": 0.002092,
+                    "val_r2": -0.2673,
+                    "val_total": 3020,
+                    "test_rmse": 0.002092,
+                    "test_mae": 0.001493,
+                    "test_r2": -0.2646,
+                    "test_total": 3020
                 },
                 "artifacts": {
                     "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\bybit_BTC_15m_regression_lightgbm_regressor.joblib"
+                },
+                "trading_metrics": {
+                    "cagr": -0.090918,
+                    "calmar": -0.856737,
+                    "max_drawdown": -0.106121,
+                    "profit_factor": 0.960736,
+                    "recovery_factor": 0.122286,
+                    "risk_of_ruin": 0.0,
+                    "sharpe": -0.30276,
+                    "sortino": -0.489604,
+                    "win_rate": 0.382979
                 }
             },
             "xgboost_regressor": {
@@ -356,21 +439,32 @@
                     "n_estimators": null
                 },
                 "accuracy_metrics": {
-                    "train_rmse": 0.001594,
-                    "train_mae": 0.001135,
-                    "train_r2": 0.6181,
-                    "train_total": 13899,
-                    "val_rmse": 0.003438,
-                    "val_mae": 0.002382,
-                    "val_r2": -0.5937,
-                    "val_total": 2978,
-                    "test_rmse": 0.002882,
-                    "test_mae": 0.002144,
-                    "test_r2": -1.3865,
-                    "test_total": 2979
+                    "train_rmse": 0.001631,
+                    "train_mae": 0.001152,
+                    "train_r2": 0.5985,
+                    "train_total": 14091,
+                    "val_rmse": 0.003388,
+                    "val_mae": 0.00231,
+                    "val_r2": -0.5571,
+                    "val_total": 3020,
+                    "test_rmse": 0.002514,
+                    "test_mae": 0.001807,
+                    "test_r2": -0.8269,
+                    "test_total": 3020
                 },
                 "artifacts": {
                     "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\bybit_BTC_15m_regression_xgboost_regressor.joblib"
+                },
+                "trading_metrics": {
+                    "cagr": -0.732649,
+                    "calmar": -2.848673,
+                    "max_drawdown": -0.25719,
+                    "profit_factor": 0.422275,
+                    "recovery_factor": 1.101215,
+                    "risk_of_ruin": 0.0,
+                    "sharpe": -6.740725,
+                    "sortino": -8.10913,
+                    "win_rate": 0.218182
                 }
             },
             "lstm_regressor": {
@@ -384,21 +478,32 @@
                     "lookback_window": 15
                 },
                 "accuracy_metrics": {
-                    "train_rmse": 0.004257,
-                    "train_mae": 0.003075,
-                    "train_r2": -1.721,
-                    "train_total": 13884,
-                    "val_rmse": 0.005012,
-                    "val_mae": 0.00366,
-                    "val_r2": -2.3803,
-                    "val_total": 2963,
-                    "test_rmse": 0.004576,
-                    "test_mae": 0.003551,
-                    "test_r2": -5.0319,
-                    "test_total": 2964
+                    "train_rmse": 0.004477,
+                    "train_mae": 0.003239,
+                    "train_r2": -2.0218,
+                    "train_total": 14076,
+                    "val_rmse": 0.006533,
+                    "val_mae": 0.005186,
+                    "val_r2": -4.7671,
+                    "val_total": 3005,
+                    "test_rmse": 0.006504,
+                    "test_mae": 0.005337,
+                    "test_r2": -11.2148,
+                    "test_total": 3005
                 },
                 "artifacts": {
                     "model_file": "D:\\Neurog_Internship\\cryptosight\\ml\\artifacts\\models\\bybit_BTC_15m_regression_lstm_regressor.pt"
+                },
+                "trading_metrics": {
+                    "cagr": -0.351837,
+                    "calmar": -1.853975,
+                    "max_drawdown": -0.189775,
+                    "profit_factor": 0.786408,
+                    "recovery_factor": 0.461797,
+                    "risk_of_ruin": 0.0,
+                    "sharpe": -1.834438,
+                    "sortino": -2.768474,
+                    "win_rate": 0.333333
                 }
             }
         }

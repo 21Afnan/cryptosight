@@ -36,7 +36,7 @@ def get_dashboard_summary():
     connected_accounts = 0
     total_backtests = 0
     trained_ml_models = 0
-    total_portfolio_value = 164930.11  # fallback default
+    total_portfolio_value = 0.0
     
     live_closed_pnl = 0.0
     live_open_pnl = 0.0
@@ -127,7 +127,7 @@ def get_dashboard_summary():
     live_total_return_pct = (live_total_return_usd / live_initial_balance) if live_initial_balance > 0 else 0.0
     live_todays_pnl_pct = (live_todays_pnl / (total_portfolio_value - live_todays_pnl)) if (total_portfolio_value - live_todays_pnl) > 0 else 0.0
 
-    final_ml_models = trained_ml_models if trained_ml_models > 0 else 12
+    final_ml_models = trained_ml_models
 
     return {
         "total_strategies": total_strats,

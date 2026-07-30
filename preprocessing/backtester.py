@@ -167,7 +167,10 @@ class PreprocessingBacktester(BacktestingEngine):
         winning_trades = len(closed_trades[closed_trades["net_pnl"] > 0])
         win_rate = (winning_trades / total_trades) * 100.0
 
-        initial_bal = float(self.config.get("initial_balance", 10000.0))
+        initial_bal_val = self.config.get("initial_balance")
+        if initial_bal_val is None:
+            raise ValueError("Configuration key 'initial_balance' is missing or empty in backtester config.")
+        initial_bal = float(initial_bal_val)
         final_bal = float(closed_trades["balance"].iloc[-1]) if "balance" in closed_trades.columns else initial_bal + closed_trades["net_pnl"].sum()
         total_return_pct = ((final_bal - initial_bal) / initial_bal) * 100.0
 

@@ -251,27 +251,6 @@ def get_wallets_data(search: str = "", filter_status: str = "") -> dict:
                     "account_stats": account_stats_payload,
                 }
                 wallets.append(w_item)
-        else:
-            default_wallet = {
-                "id": "wallet-bybit-1",
-                "exchange": "Bybit",
-                "account_type": "Unified Margin (Demo)",
-                "api_key": "••••••••••••4a82",
-                "status": "connected",
-                "balance": round(total_equity, 2) if total_equity is not None else None,
-                "available_balance": round(avail_bal, 2) if avail_bal is not None else None,
-                "balance_unavailable": balance_unavailable,
-                "unrealized_pnl": round(sum(p["unrealized_pnl"] for p in active_positions), 2),
-                "total_pnl": round(total_realized_pnl, 2) if total_realized_pnl is not None else None,
-                "pnl_unavailable": pnl_unavailable,
-                "assigned_strategies": assigned_strategies,
-                "active_positions": active_positions,
-                "open_orders": [],
-                "equity_curve": equity_curve,
-                "equity_curve_unavailable": equity_curve_unavailable,
-                "account_stats": account_stats_payload,
-            }
-            wallets.append(default_wallet)
 
     except Exception as error:
         logger.error(f"Error fetching wallet data in WalletService: {error}")

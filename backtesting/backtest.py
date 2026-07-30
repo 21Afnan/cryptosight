@@ -190,16 +190,21 @@ class BacktestingEngine:
         # 5. Position sizing
         entries_df = self.calculate_position_size(entries_df)
 
-        # 6. Calculate TP/SL target levels directly from strategy configuration with safe fallbacks
         tp_val = strategy_cfg.get("take_profit") if isinstance(strategy_cfg, dict) else None
         sl_val = strategy_cfg.get("stop_loss") if isinstance(strategy_cfg, dict) else None
 
         if tp_val is None:
             tp_cfg = self.config.get("take_profit")
-            tp_val = tp_cfg.get("value", 1.0) if isinstance(tp_cfg, dict) else 1.0
+            if isinstance(tp_cfg, dict) and "value" in tp_cfg:
+                tp_val = tp_cfg["value"]
+            else:
+                raise ValueError("Take profit value is missing in both strategy config and general config.")
         if sl_val is None:
             sl_cfg = self.config.get("stop_loss")
-            sl_val = sl_cfg.get("value", 0.5) if isinstance(sl_cfg, dict) else 0.5
+            if isinstance(sl_cfg, dict) and "value" in sl_cfg:
+                sl_val = sl_cfg["value"]
+            else:
+                raise ValueError("Stop loss value is missing in both strategy config and general config.")
 
         tp_pct = float(tp_val) / 100.0 if float(tp_val) > 0.05 else float(tp_val)
         sl_pct = float(sl_val) / 100.0 if float(sl_val) > 0.05 else float(sl_val)
@@ -615,7 +620,9 @@ class BacktestingEngine:
         """
         self.logger.info("Updating account balances after trades...")
         
-        initial_balance = self.config["initial_balance"]
+        initial_balance = self.config.get("initial_balance")
+        if initial_balance is None:
+            raise ValueError("Configuration key 'initial_balance' is missing or empty in backtester config.")
         
         # Vectorized cumulative sum of Net PnL added to the initial balance
         entries_df["cumulative_pnl"] = entries_df["net_pnl"].cumsum()
