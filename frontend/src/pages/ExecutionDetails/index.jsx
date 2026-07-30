@@ -194,20 +194,6 @@ export default function ExecutionDetails() {
     </PageContainer>
   );
 
-  if (exec.has_ledger === false) return (
-    <PageContainer title={exec.strategy_name} breadcrumbs="Execution">
-      <Box sx={{ pt: 3 }}>
-        <Button startIcon={<ArrowBackRoundedIcon />} onClick={() => navigate('/deployment')} size="small" sx={{ mb: 2 }}>Back</Button>
-        <EmptyState
-          icon={ErrorOutlineRoundedIcon}
-          title="Execution Ledger Not Found"
-          description={`No trade ledger table (execution_ledgers) exists for '${exec.strategy_name}' in the database yet. Details will open once trades are recorded in database.`}
-          action={<Button onClick={() => navigate('/deployment')}>Back to Execution</Button>}
-        />
-      </Box>
-    </PageContainer>
-  );
-
   const pos = exec.active_position;
 
   // Derive position size data from real DB trades if position_size_history is empty

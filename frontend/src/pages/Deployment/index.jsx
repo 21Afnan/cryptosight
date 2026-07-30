@@ -224,13 +224,14 @@ export default function Deployment() {
                         key={d.execution_id}
                         hover
                         onClick={() => {
-                          if (d.has_ledger === false) {
-                            setToastMsg(`Execution details unavailable: No trade ledger table exists in database for ${d.strategy_name} yet.`);
+                          const hasNoTrades = (d.total_trades || 0) === 0 && d.has_ledger === false;
+                          if (hasNoTrades) {
+                            setToastMsg(`No trades executed yet for ${d.strategy_name}. Details will open once trades occur.`);
                           } else {
                             navigate(`/deployment/${d.execution_id}`);
                           }
                         }}
-                        sx={{ cursor: d.has_ledger === false ? 'not-allowed' : 'pointer', opacity: d.has_ledger === false ? 0.75 : 1 }}
+                        sx={{ cursor: ((d.total_trades || 0) === 0 && d.has_ledger === false) ? 'not-allowed' : 'pointer', opacity: ((d.total_trades || 0) === 0 && d.has_ledger === false) ? 0.8 : 1 }}
                       >
                         <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{d.strategy_name}</Typography></TableCell>
                         <TableCell><Typography variant="body2" sx={{ color: COLORS.accent, fontWeight: 700 }}>{d.symbol}</Typography></TableCell>
