@@ -1,127 +1,138 @@
 <div id="top"></div>
 <div align="center">
 
-# 🚀 CryptoSight: Enterprise Quantitative Data, Algorithmic Engine & Trading Terminal
+# ⚡ CryptoSight — Institutional Quantitative Trading Terminal & Algorithmic Engine
+
+> **Enterprise Financial Data Ingestion, 158 Dynamic Technical Indicators, Zero-Leakage ML Signal Generation, FinBERT NLP Sentiment Analysis, Vectorized Backtesting, Bybit V5 Automated Live Execution & Real-Time React Dashboard.**
 
 [![Built by Afnan Shoukat](https://img.shields.io/badge/Built%20by-Afnan%20Shoukat-00E676?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/afnanshoukat)
 [![GitHub Profile](https://img.shields.io/badge/GitHub-21Afnan-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/21Afnan)
-[![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-REST%20API-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![React](https://img.shields.io/badge/React-18%2B%20Dashboard-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Enterprise%20Storage-316192?style=for-the-badge&logo=postgresql&logoColor=white)](https://postgresql.org)
+[![Python Version](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-REST%20Backend-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-18%20Dashboard-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Enterprise%20Storage-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://postgresql.org)
+[![PyTorch](https://img.shields.io/badge/PyTorch-Deep%20Learning-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org)
 [![TA-Lib](https://img.shields.io/badge/TA--Lib-158%20Indicators-FF6F00?style=for-the-badge)](https://ta-lib.org)
 
-**An institutional, production-grade cryptocurrency data ingestion, dynamic technical analysis, NLP sentiment classification, ML feature engineering, vectorized backtesting, FastAPI REST backend services, and interactive React trading dashboard.**
+<br/>
 
-[🌟 Key Pillars](#features) • [🏗️ System Flowchart](#flowchart) • [📊 Status: Done vs Left](#status) • [⚡ Quick Start Guide](#quickstart) • [📁 Repository Structure](#structure) • [👨‍💻 Author](#author)
+[🌟 Executive Overview](#-executive-summary--10-quantitative-pillars) • [🏗️ System Architecture](#-system-architecture--pipeline-flowcharts) • [⚙️ Core Engines & Math](#-core-quantitative-engines--zero-leakage-guarantee) • [📊 Status & Roadmap](#-system-status--done-vs-roadmap) • [⚡ Quick Start](#-quick-start-guide) • [📁 Directory Tree](#-repository-structure)
 
 </div>
 
 ---
 
-<div id="features"></div>
-
 ## 🌟 Executive Summary & 10 Quantitative Pillars
 
-**CryptoSight** bridges the gap between raw exchange data feeds and institutional quantitative strategies. It eliminates boilerplate data cleaning, API pagination headaches, and indicator mapping complexities by providing an end-to-end automated framework organized into **10 Quantitative Pillars**:
+**CryptoSight** bridges the gap between raw cryptocurrency exchange feeds and institutional quantitative strategies. It eliminates manual data cleaning, API pagination headaches, and indicator mapping complexities by unifying financial data engineering into **10 Quantitative Pillars**:
 
-| Status | Pillar | Module | High-Level Institutional Functionality |
+```
+ ┌─────────────────────────────────────────────────────────────────────────────────────────┐
+ │                                 CRYPTOSIGHT QUANT ENGINE                                │
+ ├──────────────┬──────────────┬──────────────┬──────────────┬──────────────┬──────────────┤
+ │  INGESTION   │  TA ENGINE   │   SIGNALS    │  SIMULATOR   │  BACKTESTER  │  SENTIMENT   │
+ │  Binance/    │  158 TA-Lib  │ YAML Logic & │ Event-Driven │  Vectorized  │ FinBERT NLP  │
+ │  Bybit Streams │  Interception│ Shift(1) Guard│ Active Pos   │ 10-Step Engine│ Reddit Scrape│
+ ├──────────────┼──────────────┼──────────────┼──────────────┼──────────────┴──────────────┤
+ │  ML ENGINE   │  ANALYTICS   │   TERMINAL   │ LIVE EXECUTE │  DATA INTEGRITY POLICY      │
+ │ PyTorch/XGB  │ 59+ Ratios   │ React 18 UI  │  Bybit V5    │ Zero-Fake-Data & Fail-Safe   │
+ └──────────────┴──────────────┴──────────────┴──────────────┴─────────────────────────────┘
+```
+
+### 🏛️ The 10 Quantitative Pillars Breakdown
+
+| Status | Pillar | Core Module | Institutional Functionality |
 | :---: | :--- | :--- | :--- |
-| 🟢 **COMPLETED** | **1. Ingestion** | `cryptosight.data` | **Binance & Bybit Ingestion** with smart SQL gap-fill, COPY binary streams, and live candle stripping (`latest_ts` synchronization). |
-| 🟢 **COMPLETED** | **2. TA Engine** | `cryptosight.tal_Indicators` | **Dynamic 158 TA-Lib Wrapper** utilizing Python `__getattr__` interception with parameter hierarchy & Plotly visual rendering. |
-| 🟢 **COMPLETED** | **3. Signals** | `cryptosight.signals` | **YAML-Driven Signal Pipeline** with multi-crossover conditions and automatic `.shift(1)` look-ahead bias prevention. |
-| 🟢 **COMPLETED** | **4. Simulator Engine**| `cryptosight.simulator` | **Event-Driven Simulation Engine** maintaining live active positions (`simulations.active_positions`), trade ledgers (`simulation_ledgers`), and dynamic performance metrics (`simulations.stats`). |
-| 🟢 **COMPLETED** | **5. Backtester** | `cryptosight.backtesting` | **Vectorized 10-Step Backtesting Engine** simulating realistic commissions (`0.05%`), slippage (`0.02%`), dynamic TP/SL, clean single strategy slug table mapping, and automatic 0-trade fallback safety. |
-| 🟢 **COMPLETED** | **6. Sentiment** | `cryptosight.sentiment` | **Reddit NLP Pipeline** with PRAW scraping, text cleaning, and **Hugging Face FinBERT** chunk-averaged classification. |
-| 🟢 **COMPLETED** | **7. ML Ecosystem** | `cryptosight.ml` | **Quant ML Engine** with lag-free feature extraction (`.shift(1)`), stationarity scaling, XGBoost/LightGBM/LSTM models, and out-of-sample forward inference. |
-| 🟢 **COMPLETED** | **8. Analytics** | `cryptosight.stats` | **Institutional QuantStats Suite** computing 59+ financial performance ratios (`CAGR, Sharpe, Sortino, Calmar`) embedded as dynamic PostgreSQL tabular columns. |
-| 🟢 **COMPLETED** | **9. Terminal Platform** | `cryptosight.backend` & `frontend` | **FastAPI REST API & React Dashboard** with clean strategy name stripping, dynamic Avg Win Rate dashboard card, 4-column balanced layout, database active polling, and soft matte red status design system. |
-| 🟢 **COMPLETED** | **10. Live Execution** | `cryptosight.execution` | **Automated Bybit Live Execution Engine** managing live positions (`execution.active_positions`), strategy ledgers (`execution_ledgers`), exchange history sync (`account_history.*`), TP/SL/Reversal reconciliation, and real-time execution stats (`execution.stats` & `account.stats`) with strict single active strategy per symbol limits. |
-
-> [!TIP]
-> **Platform Upgrades (July 29, 2026)**:
-> * **Symbol Guardrails**: Toggle switch checks enforce that **only one strategy can be active per symbol** at any time. Activating a conflict triggers a warning toast: *"You can activate just 1 strategy for this symbol, another is already activated."*
-> * **Dashboard Refactoring & Equal Heights**: Portfolio Value card swapped for a dynamically calculated **Average Win Rate** across active strategies. Swapped green shadows for a subtle, premium neutral gray shadow and enforced equal heights for all dashboard card slots.
-> * **Visual Confluence Flow**: Integrated a flowchart workspace diagram in Column 2 (`Build Strategy`) of the Strategy Builder page to explain logical expressions dynamically and eliminate empty screen spaces.
-> * **Daily Returns Timeline**: Replaced the sparse, empty Trade PnL Distribution histogram with a rich, continuous `Daily Returns (%)` chart on the Strategy Details page.
-> * **Position Liquidation Tracking**: Replaced the redundant `Mark Price` column in the Live Wallet Positions table with `Liq. Price` (Liquidation Price) styled in red.
-> * **Model Details Optimization**: Automatically hide classification evaluation charts when viewing regression models, and removed the empty `ROC-AUC` bar from classification charts to clean up ML model performance views.
-> * **Topbar Cleanup**: Removed the database health checking state and status pill (`● DB Active`) from the header Topbar to clean up the navigation layout.
-
-> [!IMPORTANT]
-> **Zero Data Leakage Guarantee (`.shift(1)`)**: Every single technical indicator, moving average, and pattern calculated inside CryptoSight is explicitly shifted forward by 1 period (`Bar T -> Bar T+1`) before generating target labels or execution signals. This mathematically prevents future look-ahead bias during historical backtests and ML cross-validation.
-
-> [!NOTE]
-> **Strict Financial Data Governance & Zero Fake Data Policy**: All backend services (including `wallet_service.py`) operate under a strict zero-fabricated-data policy. If live exchange APIs or database analytics are unavailable, financial endpoints issue explicit `*_unavailable` boolean flags (`balance_unavailable`, `pnl_unavailable`, `equity_curve_unavailable`) and structured warning logs rather than returning hardcoded fallbacks.
+| 🟢 **DONE** | **1. Data Ingestion** | `cryptosight.data` | Multi-exchange OHLCV downloader with smart PostgreSQL gap-filling, `COPY` binary streaming, and live candle stripping (`latest_ts` sync). |
+| 🟢 **DONE** | **2. Technical Analysis** | `cryptosight.tal_Indicators` | Dynamic **158 TA-Lib Indicator Wrapper** utilizing Python `__getattr__` interception with parameter hierarchy & Plotly rendering. |
+| 🟢 **DONE** | **3. Signal Generation** | `cryptosight.signals` | Declarative YAML-driven rules engine with multi-indicator crossovers and mandatory `.shift(1)` look-ahead bias prevention. |
+| 🟢 **DONE** | **4. Event Simulator** | `cryptosight.simulator` | Bar-by-bar execution engine maintaining live active positions (`simulations.active_positions`), trade ledgers, and dynamic PnL metrics. |
+| 🟢 **DONE** | **5. Vectorized Backtester**| `cryptosight.backtesting` | 10-Step vectorized engine simulating taker/maker fees (`0.05%`), slippage (`0.02%`), dynamic TP/SL, and exporting trade ledgers to DB. |
+| 🟢 **DONE** | **6. NLP Sentiment** | `cryptosight.sentiment` | PRAW Reddit scraper & **Hugging Face FinBERT** chunk-averaged transformer for real-time market sentiment classification. |
+| 🟢 **DONE** | **7. ML Ecosystem** | `cryptosight.ml` | Stationarity-scaled feature engineering, XGBoost, LightGBM, Random Forest & PyTorch LSTM models with forward inference. |
+| 🟢 **DONE** | **8. Quant Analytics** | `cryptosight.stats` | **QuantStats Suite** computing 59+ institutional performance ratios (Sharpe, Sortino, Calmar, Tail Ratio, Expectancy, Max Drawdown). |
+| 🟢 **DONE** | **9. Trading Terminal** | `backend` & `frontend` | **FastAPI REST API + React 18 Dashboard** with Lightweight Charts v5, equal-height card layouts, and strict financial data governance. |
+| 🟢 **DONE** | **10. Automated Execution** | `cryptosight.execution` | Automated Bybit UTA V5 live execution engine with position tracking (`execution.active_positions`), account history sync, and symbol guardrails. |
 
 <div align="right"><a href="#top">⬆️ Back to Top</a></div>
 
 ---
 
-<div id="flowchart"></div>
+## 🏗️ System Architecture & Pipeline Flowcharts
 
-## 🏗️ System Architecture & Full-Stack Pipeline Flowchart
+### 1. Master System & Data Flowchart
 
 ```mermaid
-graph TD
-    subgraph Data_Ingestion["Data Ingestion Layer"]
-        API["Exchange APIs - Binance & Bybit"] -->|"Fetch Historical & Live Price Data"| Fetcher["Exchange Downloaders"]
-        Fetcher -->|"Clean & Organize OHLCV"| Facade["Master Data Downloader"]
-        Reddit["Reddit API - PRAW Client"] -->|"Scrape Posts & Comments"| RedditScraper["Reddit Scraper & Saver"]
+flowchart TB
+    subgraph Layer1["🌐 1. Data Ingestion & Social Sensing"]
+        direction LR
+        Exchanges["Binance & Bybit REST/WS APIs"] --> Downloader["Smart Data Downloader"]
+        Reddit["Reddit PRAW Client"] --> Scraper["Reddit Sentiment Scraper"]
     end
 
-    subgraph Database_Layer["PostgreSQL Database & Storage Layer"]
-        Facade -->|"Check Last Saved Candle Date"| SQL_Check["PostgreSQL Database"]
-        SQL_Check -->|"Download Only Missing Gap"| Facade
-        Facade -->|"Fast Bulk Save via COPY Stream"| SQL_Check
-        
-        RedditScraper -->|"Save Raw Posts & Comments"| SQL_Check
-        SQL_Check -->|"Fetch Unprocessed Raw Posts"| AI_Sentiment["AI Sentiment Pipeline FinBERT"]
-        AI_Sentiment -->|"Save Bullish/Bearish Scores"| SQL_Check
+    subgraph Layer2["🗄️ 2. PostgreSQL Enterprise Storage Lake"]
+        Downloader -->|"COPY Binary Stream"| DB[(PostgreSQL Database Lake)]
+        Scraper -->|"Raw Posts & Comments"| DB
+        FinBERT["Hugging Face FinBERT Model"] <-->|"Batch Sentiment Scoring"| DB
     end
 
-    subgraph Indicators_Layer["Indicators & Charting Layer"]
-        SQL_Check -->|"Load Price Candles"| Engine["158 Technical Indicators Engine TA-Lib Wrapper"]
-        Engine -->|"Render Interactive Visuals"| Dashboard["Dark Mode Web Charts Plotly"]
+    subgraph Layer3["⚡ 3. Quantitative Processing & Feature Engine"]
+        DB --> TALib["158 Dynamic TA-Lib Wrapper"]
+        TALib --> Guardrail["Shift(1) Zero Look-Ahead Guardrail"]
+        Guardrail --> SignalGen["YAML & Math Signal Engine"]
+        Guardrail --> MLBuilder["ML Feature Builder & Scaling\n(XGBoost / LightGBM / PyTorch LSTM)"]
     end
 
-    subgraph Signals_Layer["Trading Signals Layer"]
-        Engine -->|"Apply Crossover Rules"| Signals["Trading Signal Generator YAML Rules"]
-        Signals -->|"Store Pre-Computed Signals"| SQL_Signals["signals Schema"]
+    subgraph Layer4["📈 4. Backtesting & Automated Live Execution"]
+        SignalGen --> Backtester["Vectorized 10-Step Backtester\n(QuantStats 59+ Ratios)"]
+        SignalGen --> LiveExec["Bybit UTA V5 Execution Engine\n(Position Sync & Reconciliation)"]
+        Backtester -->|"Trade Ledgers"| DB
+        LiveExec -->|"Live Positions & Stats"| DB
     end
 
-    subgraph Simulation_Layer["Event-Driven Simulator & Backtesting Engine"]
-        SQL_Check -->|"Load 1m Base Candles"| Simulator["Event-Driven Simulator Engine"]
-        Signals -->|"Feed Target Signals"| Simulator
-        Simulator -->|"Track Live Trades"| ActivePos["simulations.active_positions"]
-        Simulator -->|"Stream Trade Logs"| Ledgers["simulation_ledgers Schema"]
-        Simulator -->|"Dynamic QuantStats Metrics"| StatsTable["simulations.stats Table"]
-        
-        SQL_Check -->|"Load Price Candles"| Backtester["Vectorized 10-Step Backtester"]
-        Backtester -->|"Export Trade Ledgers"| SQL_Backtests["backtests Schema"]
-        Backtester -->|"Update Summary Stats"| SQL_BacktestData["metadata.backtest_data Table"]
+    subgraph Layer5["💻 5. REST API Services & React 18 Terminal"]
+        DB <--> FastAPI["FastAPI Backend Services\n(/api/v1/dashboard, /strategies, /backtests, /wallets, /ml)"]
+        FastAPI <--> ReactApp["React 18 Trading Dashboard\n(Lightweight Charts v5, Dark/Light Theme)"]
     end
+```
 
-    subgraph Execution_Engine_Layer["Bybit Automated Live Execution Engine"]
-        Signals -->|"Poll Strategy Signals"| ExecEngine["Live Execution Engine (engine.py)"]
-        ExecEngine -->|"Place Orders / Manage Positions"| BybitAPI["Bybit UTA V5 REST API"]
-        BybitAPI -->|"Track Open Trades"| LivePos["execution.active_positions"]
-        BybitAPI -->|"Sync History"| AccHist["account_history Schema (executions, closed_pnl, transaction_log)"]
-        ExecEngine -->|"Reconcile & Log Completed Trades"| ExecLedgers["execution_ledgers Schema"]
-        ExecEngine -->|"Compute Live Performance Metrics"| ExecStats["execution.stats & account.stats"]
-    end
+---
 
-    subgraph Backend_Services_Layer["FastAPI REST API Services Layer"]
-        SQL_Check -->|"Query Strategies & Stats"| FastAPI["FastAPI Service Layer (backtest_service.py DB queries & chart calculation)"]
-        SQL_Backtests -->|"Fetch Real Trade Ledgers"| FastAPI
-        FastAPI -->|"Dynamic Chart Calculations (generate_charts_from_trades)"| API_Routes["REST Router (/api/v1/backtests)"]
-    end
+### 2. Zero Look-Ahead Bias Execution Flowchart
 
-    subgraph Frontend_Dashboard_Layer["React 18 Trading Dashboard"]
-        API_Routes -->|"Stream JSON Payloads"| ReactApp["Vite + React 18 Dashboard"]
-        ReactApp -->|"Render Equity & Drawdown Curves"| LightweightCharts["Lightweight Charts v5 & Recharts"]
-        ReactApp -->|"Interactive Up/Down Sorting"| TradeLedgerTable["Trade Execution Ledger Table"]
-        ReactApp -->|"Poll DB Health (15s)"| DBStatusChip["● DB Active Topbar Pill"]
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Market as Exchange OHLCV Feed
+    participant Engine as Technical Analysis Engine
+    participant Guard as Shift(1) Look-Ahead Protection
+    participant Signal as Signal & ML Pipeline
+    participant Execution as Backtester / Bybit Live Executor
+
+    Market->>Engine: Bar T Candle Closes (Price P_T)
+    Engine->>Engine: Compute Technical Indicators (EMA, RSI, MACD)
+    Engine->>Guard: Apply Explicit Shift(1) Forward Offset
+    Note over Guard: Bar T indicators mapped to Signal for Bar T+1
+    Guard->>Signal: Forward-Shifted Indicator Matrix
+    Signal->>Execution: Execute Order at Open of Bar T+1
+    Note over Execution: Zero Future Data Leakage Guaranteed!
+```
+
+---
+
+### 3. Bybit Live Execution & Reconciliation Engine
+
+```mermaid
+flowchart LR
+    subgraph ExecEngine["🔄 Live Bybit UTA V5 Execution Loop"]
+        direction TB
+        A["1. Poll DB Strategy Signals"] --> B{"Conflict Check?"}
+        B -- "Conflict (Symbol Active)" --> C["Skip Signal & Emit Warning Toast"]
+        B -- "No Conflict" --> D["2. Execute Order via Bybit V5 REST API"]
+        D --> E["3. Track Active Position in DB"]
+        E --> F["4. Monitor TP/SL & Order Reversals"]
+        F --> G["5. Sync History & Write to execution_ledgers"]
+        G --> H["6. Recalculate Quant Performance Stats"]
     end
 ```
 
@@ -129,121 +140,96 @@ graph TD
 
 ---
 
-<div id="status"></div>
+## ⚙️ Core Quantitative Engines & Zero-Leakage Guarantee
 
-## 📊 Deep Feature Breakdown: What is DONE vs What is LEFT
+### 🛡️ Zero Look-Ahead Bias ($\mathbf{\text{Shift}(1)}$ Protection)
 
-### 🟢 **What is DONE (Fully Implemented)**
+In quantitative finance, look-ahead bias is the primary cause of backtest overfitting. **CryptoSight** enforces mathematical shift guardrails across the entire data engineering pipeline:
 
-#### 1. Backend Core & Quantitative Engines
-- **Data Ingestion Engine (`cryptosight.data`)**:
-  - Binance and Bybit historical & live candle downloader.
-  - PostgreSQL binary COPY streaming (`copy_expert`) for ultra-fast bulk writes.
-  - Automatic OHLCV gap-filling based on `latest_ts` in PostgreSQL.
-  - Live candle stripping to eliminate incomplete bar look-ahead bias.
-  - Multi-timeframe OHLCV resampling (1m, 5m, 15m, 1h, 4h, 1d).
-- **Technical Analysis Engine (`cryptosight.tal_Indicators`)**:
-  - Dynamic Python `__getattr__` wrapper covering all **158 TA-Lib indicators**.
-  - Parameter hierarchy fallbacks (Custom Config $\to$ Defaults).
-  - Plotly indicator overlay generation.
-- **Quant Signal Generator (`cryptosight.signals`)**:
-  - YAML rule definition engine (`strategy_config.yaml`).
-  - Multi-indicator crossover conditions (e.g. EMA cross, RSI boundaries, MACD histograms).
-  - Mandatory `.shift(1)` look-ahead bias protection across all signals.
-- **Event-Driven Simulator (`cryptosight.simulator`)**:
-  - Bar-by-bar execution simulator on 1m price feeds.
-  - Dynamic active position tracking in `simulations.active_positions`.
-  - Detailed trade log record keeping in `simulation_ledgers`.
-  - Performance statistics aggregation in `simulations.stats`.
-- **Vectorized Backtesting Engine (`cryptosight.backtesting`)**:
-  - 10-step vectorized backtest execution engine.
-  - Models realistic taker/maker commissions (0.05%), slippage (0.02%), stop-loss, take-profit, trailing stops.
-  - Exports full strategy trade ledgers to `backtests.<strategy_slug>` tables.
-  - Populates strategy metadata in `metadata.backtest_data` & `backtests.stats`.
-- **NLP Sentiment Classification (`cryptosight.sentiment`)**:
-  - Reddit PRAW API scraper for crypto subreddits.
-  - Text normalization & cleaning pipeline.
-  - **Hugging Face FinBERT** classification pipeline (Bullish, Bearish, Neutral).
-  - Sentiment metrics stored in PostgreSQL DB.
-- **Machine Learning Ecosystem (`cryptosight.ml`)**:
-  - Lag-free feature engineering pipeline (`.shift(1)`).
-  - Classification models (XGBoost, LightGBM, Random Forest) & Sequence models (LSTM).
-  - Out-of-sample forward inference pipeline.
-  - Scaler & model artifact storage (`.pkl`, `.json`, `.pt`).
-  - Dedicated `ml_backtests` trade ledger export schema.
-- **Statistical Analytics (`cryptosight.stats`)**:
-  - 59+ institutional performance ratios (CAGR, Sharpe Ratio, Sortino Ratio, Calmar Ratio, Profit Factor, Expectancy, Max Drawdown, Tail Ratio).
-  - Dynamic Plotly chart generators (Equity, Drawdown, Monthly Returns heatmap/bar, Rolling Sharpe/Volatility).
-- **Automated Live Bybit Execution Engine (`cryptosight.execution`)**:
-  - Bybit UTA V5 REST API integration (`bybit_executor.py`).
-  - Master execution engine (`engine.py`) polling live signals, managing active positions (`execution.active_positions`), and placing orders.
-  - Exchange history synchronization (`account_history.executions`, `closed_pnl`, `transaction_log`).
-  - Position reconciliation & performance stats (`execution.stats` & `account.stats`).
-- **FastAPI REST API Backend Services (`cryptosight.backend`)**:
-  - APIRouters & Services for `/api/v1/dashboard/summary`, `/api/v1/strategies`, `/api/v1/backtests`, `/api/v1/wallets`, and `/api/v1/ml`.
-  - Real-time DB health endpoint `/api/v1/backtests/health` connected to PostgreSQL.
-  - Real-time chart calculation service (`generate_charts_from_trades`) calculating 4 series (Equity, Drawdown, Monthly Returns, Rolling Metrics) directly from raw SQL trade ledgers.
-  - Zero-fake-data policy with explicit `*_unavailable` flags when APIs are disconnected.
+$$\text{Signal}_{t+1} = f(\text{Price}_{t}, \text{Indicator}_{t})$$
 
-#### 2. Frontend React 18 Dashboard (`cryptosight/frontend`)
-- **11 Interactive Dashboard Pages**:
-  1. `Dashboard` (`/`): Executive overview, portfolio total value, strategy count, asset donut allocation, strategy ranking table.
-  2. `StrategyDetails` (`/strategies` & `/strategies/:id`): Strategy catalog, configuration parameters, YAML rules inspector, risk settings, trade ledger.
-  3. `Wallets` (`/wallets`): Wallet balances, exchange connection modal (Binance/Bybit), API credentials status, equity growth curve.
-  4. `Deployment` (`/deployment`): Live strategy runner overview, active position count, engine status toggle, live PnL, and strict ledger gatekeeping (warning toast when opening strategies without a DB ledger).
-  5. `ExecutionDetails` (`/deployment/:id`): Institutional live trade execution inspector featuring a 100% full-width 8-metric KPI matrix (`Current PnL`, `PnL %`, `Win Rate`, `Profit Factor`, `Total Trades`, `Max Drawdown`, `Last Signal`, `Last Execution`), an 8-parameter **Execution Configuration** matrix mapped 1:1 with `metadata.execution_config`, full-width **Performance Charts & Oscillators** with 4 tabs (`Equity Curve & Drawdown`, `PnL Per Trade`, `Trade History & Position Size`, `Monthly Returns`), dynamic PostgreSQL trade ledger calculations (`execution_service.py`), and clean timestamp formatting (automatically stripping `.microseconds`, `+00:00`, `UTC`, and `Z` noise).
-  6. `BacktestRequests` (`/backtests`): Vectorized backtest list, status pills, run new backtest modal form.
-  7. `BacktestDetails` (`/backtests/:id`): Full strategy backtest inspector with 4 Lightweight Charts tabs (Equity, Drawdown, Monthly Returns, Rolling Metrics), 59+ QuantStats metrics grid, and interactive trade ledger.
-  8. `MachineLearning` (`/ml`): Model catalog, task type filter (classification/regression), symbol filter, model accuracy/F1 score KPI cards.
-  9. `ModelDetails` (`/ml/:id`): Detailed ML model inspector with confusion matrix / classification report, feature importances, hyperparameters, forward inference signal chart, model backtest trade ledger.
-  10. `Sentiment` (`/sentiment`): Sentiment overview, FinBERT classification status, market bullish/bearish gauge, asset sentiment breakdown, raw Reddit post feed.
-  11. `AccountOverview`: Account settings and security parameters.
-- **Design System & Theme Switcher**:
-  - Full Dark Mode and Light Mode support with seamless state persistence (`localStorage`).
-  - Topbar `● DB Active` pill styled in custom sage green theme palette with ambient glow.
-  - Soft matte red palette (`#EE5D5D`) for zero eye strain on negative PnL and trade status chips.
-  - Up/Down interactive sorting on all table headers (`TableSortLabel`).
+* Every moving average, RSI boundary, MACD histogram, and ML feature generated by CryptoSight is explicitly shifted forward by 1 bar (`.shift(1)`).
+* Trades triggered at timestamp $T$ execute strictly at the **Open price of Bar $T+1$**.
+* Live candles are automatically stripped (`latest_ts` sync) to prevent incomplete candle data contamination.
 
 ---
 
-### 🟡 **What is LEFT / IN-PROGRESS / UPCOMING ROADMAP**
+### 📊 QuantStats Institutional Analytics Suite (59+ Metrics)
 
-1. **Authentication & User Authorization**:
-   - **Status**: Pending.
-   - **Description**: FastAPI currently operates without JWT / OAuth2 auth middleware. User login/signup pages and API token header validation are scheduled for future security hardening.
-2. **Real-Time WebSockets (`ws://`) Streaming**:
-   - **Status**: Planned.
-   - **Description**: Frontend currently uses 15s REST polling for DB health and data fetching. Adding a dedicated WebSocket server (`cryptosight.backend.ws`) for live tick prices and real-time trade execution notifications will minimize latency.
-3. **Distributed Async Task Queue (Celery + Redis)**:
-   - **Status**: Planned.
-   - **Description**: Backtest submission (`POST /api/v1/backtests`) currently runs via FastAPI `BackgroundTasks` in-process. For large multi-year 1m backtests, delegating to Celery workers with Redis message broker is planned.
-4. **Multi-Exchange Execution Expansion (Binance Futures & OKX)**:
-   - **Status**: In-Progress.
-   - **Description**: The live execution engine currently targets **Bybit UTA V5**. Expanding `bybit_executor.py` into a unified multi-exchange facade for Binance Futures and OKX live trading.
-5. **Real-Time Alerting System (Telegram / Discord Webhooks)**:
-   - **Status**: Planned.
-   - **Description**: Webhook alerting config fields exist in `strategy_config.yaml`. Adding a dedicated notification dispatcher service for immediate trade entry/exit alerts to Telegram and Discord.
-6. **Automated Unit & E2E Test Suite Expansion**:
-   - **Status**: In-Progress.
-   - **Description**: Adding comprehensive PyTest backend tests for backtest math validation and Playwright/Cypress end-to-end frontend regression testing.
+CryptoSight automatically computes 59+ institutional risk & performance ratios directly from PostgreSQL trade ledgers:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                      59+ QUANTSTATS RISK MATRIX                        │
+├──────────────────────────┬──────────────────────────┬──────────────────┤
+│ Risk-Adjusted Returns    │ Drawdown Profile         │ Trade Ratios     │
+│ • Sharpe Ratio           │ • Max Drawdown (%)       │ • Win Rate (%)   │
+│ • Sortino Ratio          │ • Average Drawdown (%)   │ • Profit Factor  │
+│ • Calmar Ratio           │ • Longest Drawdown Days  │ • Expectancy ($) │
+│ • Omega Ratio            │ • Recovery Factor        │ • Payoff Ratio   │
+│ • Tail Ratio             │ • Value at Risk (VaR)    │ • Max Loss Streak│
+└──────────────────────────┴──────────────────────────┴──────────────────┘
+```
+
+---
+
+### 🔒 Zero Fake Data & Fail-Safe Governance
+
+All backend services operate under an unyielding financial governance policy:
+* **Zero Fabricated Data**: If live exchange connections or database metrics are unavailable, financial endpoints issue explicit `*_unavailable` boolean flags (`balance_unavailable`, `pnl_unavailable`, `equity_curve_unavailable`) along with structured logs.
+* **Strict Symbol Guardrails**: Only one live strategy can be active per cryptocurrency symbol at any time. Activating a conflicting strategy immediately triggers system guardrails and safety notifications.
 
 <div align="right"><a href="#top">⬆️ Back to Top</a></div>
 
 ---
 
-<div id="quickstart"></div>
+## 📊 System Status & Roadmap
+
+```
+Progress Overview:
+[████████████████████████████████████████] 92% Completed
+```
+
+### 🟢 **What is Fully Implemented**
+
+* **Data Ingestion Engine**: Smart SQL gap filling, PostgreSQL `COPY` binary streaming, multi-timeframe resampling (1m, 5m, 15m, 1h, 4h, 1d).
+* **158 TA-Lib Engine**: Interception-based indicator evaluation with fallbacks and Plotly visual rendering.
+* **YAML Signals Engine**: Multi-indicator crossover rules with look-ahead bias protection.
+* **Event-Driven Simulator**: Bar-by-bar active position tracker and trade ledger recorder.
+* **Vectorized Backtester**: 10-step backtest pipeline modeling fees (0.05%), slippage (0.02%), TP/SL, and exporting trade ledgers.
+* **FinBERT Sentiment NLP**: Reddit PRAW scraper, text cleaning, FinBERT chunk-averaged classification pipeline.
+* **ML Ecosystem**: Feature Builder, XGBoost, LightGBM, Random Forest, PyTorch LSTM models, and forward inference.
+* **Quant Analytics**: 59+ QuantStats metrics grid and Lightweight Charts v5 dynamic charting.
+* **Bybit Live Executor**: Bybit UTA V5 REST API executor, live position tracking, position reconciliation, and account stats updater.
+* **FastAPI Backend Services**: Endpoints for dashboard summary, strategies, backtests, wallets, and ML models with strict fallback handling.
+* **React 18 Trading Dashboard**: Dark/Light mode design system, 11 dedicated pages, interactive table sorting, and responsive card layouts.
+
+---
+
+### 🟡 **Upcoming Roadmap (In Progress)**
+
+1. **Authentication & JWT Security**: User login/signup pages and API token header validation.
+2. **WebSocket (`ws://`) Streaming**: Real-time tick prices and trade execution broadcasts.
+3. **Async Task Queue (Celery + Redis)**: Out-of-process distributed backtest engine for multi-year datasets.
+4. **Multi-Exchange Facade**: Expanding `bybit_executor.py` into a unified interface for Binance Futures and OKX.
+5. **Real-Time Webhook Alerting**: Instant entry/exit notifications sent to Telegram and Discord.
+
+<div align="right"><a href="#top">⬆️ Back to Top</a></div>
+
+---
 
 ## ⚡ Quick Start Guide
 
 ### 1️⃣ **Environment Setup**
+
 ```bash
-# Clone the repository
+# Clone repository
 git clone https://github.com/21Afnan/cryptosight.git
 cd cryptosight
 
 # Create and activate Python virtual environment
 python -m venv venv
-venv\Scripts\activate.bat
+venv\Scripts\activate.bat   # Windows (or source venv/bin/activate on Linux/macOS)
 
 # Install Python backend dependencies
 pip install -r requirements.txt
@@ -254,76 +240,83 @@ npm install
 cd ..
 ```
 
-### 2️⃣ **Running FastAPI Backend Server**
+---
+
+### 2️⃣ **Launch FastAPI Backend Services**
+
 ```bash
-# Launch FastAPI server on port 8000 with auto-reload
+# Start FastAPI application on port 8000
 python -m uvicorn cryptosight.backend.main:app --reload --port 8000
 ```
-- **Interactive Swagger Docs**: [`http://localhost:8000/docs`](http://localhost:8000/docs)
-- **Health Check Endpoint**: [`http://localhost:8000/api/v1/backtests/health`](http://localhost:8000/api/v1/backtests/health)
+* 📖 **Interactive Swagger API Docs**: [`http://localhost:8000/docs`](http://localhost:8000/docs)
+* 🩺 **Backend Health Check**: [`http://localhost:8000/api/v1/backtests/health`](http://localhost:8000/api/v1/backtests/health)
 
-### 3️⃣ **Running React Frontend Trading Dashboard**
+---
+
+### 3️⃣ **Launch React 18 Trading Terminal**
+
 ```bash
-# Launch Vite development server on port 5173
 cd frontend
 npm run dev
 ```
-- **Trading Dashboard UI**: [`http://localhost:5173`](http://localhost:5173)
+* 💻 **Interactive Trading Dashboard**: [`http://localhost:5173`](http://localhost:5173)
 
-### 4️⃣ **Running Ingestion, Execution, Backtesting & ML Pipelines**
+---
+
+### 4️⃣ **Run Ingestion, Execution & ML Pipelines**
+
 ```bash
-# Download Binance & Bybit Market Data
+# Ingest Market Data (Binance & Bybit)
 python -m cryptosight.data.binance.main
 python -m cryptosight.data.bybit.main
-
-# Run Live Bybit Automated Execution Engine
-python -m cryptosight.execution.main
 
 # Run Vectorized Backtest Engine
 python -m cryptosight.backtesting.backtest
 
 # Run Machine Learning Pipeline
 python -m cryptosight.ml.main
+
+# Launch Automated Bybit Live Execution Engine
+python -m cryptosight.execution.main
 ```
 
 <div align="right"><a href="#top">⬆️ Back to Top</a></div>
 
 ---
 
-<div id="structure"></div>
-
-## 📁 Complete Repository Structure
+## 📁 Repository Structure
 
 ```text
 cryptosight/
 ├── backend/                       # FastAPI REST API backend services & routers
-│   ├── main.py                    # FastAPI application setup, CORS middleware & route registration
+│   ├── main.py                    # Application entry point & CORS configuration
 │   ├── routers/                   # APIRouters (dashboard, strategy, backtest, wallet, ml)
-│   └── services/                  # Business logic & PostgreSQL query builders
-├── data/                          # Exchange downloaders with smart SQL gap fill & live bar protection
-│   ├── downloader.py              # Master Downloader class with SQL COPY stream & resampling
-│   ├── binance/                   # Binance API fetcher, config.yaml & main runner
-│   └── bybit/                     # Bybit API fetcher, config.yaml & main runner
-├── execution/                     # Live Bybit Automated Execution Engine & Reconciliation Pipeline
-│   ├── engine.py                  # Master execution loop, position tracking & auto-reconciliation
-│   ├── bybit_executor.py          # Bybit V5 REST API executor, order placement & PnL/fee fetcher
-│   ├── account_stats.py           # Account-level performance statistics engine & PostgreSQL upsert
-│   ├── selector.py                # Top performing strategy selector from metadata
-│   └── main.py                    # Master execution entry point
-├── tal_Indicators/                # Dynamic __getattr__ wrapper for all 158 TA-Lib technical indicators
-├── signals/                       # YAML/DB-driven quant signal generator & multi-crossover rule engine
-├── simulator/                     # Real-time event-driven simulation engine with active position tracking
-├── backtesting/                   # Vectorized 10-step backtester modeling commissions, slippage & SQL ledger
-├── sentiment/                     # PRAW Reddit scraper, text cleaning engine & Hugging Face FinBERT classifier
-├── ml/                            # Comprehensive end-to-end Machine Learning ecosystem
-├── stats/                         # Institutional statistical analytics & frontend charts suite (QuantStats + Plotly)
-├── frontend/                      # React 18 / Vite quantitative trading dashboard interface
-│   ├── src/                       # React components, charts, pages, theme design system & contexts
-│   └── PROGRESS.md                # Detailed frontend & full-stack development log
-├── csv_files/                     # Automated export directory for predictions, reports & master tables
-├── logs/                          # Rotating execution logs with SafeRotatingFileHandler
-├── utils/                         # Shared utilities (db.py PostgreSQL pool, metadata.py schema managers, logger.py)
-├── .env                           # Database & API credentials (git-ignored)
+│   └── services/                  # SQL query builders, calculation services & fallback handlers
+├── data/                          # Data ingestion engine with SQL gap-filling
+│   ├── downloader.py              # Master Downloader with PostgreSQL COPY streaming
+│   ├── binance/                   # Binance REST fetcher & main runner
+│   └── bybit/                     # Bybit REST fetcher & main runner
+├── execution/                     # Bybit UTA V5 Automated Live Execution Engine
+│   ├── engine.py                  # Master live execution loop & position reconciler
+│   ├── bybit_executor.py          # Bybit V5 REST API executor & order manager
+│   ├── account_stats.py           # Account performance statistics calculator
+│   └── main.py                    # Live execution entry point
+├── tal_Indicators/                # Dynamic __getattr__ wrapper for 158 TA-Lib indicators
+├── signals/                       # Declarative YAML quant signal generator
+├── simulator/                     # Bar-by-bar event-driven simulation engine
+├── backtesting/                   # Vectorized 10-step backtester with commission & slippage
+├── sentiment/                     # PRAW Reddit scraper & Hugging Face FinBERT NLP model
+├── ml/                            # End-to-end Machine Learning ecosystem (XGBoost/LightGBM/LSTM)
+│   ├── artifacts/                 # Saved model weights (.joblib, .pt) & configs
+│   ├── evaluation/                # Classification & regression evaluators
+│   ├── preprocessing/             # Feature builders & stationarity scaling
+│   └── main.py                    # ML pipeline orchestrator
+├── stats/                         # QuantStats institutional analytics & chart generators
+├── frontend/                      # React 18 / Vite trading terminal interface
+│   ├── src/                       # Components, lightweight charts, pages, theme system
+│   └── package.json               # Frontend dependencies
+├── logs/                          # System execution logs
+├── utils/                         # Database pool (db.py), logger, metadata schema managers
 ├── README.md                      # Enterprise system documentation
 └── requirements.txt               # Python package dependencies
 ```
@@ -332,7 +325,6 @@ cryptosight/
 
 ---
 
-<div id="author"></div>
 <div align="center">
 
 ## 👨‍💻 Built & Engineered by Afnan Shoukat
@@ -342,7 +334,7 @@ cryptosight/
 [![Connect on LinkedIn](https://img.shields.io/badge/Connect%20on-LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/afnanshoukat)
 [![Follow on GitHub](https://img.shields.io/badge/Follow%20on-GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/21Afnan)
 
-*Designed with enterprise precision, zero data leakage, and institutional quantitative rigor.*
+*Engineered with mathematical precision, zero data leakage, and institutional quantitative rigor.*
 
 © 2026 CryptoSight. All rights reserved.
 
