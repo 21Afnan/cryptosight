@@ -64,6 +64,36 @@
 
 ```mermaid
 flowchart TB
+    subgraph Layer1["🌐 1. Data Ingestion & Social Sensing"]
+        Exchanges["Binance & Bybit REST/WS APIs"] --> Downloader["Smart Data Downloader"]
+        Reddit["Reddit PRAW Client"] --> Scraper["Reddit Sentiment Scraper"]
+    end
+
+    subgraph Layer2["🗄️ 2. PostgreSQL Enterprise Storage Lake"]
+        Downloader -->|"COPY Binary Stream"| DB[(PostgreSQL Database Lake)]
+        Scraper -->|"Raw Posts & Comments"| DB
+        FinBERT["Hugging Face FinBERT Model"] <-->|"Batch Sentiment Scoring"| DB
+    end
+
+    subgraph Layer3["⚡ 3. Quantitative Processing & Feature Engine"]
+        DB --> TALib["158 Dynamic TA-Lib Wrapper"]
+        TALib --> Guardrail["Shift(1) Zero Look-Ahead Guardrail"]
+        Guardrail --> SignalGen["YAML & Math Signal Engine"]
+        Guardrail --> MLBuilder["ML Feature Builder & Scaling\n(XGBoost / LightGBM / PyTorch LSTM)"]
+    end
+
+    subgraph Layer4["📈 4. Backtesting & Automated Live Execution"]
+        SignalGen --> Backtester["Vectorized 10-Step Backtester\n(QuantStats 59+ Ratios)"]
+        SignalGen --> LiveExec["Bybit UTA V5 Execution Engine\n(Position Sync & Reconciliation)"]
+        Backtester -->|"Trade Ledgers"| DB
+        LiveExec -->|"Live Positions & Stats"| DB
+    end
+
+    subgraph Layer5["💻 5. REST API Services & React 18 Terminal"]
+        DB <--> FastAPI["FastAPI Backend Services\n(/api/v1/dashboard, /strategies, /backtests, /wallets, /ml)"]
+        FastAPI <--> ReactApp["React 18 Trading Dashboard\n(Lightweight Charts v5, Dark/Light Theme)"]
+    end
+
     classDef dataLayer fill:#0284c7,stroke:#38bdf8,stroke-width:2px,color:#ffffff,font-weight:bold;
     classDef dbLayer fill:#0f766e,stroke:#2dd4bf,stroke-width:2px,color:#ffffff,font-weight:bold;
     classDef coreEngine fill:#7c3aed,stroke:#a78bfa,stroke-width:2px,color:#ffffff,font-weight:bold;
@@ -71,35 +101,12 @@ flowchart TB
     classDef terminalLayer fill:#c026d3,stroke:#f0abfc,stroke-width:2px,color:#ffffff,font-weight:bold;
     classDef highlight fill:#e11d48,stroke:#fda4af,stroke-width:2px,color:#ffffff,font-weight:bold;
 
-    subgraph Layer1["🌐 1. Data Ingestion & Social Sensing"]
-        Exchanges["Binance & Bybit REST/WS APIs"] ::: dataLayer --> Downloader["Smart Data Downloader"] ::: dataLayer
-        Reddit["Reddit PRAW Client"] ::: dataLayer --> Scraper["Reddit Sentiment Scraper"] ::: dataLayer
-    end
-
-    subgraph Layer2["🗄️ 2. PostgreSQL Enterprise Storage Lake"]
-        Downloader -->|"COPY Binary Stream"| DB[(PostgreSQL Database Lake)] ::: dbLayer
-        Scraper -->|"Raw Posts & Comments"| DB
-        FinBERT["Hugging Face FinBERT Model"] ::: highlight <-->|"Batch Sentiment Scoring"| DB
-    end
-
-    subgraph Layer3["⚡ 3. Quantitative Processing & Feature Engine"]
-        DB --> TALib["158 Dynamic TA-Lib Wrapper"] ::: coreEngine
-        TALib --> Guardrail["Shift(1) Zero Look-Ahead Guardrail"] ::: highlight
-        Guardrail --> SignalGen["YAML & Math Signal Engine"] ::: coreEngine
-        Guardrail --> MLBuilder["ML Feature Builder & Scaling\n(XGBoost / LightGBM / PyTorch LSTM)"] ::: coreEngine
-    end
-
-    subgraph Layer4["📈 4. Backtesting & Automated Live Execution"]
-        SignalGen --> Backtester["Vectorized 10-Step Backtester\n(QuantStats 59+ Ratios)"] ::: execLayer
-        SignalGen --> LiveExec["Bybit UTA V5 Execution Engine\n(Position Sync & Reconciliation)"] ::: execLayer
-        Backtester -->|"Trade Ledgers"| DB
-        LiveExec -->|"Live Positions & Stats"| DB
-    end
-
-    subgraph Layer5["💻 5. REST API Services & React 18 Terminal"]
-        DB <--> FastAPI["FastAPI Backend Services\n(/api/v1/dashboard, /strategies, /backtests, /wallets, /ml)"] ::: terminalLayer
-        FastAPI <--> ReactApp["React 18 Trading Dashboard\n(Lightweight Charts v5, Dark/Light Theme)"] ::: terminalLayer
-    end
+    class Exchanges,Downloader,Reddit,Scraper dataLayer;
+    class DB dbLayer;
+    class FinBERT,Guardrail highlight;
+    class TALib,SignalGen,MLBuilder coreEngine;
+    class Backtester,LiveExec execLayer;
+    class FastAPI,ReactApp terminalLayer;
 ```
 
 ---
@@ -108,20 +115,26 @@ flowchart TB
 
 ```mermaid
 flowchart TD
+    BarT["Bar T Candle Closes (Price P_T)"] --> Engine["Calculate Technical Indicators\n(158 TA-Lib Indicators)"]
+    Engine --> Guard["Apply Explicit Shift(1) Guardrail\n(Map Bar T Indicators -> Bar T+1)"]
+    Guard --> Signal["Generate Target Signal & ML Feature Matrix"]
+    Signal --> Order["Execute Order at Open of Bar T+1"]
+
+    subgraph Protection["🛡️ ZERO LOOK-AHEAD BIAS GUARANTEE"]
+        Guard
+    end
+
     classDef market fill:#0284c7,stroke:#38bdf8,stroke-width:2px,color:#ffffff,font-weight:bold;
     classDef taEngine fill:#7c3aed,stroke:#a78bfa,stroke-width:2px,color:#ffffff,font-weight:bold;
     classDef guard fill:#e11d48,stroke:#fda4af,stroke-width:3px,color:#ffffff,font-weight:bold;
     classDef signal fill:#c026d3,stroke:#f0abfc,stroke-width:2px,color:#ffffff,font-weight:bold;
     classDef exec fill:#15803d,stroke:#4ade80,stroke-width:2px,color:#ffffff,font-weight:bold;
 
-    BarT["Bar T Candle Closes (Price P_T)"] ::: market --> Engine["Calculate Technical Indicators\n(158 TA-Lib Indicators)"] ::: taEngine
-    Engine --> Guard["Apply Explicit Shift(1) Guardrail\n(Map Bar T Indicators -> Bar T+1)"] ::: guard
-    Guard --> Signal["Generate Target Signal & ML Feature Matrix"] ::: signal
-    Signal --> Order["Execute Order at Open of Bar T+1"] ::: exec
-
-    subgraph Protection["🛡️ ZERO LOOK-AHEAD BIAS GUARANTEE"]
-        Guard
-    end
+    class BarT market;
+    class Engine taEngine;
+    class Guard guard;
+    class Signal signal;
+    class Order exec;
 ```
 
 ---
@@ -130,19 +143,25 @@ flowchart TD
 
 ```mermaid
 flowchart TD
+    A["1. Poll Strategy Signals from DB"] --> B{"Conflict Check?\n(Symbol Active?)"}
+    B -- "Conflict (Symbol Active)" --> C["Skip Signal & Emit Warning Toast"]
+    B -- "No Conflict" --> D["2. Execute Order via Bybit V5 REST API"]
+    D --> E["3. Track Active Position in DB"]
+    E --> F["4. Monitor TP/SL & Order Reversals"]
+    F --> G["5. Sync History & Write to execution_ledgers"]
+    G --> H["6. Recalculate Quant Performance & Account Stats"]
+
     classDef startNode fill:#0284c7,stroke:#38bdf8,stroke-width:2px,color:#ffffff,font-weight:bold;
     classDef decision fill:#7c3aed,stroke:#a78bfa,stroke-width:2px,color:#ffffff,font-weight:bold;
     classDef warning fill:#e11d48,stroke:#fda4af,stroke-width:2px,color:#ffffff,font-weight:bold;
     classDef success fill:#15803d,stroke:#4ade80,stroke-width:2px,color:#ffffff,font-weight:bold;
     classDef stepNode fill:#0f766e,stroke:#2dd4bf,stroke-width:2px,color:#ffffff,font-weight:bold;
 
-    A["1. Poll Strategy Signals from DB"] ::: startNode --> B{"Conflict Check?\n(Symbol Active?)"} ::: decision
-    B -- "Conflict (Symbol Active)" --> C["Skip Signal & Emit Warning Toast"] ::: warning
-    B -- "No Conflict" --> D["2. Execute Order via Bybit V5 REST API"] ::: success
-    D --> E["3. Track Active Position in DB"] ::: stepNode
-    E --> F["4. Monitor TP/SL & Order Reversals"] ::: stepNode
-    F --> G["5. Sync History & Write to execution_ledgers"] ::: stepNode
-    G --> H["6. Recalculate Quant Performance & Account Stats"] ::: success
+    class A startNode;
+    class B decision;
+    class C warning;
+    class D,H success;
+    class E,F,G stepNode;
 ```
 
 <div align="right"><a href="#top">⬆️ Back to Top</a></div>
