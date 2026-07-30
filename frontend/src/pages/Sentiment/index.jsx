@@ -170,7 +170,7 @@ function CleanPostTableRow({ post, isDark, theme }) {
               }}
             >
               <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, color: COLORS.accent }}>
-                Cleaned Post Text & Context
+                Post Text & Context
               </Typography>
               <Typography
                 variant="body2"

@@ -406,12 +406,12 @@ export default function ExecutionDetails() {
           </CardContent>
         </Card>
 
-        {/* Performance Charts & Oscillators Card (Tabs matching Backtest Details) */}
+        {/* Performance Charts Card (Tabs matching Backtest Details) */}
         <Card sx={{ mb: 3 }}>
           <CardContent sx={{ p: '20px !important' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2.5, flexWrap: 'wrap', gap: 1 }}>
               <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                Performance Charts & Oscillators
+                Performance Charts
               </Typography>
               <Tabs
                 value={chartTab}
@@ -421,9 +421,9 @@ export default function ExecutionDetails() {
                 }}
                 sx={{ minHeight: '36px' }}
               >
-                <Tab label="Equity Curve & Drawdown" sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
+                <Tab label="Equity Curve" sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
                 <Tab label="PnL Per Trade" sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
-                <Tab label="Trade History & Position Size" sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
+                <Tab label="Position Size per Trade" sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
                 <Tab label="Monthly Returns" sx={{ minHeight: '36px', py: 0, fontWeight: 600 }} />
               </Tabs>
             </Box>
@@ -432,19 +432,10 @@ export default function ExecutionDetails() {
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%' }}>
                 <Box sx={{ width: '100%', minWidth: 0 }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-                    Equity Curve Trajectory
+                    Equity Curve
                   </Typography>
-                  <Box sx={{ height: 320, width: '100%', minWidth: 0, position: 'relative' }}>
-                    <EquityCurveChart data={exec.equity_curve ?? []} height={320} />
-                  </Box>
-                </Box>
-
-                <Box sx={{ width: '100%', minWidth: 0 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-                    Underwater Drawdown
-                  </Typography>
-                  <Box sx={{ height: 260, width: '100%', minWidth: 0, position: 'relative' }}>
-                    <DrawdownChart data={exec.drawdown_curve ?? []} height={260} />
+                  <Box sx={{ height: 360, width: '100%', minWidth: 0, position: 'relative' }}>
+                    <EquityCurveChart data={exec.equity_curve ?? []} height={360} />
                   </Box>
                 </Box>
               </Box>
@@ -460,24 +451,11 @@ export default function ExecutionDetails() {
             )}
 
             {chartTab === 2 && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%' }}>
-                <Box sx={{ width: '100%', minWidth: 0 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-                    Position Size per Trade
-                  </Typography>
-                  <Box sx={{ height: 280, width: '100%', minWidth: 0, position: 'relative' }}>
-                    <PositionSizeChart data={positionSizeData} height={280} />
-                  </Box>
-                </Box>
-
-                <Box sx={{ width: '100%', minWidth: 0 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-                    Trade History (Entry/Exit Markers)
-                  </Typography>
-                  <Box sx={{ height: 280, width: '100%', minWidth: 0, position: 'relative' }}>
-                    <TradeHistoryChart equityData={exec.equity_curve ?? []} markers={tradeMarkers} height={280} />
-                  </Box>
-                </Box>
+              <Box sx={{ width: '100%', height: 360 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                  Position Size per Trade
+                </Typography>
+                <PositionSizeChart data={positionSizeData} height={340} />
               </Box>
             )}
 
