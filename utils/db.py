@@ -161,6 +161,25 @@ def get_latest_timestamp(conn, exchange: str, symbol: str, timeframe: str):
         return None
 
 
+def get_earliest_timestamp(conn, exchange: str, symbol: str, timeframe: str):
+    """Gets the earliest timestamp available for the given market table."""
+    schema_name, table_name = get_table_names(exchange, symbol, timeframe)
+
+    table_exists_query = "SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = %s AND tablename = %s);"
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(table_exists_query, (schema_name, table_name))
+            if not cursor.fetchone()[0]:
+                return None
+
+            cursor.execute(f"SELECT MIN(timestamp) FROM {schema_name}.{table_name};")
+            result = cursor.fetchone()
+            return result[0] if result else None
+    except Exception as error:
+        logger.error(f"Error getting earliest timestamp from '{schema_name}.{table_name}': {error}")
+        return None
+
+
 def fetch_ohlcv(conn, exchange: str, symbol: str, timeframe: str, start_time: str, end_time: str) -> pd.DataFrame:
     """
     Ultra-fast vectorized fetch of OHLCV data from PostgreSQL using COPY TO STDOUT.

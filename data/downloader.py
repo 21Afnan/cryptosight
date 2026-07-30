@@ -2,7 +2,7 @@ import pandas as pd
 from cryptosight.utils.logger import get_logger
 from cryptosight.utils.db import (
     get_connection, create_schema_and_table,
-    insert_ohlcv, get_latest_timestamp, get_table_names
+    insert_ohlcv, get_latest_timestamp, get_earliest_timestamp, get_table_names
 )
 from cryptosight.data.binance.binance_client import BinanceClient
 from cryptosight.data.bybit.bybit_client import BybitClient
@@ -45,13 +45,35 @@ class Downloader:
     ) -> None:
         """
         Downloads OHLCV candles from the exchange and saves them to the database.
-        Resumes from the latest stored timestamp if data already exists in DB.
+        Resumes from the latest stored timestamp if data already exists in DB,
+        and fetches historical gaps if start_time is earlier than the earliest DB timestamp.
         """
         conn = get_connection()
         try:
             create_schema_and_table(conn, self.exchange, self.symbol, self.timeframe)
 
-            latest_ts  = get_latest_timestamp(conn, self.exchange, self.symbol, self.timeframe)
+            latest_ts   = get_latest_timestamp(conn, self.exchange, self.symbol, self.timeframe)
+            earliest_ts = get_earliest_timestamp(conn, self.exchange, self.symbol, self.timeframe)
+
+            # Check if start_time is earlier than stored earliest_ts
+            if earliest_ts and start_time:
+                req_start_dt = pd.to_datetime(start_time, utc=True)
+                earliest_dt = pd.to_datetime(earliest_ts, utc=True)
+                if req_start_dt < earliest_dt:
+                    logger.info(f"Historical gap detected ({start_time} to {earliest_ts}). Downloading historical gap...")
+                    hist_df = self.client.fetch_candles(
+                        symbol=self.symbol, timeframe=self.timeframe,
+                        start_time=start_time, end_time=pd.to_datetime(earliest_ts, utc=True).strftime("%Y-%m-%d %H:%M:%S"),
+                        max_retries=max_retries, retry_delay=retry_delay,
+                    )
+                    if not hist_df.empty:
+                        hist_df = hist_df.set_index("timestamp")
+                        cols = ["open", "high", "low", "close"]
+                        hist_df["volume"] = hist_df["volume"].fillna(0.0)
+                        if fill_method == "ffill":
+                            hist_df[cols] = hist_df[cols].ffill().bfill()
+                        insert_ohlcv(conn, self.exchange, self.symbol, self.timeframe, list(hist_df.itertuples(index=True, name=None)))
+
             fetch_from = (
                 pd.to_datetime(latest_ts, utc=True).strftime("%Y-%m-%d %H:%M:%S")
                 if latest_ts else start_time
@@ -65,26 +87,19 @@ class Downloader:
                 max_retries=max_retries, retry_delay=retry_delay,
             )
 
-            if df.empty:
-                logger.info("No new candles returned from exchange.")
-                return
+            if not df.empty:
+                df = df.set_index("timestamp")
+                if (not end_time or end_time == "now") and len(df) > 1:
+                    df = df.iloc[:-1]  # drop unclosed live candle when fetching up to 'now'
 
-            df = df.set_index("timestamp")
-            if (not end_time or end_time == "now") and len(df) > 1:
-                df = df.iloc[:-1]  # drop unclosed live candle when fetching up to 'now'
+                if not df.empty:
+                    cols = ["open", "high", "low", "close"]
+                    df["volume"] = df["volume"].fillna(0.0)
+                    if fill_method == "ffill":
+                        df[cols] = df[cols].ffill().bfill()
 
-            if df.empty:
-                logger.info("No completed candles to save.")
-                return
-            
-            cols=["open", "high", "low", "close"]
-            
-            # Fill missing values inline
-            df["volume"] = df["volume"].fillna(0.0)
-            if fill_method == "ffill":
-                df[cols] = df[cols].ffill().bfill()
+                    insert_ohlcv(conn, self.exchange, self.symbol, self.timeframe, list(df.itertuples(index=True, name=None)))
 
-            insert_ohlcv(conn, self.exchange, self.symbol, self.timeframe, list(df.itertuples(index=True, name=None)))
             upsert_market_data(conn, self.exchange, self.symbol, self.timeframe)
 
         except Exception as e:
@@ -101,15 +116,29 @@ class Downloader:
         retry_delay: int,
     ) -> pd.DataFrame:
         """
-        Returns a complete, clean OHLCV DataFrame by:
-          1. Finding the latest timestamp in DB via get_latest_timestamp().
-          2. Fetching only the gap (latest_ts to end_time) from the exchange.
-          3. Loading all existing DB rows and merging with the new data.
+        Returns a complete, clean OHLCV DataFrame by checking both historical start_time gaps and forward end_time gaps.
         """
         conn = get_connection()
         try:
-            # Step 1 — find where the gap starts
-            latest_ts = get_latest_timestamp(conn, self.exchange, self.symbol, self.timeframe)
+            latest_ts   = get_latest_timestamp(conn, self.exchange, self.symbol, self.timeframe)
+            earliest_ts = get_earliest_timestamp(conn, self.exchange, self.symbol, self.timeframe)
+
+            # Check if start_time is earlier than DB earliest_ts
+            if earliest_ts and start_time:
+                req_start_dt = pd.to_datetime(start_time, utc=True)
+                earliest_dt  = pd.to_datetime(earliest_ts, utc=True)
+                if req_start_dt < earliest_dt:
+                    logger.info(f"Fetching historical gap prior to DB: {start_time} to {earliest_ts}")
+                    hist_df = self.client.fetch_candles(
+                        symbol=self.symbol, timeframe=self.timeframe,
+                        start_time=start_time, end_time=pd.to_datetime(earliest_ts, utc=True).strftime("%Y-%m-%d %H:%M:%S"),
+                        max_retries=max_retries, retry_delay=retry_delay,
+                    )
+                    if not hist_df.empty:
+                        hist_df = hist_df.set_index("timestamp")
+                        cols = ["open", "high", "low", "close"]
+                        hist_df["volume"] = hist_df["volume"].fillna(0.0)
+                        insert_ohlcv(conn, self.exchange, self.symbol, self.timeframe, list(hist_df.itertuples(index=True, name=None)))
 
             if latest_ts:
                 fetch_from = pd.to_datetime(latest_ts, utc=True).strftime("%Y-%m-%d %H:%M:%S")
