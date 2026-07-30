@@ -60,58 +60,37 @@
 
 ## 🏗️ System Architecture & Pipeline Flowcharts
 
-### 1. Master System & Data Flowchart
+<div align="center">
+  <img src="docs/architecture.png" alt="CryptoSight Simple System Pipeline" width="100%" />
+</div>
+
+<br/>
+
+### 1. High-Level 5-Step Pipeline Flow
 
 ```mermaid
-flowchart TB
-    subgraph Layer1["🌐 1. Data Ingestion & Social Sensing"]
-        Exchanges["Binance & Bybit REST/WS APIs"] --> Downloader["Smart Data Downloader"]
-        Reddit["Reddit PRAW Client"] --> Scraper["Reddit Sentiment Scraper"]
-    end
+flowchart LR
+    A["1️⃣ DATA INGESTION\n(Binance, Bybit & Reddit)"] --> B["2️⃣ POSTGRESQL LAKE\n(Binary COPY & Gap-Fill)"]
+    B --> C["3️⃣ AI & QUANT ENGINE\n(158 TA-Lib + FinBERT)"]
+    C --> D["4️⃣ STRATEGY & ML\n(Signals + Backtester)"]
+    D --> E["5️⃣ LIVE TRADING & UI\n(Bybit V5 + React Dashboard)"]
 
-    subgraph Layer2["🗄️ 2. PostgreSQL Enterprise Storage Lake"]
-        Downloader -->|"COPY Binary Stream"| DB[(PostgreSQL Database Lake)]
-        Scraper -->|"Raw Posts & Comments"| DB
-        FinBERT["Hugging Face FinBERT Model"] <-->|"Batch Sentiment Scoring"| DB
-    end
+    classDef step1 fill:#0284c7,stroke:#38bdf8,stroke-width:2px,color:#ffffff,font-weight:bold;
+    classDef step2 fill:#0f766e,stroke:#2dd4bf,stroke-width:2px,color:#ffffff,font-weight:bold;
+    classDef step3 fill:#7c3aed,stroke:#a78bfa,stroke-width:2px,color:#ffffff,font-weight:bold;
+    classDef step4 fill:#c026d3,stroke:#f0abfc,stroke-width:2px,color:#ffffff,font-weight:bold;
+    classDef step5 fill:#15803d,stroke:#4ade80,stroke-width:2px,color:#ffffff,font-weight:bold;
 
-    subgraph Layer3["⚡ 3. Quantitative Processing & Feature Engine"]
-        DB --> TALib["158 Dynamic TA-Lib Wrapper"]
-        TALib --> Guardrail["Shift(1) Zero Look-Ahead Guardrail"]
-        Guardrail --> SignalGen["YAML & Math Signal Engine"]
-        Guardrail --> MLBuilder["ML Feature Builder & Scaling\n(XGBoost / LightGBM / PyTorch LSTM)"]
-    end
-
-    subgraph Layer4["📈 4. Backtesting & Automated Live Execution"]
-        SignalGen --> Backtester["Vectorized 10-Step Backtester\n(QuantStats 59+ Ratios)"]
-        SignalGen --> LiveExec["Bybit UTA V5 Execution Engine\n(Position Sync & Reconciliation)"]
-        Backtester -->|"Trade Ledgers"| DB
-        LiveExec -->|"Live Positions & Stats"| DB
-    end
-
-    subgraph Layer5["💻 5. REST API Services & React 18 Terminal"]
-        DB <--> FastAPI["FastAPI Backend Services\n(/api/v1/dashboard, /strategies, /backtests, /wallets, /ml)"]
-        FastAPI <--> ReactApp["React 18 Trading Dashboard\n(Lightweight Charts v5, Dark/Light Theme)"]
-    end
-
-    classDef dataLayer fill:#0284c7,stroke:#38bdf8,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef dbLayer fill:#0f766e,stroke:#2dd4bf,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef coreEngine fill:#7c3aed,stroke:#a78bfa,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef execLayer fill:#15803d,stroke:#4ade80,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef terminalLayer fill:#c026d3,stroke:#f0abfc,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef highlight fill:#e11d48,stroke:#fda4af,stroke-width:2px,color:#ffffff,font-weight:bold;
-
-    class Exchanges,Downloader,Reddit,Scraper dataLayer;
-    class DB dbLayer;
-    class FinBERT,Guardrail highlight;
-    class TALib,SignalGen,MLBuilder coreEngine;
-    class Backtester,LiveExec execLayer;
-    class FastAPI,ReactApp terminalLayer;
+    class A step1;
+    class B step2;
+    class C step3;
+    class D step4;
+    class E step5;
 ```
 
 ---
 
-### 2. Zero Look-Ahead Bias Execution Flowchart
+### 2. Zero Look-Ahead Bias Signal Flow
 
 ```mermaid
 flowchart TD
@@ -139,7 +118,7 @@ flowchart TD
 
 ---
 
-### 3. Bybit Live Execution & Reconciliation Engine Flowchart
+### 3. Bybit Live Execution Flowchart
 
 ```mermaid
 flowchart TD
@@ -323,37 +302,4 @@ cryptosight/
 ├── signals/                       # Declarative YAML quant signal generator
 ├── simulator/                     # Bar-by-bar event-driven simulation engine
 ├── backtesting/                   # Vectorized 10-step backtester with commission & slippage
-├── sentiment/                     # PRAW Reddit scraper & Hugging Face FinBERT NLP model
-├── ml/                            # End-to-end Machine Learning ecosystem (XGBoost/LightGBM/LSTM)
-│   ├── artifacts/                 # Saved model weights (.joblib, .pt) & configs
-│   ├── evaluation/                # Classification & regression evaluators
-│   ├── preprocessing/             # Feature builders & stationarity scaling
-│   └── main.py                    # ML pipeline orchestrator
-├── stats/                         # QuantStats institutional analytics & chart generators
-├── frontend/                      # React 18 / Vite trading terminal interface
-│   ├── src/                       # Components, lightweight charts, pages, theme system
-│   └── package.json               # Frontend dependencies
-├── logs/                          # System execution logs
-├── utils/                         # Database pool (db.py), logger, metadata schema managers
-├── README.md                      # Enterprise system documentation
-└── requirements.txt               # Python package dependencies
-```
-
-<div align="right"><a href="#top">⬆️ Back to Top</a></div>
-
----
-
-<div align="center">
-
-## 👨‍💻 Built & Engineered by Afnan Shoukat
-
-**Full-Stack Quantitative Engineer • Financial Data Scientist • Algorithmic Systems Architect**
-
-[![Connect on LinkedIn](https://img.shields.io/badge/Connect%20on-LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/afnanshoukat)
-[![Follow on GitHub](https://img.shields.io/badge/Follow%20on-GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/21Afnan)
-
-*Engineered with mathematical precision, zero data leakage, and institutional quantitative rigor.*
-
-© 2026 CryptoSight. All rights reserved.
-
-</div>
+├── sentiment/
