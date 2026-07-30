@@ -6,17 +6,13 @@
 > **Enterprise Financial Data Ingestion, 158 Dynamic Technical Indicators, Zero-Leakage ML Signal Generation, FinBERT NLP Sentiment Analysis, Vectorized Backtesting, Bybit V5 Automated Live Execution & Real-Time React Dashboard.**
 
 [![Built by Afnan Shoukat](https://img.shields.io/badge/Built%20by-Afnan%20Shoukat-00E676?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/afnanshoukat)
+[![Neurog.ai](https://img.shields.io/badge/Internship-Neurog.ai-8A2BE2?style=for-the-badge&logo=openai&logoColor=white)](https://neurog.ai)
 [![GitHub Profile](https://img.shields.io/badge/GitHub-21Afnan-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/21Afnan)
+[![Email Contact](https://img.shields.io/badge/Email-Contact%20Me-EA4335?style=for-the-badge&logo=gmail&logoColor=white)](mailto:afnanshoukat21@gmail.com)
 [![Python Version](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-REST%20Backend-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React-18%20Dashboard-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Enterprise%20Storage-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://postgresql.org)
-[![PyTorch](https://img.shields.io/badge/PyTorch-Deep%20Learning-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org)
-[![TA-Lib](https://img.shields.io/badge/TA--Lib-158%20Indicators-FF6F00?style=for-the-badge)](https://ta-lib.org)
-
-<br/>
-
-[🌟 Executive Overview](#-executive-summary--10-quantitative-pillars) • [🏗️ System Architecture](#-system-architecture--pipeline-flowcharts) • [⚙️ Core Engines & Math](#-core-quantitative-engines--zero-leakage-guarantee) • [📊 Status](#-system-status--100-completed) • [⚡ Quick Start](#-quick-start-guide) • [📁 Directory Tree](#-repository-structure)
 
 </div>
 
@@ -58,28 +54,64 @@
 
 ---
 
+## 📁 Repository Structure
+
+```text
+cryptosight/
+├── backend/                       # FastAPI REST API backend services & routers
+│   ├── main.py                    # Application entry point & CORS configuration
+│   ├── routers/                   # APIRouters (dashboard, strategy, backtest, wallet, ml)
+│   └── services/                  # SQL query builders, calculation services & fallback handlers
+├── data/                          # Data ingestion engine with SQL gap-filling
+│   ├── downloader.py              # Master Downloader with PostgreSQL COPY streaming
+│   ├── binance/                   # Binance REST fetcher & main runner
+│   └── bybit/                     # Bybit REST fetcher & main runner
+├── execution/                     # Bybit UTA V5 Automated Live Execution Engine
+│   ├── engine.py                  # Master live execution loop & position reconciler
+│   ├── bybit_executor.py          # Bybit V5 REST API executor & order manager
+│   ├── account_stats.py           # Account performance statistics calculator
+│   └── main.py                    # Live execution entry point
+├── tal_Indicators/                # Dynamic __getattr__ wrapper for 158 TA-Lib indicators
+├── signals/                       # Declarative YAML quant signal generator
+├── simulator/                     # Bar-by-bar event-driven simulation engine
+├── backtesting/                   # Vectorized 10-step backtester with commission & slippage
+├── sentiment/                     # PRAW Reddit scraper & Hugging Face FinBERT NLP model
+├── ml/                            # End-to-end Machine Learning ecosystem (XGBoost/LightGBM/LSTM)
+│   ├── artifacts/                 # Saved model weights (.joblib, .pt) & configs
+│   ├── evaluation/                # Classification & regression evaluators
+│   ├── preprocessing/             # Feature builders & stationarity scaling
+│   └── main.py                    # ML pipeline orchestrator
+├── stats/                         # QuantStats institutional analytics & chart generators
+├── frontend/                      # React 18 / Vite trading terminal interface
+│   ├── src/                       # Components, lightweight charts, pages, theme system
+│   └── package.json               # Frontend dependencies
+├── docs/                          # System architecture diagrams & dashboard screenshots
+├── logs/                          # System execution logs
+├── utils/                         # Database pool (db.py), logger, metadata schema managers
+├── README.md                      # Enterprise system documentation
+└── requirements.txt               # Python package dependencies
+```
+
+<div align="right"><a href="#top">⬆️ Back to Top</a></div>
+
+---
+
 ## 🏗️ System Architecture & Pipeline Flowcharts
 
-<div align="center">
-  <img src="docs/architecture.png" alt="CryptoSight Simple System Pipeline" width="100%" />
-</div>
-
-<br/>
-
-### 1. High-Level 5-Step Pipeline Flow
+### 1. Simple 5-Step System Pipeline
 
 ```mermaid
 flowchart LR
-    A["1️⃣ DATA INGESTION\n(Binance, Bybit & Reddit)"] --> B["2️⃣ POSTGRESQL LAKE\n(Binary COPY & Gap-Fill)"]
-    B --> C["3️⃣ AI & QUANT ENGINE\n(158 TA-Lib + FinBERT)"]
-    C --> D["4️⃣ STRATEGY & ML\n(Signals + Backtester)"]
-    D --> E["5️⃣ LIVE TRADING & UI\n(Bybit V5 + React Dashboard)"]
+    A["1️⃣ Data Ingestion\n(Binance, Bybit & Reddit)"] --> B["2️⃣ PostgreSQL Lake\n(Binary COPY Stream)"]
+    B --> C["3️⃣ AI & Indicators\n(158 TA-Lib + FinBERT)"]
+    C --> D["4️⃣ Strategy & ML\n(Signals + Backtester)"]
+    D --> E["5️⃣ Live Trading & UI\n(Bybit V5 + React Terminal)"]
 
-    classDef step1 fill:#0284c7,stroke:#38bdf8,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef step2 fill:#0f766e,stroke:#2dd4bf,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef step3 fill:#7c3aed,stroke:#a78bfa,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef step4 fill:#c026d3,stroke:#f0abfc,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef step5 fill:#15803d,stroke:#4ade80,stroke-width:2px,color:#ffffff,font-weight:bold;
+    classDef step1 fill:#00b0ff,stroke:#80d8ff,stroke-width:2px,color:#ffffff,font-weight:bold;
+    classDef step2 fill:#00e676,stroke:#b9f6ca,stroke-width:2px,color:#000000,font-weight:bold;
+    classDef step3 fill:#7c3aed,stroke:#b388ff,stroke-width:2px,color:#ffffff,font-weight:bold;
+    classDef step4 fill:#ff4081,stroke:#ff80ab,stroke-width:2px,color:#ffffff,font-weight:bold;
+    classDef step5 fill:#00E676,stroke:#69f0ae,stroke-width:2px,color:#000000,font-weight:bold;
 
     class A step1;
     class B step2;
@@ -90,57 +122,48 @@ flowchart LR
 
 ---
 
-### 2. Zero Look-Ahead Bias Signal Flow
+### 2. Simple Zero Look-Ahead Bias Flow
 
 ```mermaid
-flowchart TD
-    BarT["Bar T Candle Closes (Price P_T)"] --> Engine["Calculate Technical Indicators\n(158 TA-Lib Indicators)"]
-    Engine --> Guard["Apply Explicit Shift(1) Guardrail\n(Map Bar T Indicators -> Bar T+1)"]
-    Guard --> Signal["Generate Target Signal & ML Feature Matrix"]
-    Signal --> Order["Execute Order at Open of Bar T+1"]
+flowchart LR
+    A["1. Bar T Closes\n(Price P_T)"] --> B["2. Indicators Computed\n(MA, RSI, MACD)"]
+    B --> C["3. Shift(1) Guardrail\n(Prevent Data Leakage)"]
+    C --> D["4. Order Executes\n(Bar T+1 Open Price)"]
 
-    subgraph Protection["🛡️ ZERO LOOK-AHEAD BIAS GUARANTEE"]
-        Guard
-    end
+    classDef stepA fill:#00b0ff,stroke:#80d8ff,stroke-width:2px,color:#ffffff,font-weight:bold;
+    classDef stepB fill:#7c3aed,stroke:#b388ff,stroke-width:2px,color:#ffffff,font-weight:bold;
+    classDef stepC fill:#EE5D5D,stroke:#ff8a80,stroke-width:3px,color:#ffffff,font-weight:bold;
+    classDef stepD fill:#00E676,stroke:#69f0ae,stroke-width:2px,color:#000000,font-weight:bold;
 
-    classDef market fill:#0284c7,stroke:#38bdf8,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef taEngine fill:#7c3aed,stroke:#a78bfa,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef guard fill:#e11d48,stroke:#fda4af,stroke-width:3px,color:#ffffff,font-weight:bold;
-    classDef signal fill:#c026d3,stroke:#f0abfc,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef exec fill:#15803d,stroke:#4ade80,stroke-width:2px,color:#ffffff,font-weight:bold;
-
-    class BarT market;
-    class Engine taEngine;
-    class Guard guard;
-    class Signal signal;
-    class Order exec;
+    class A stepA;
+    class B stepB;
+    class C stepC;
+    class D stepD;
 ```
 
 ---
 
-### 3. Bybit Live Execution Flowchart
+### 3. Simple Bybit Live Execution Flow
 
 ```mermaid
 flowchart TD
-    A["1. Poll Strategy Signals from DB"] --> B{"Conflict Check?\n(Symbol Active?)"}
-    B -- "Conflict (Symbol Active)" --> C["Skip Signal & Emit Warning Toast"]
-    B -- "No Conflict" --> D["2. Execute Order via Bybit V5 REST API"]
-    D --> E["3. Track Active Position in DB"]
-    E --> F["4. Monitor TP/SL & Order Reversals"]
-    F --> G["5. Sync History & Write to execution_ledgers"]
-    G --> H["6. Recalculate Quant Performance & Account Stats"]
+    A["1. Poll Live Signal from DB"] --> B{"Symbol Already Active?"}
+    B -- "Yes (Active Conflict)" --> C["Skip Signal & Show Warning Toast"]
+    B -- "No Conflict" --> D["2. Execute Order via Bybit V5 API"]
+    D --> E["3. Track Position & TP/SL in DB"]
+    E --> F["4. Sync History & Update Live Account Stats"]
 
-    classDef startNode fill:#0284c7,stroke:#38bdf8,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef decision fill:#7c3aed,stroke:#a78bfa,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef warning fill:#e11d48,stroke:#fda4af,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef success fill:#15803d,stroke:#4ade80,stroke-width:2px,color:#ffffff,font-weight:bold;
-    classDef stepNode fill:#0f766e,stroke:#2dd4bf,stroke-width:2px,color:#ffffff,font-weight:bold;
+    classDef startNode fill:#00b0ff,stroke:#80d8ff,stroke-width:2px,color:#ffffff,font-weight:bold;
+    classDef decision fill:#7c3aed,stroke:#b388ff,stroke-width:2px,color:#ffffff,font-weight:bold;
+    classDef warning fill:#EE5D5D,stroke:#ff8a80,stroke-width:2px,color:#ffffff,font-weight:bold;
+    classDef success fill:#00E676,stroke:#69f0ae,stroke-width:2px,color:#000000,font-weight:bold;
+    classDef stepNode fill:#00b0ff,stroke:#80d8ff,stroke-width:2px,color:#ffffff,font-weight:bold;
 
     class A startNode;
     class B decision;
     class C warning;
-    class D,H success;
-    class E,F,G stepNode;
+    class D success;
+    class E,F stepNode;
 ```
 
 <div align="right"><a href="#top">⬆️ Back to Top</a></div>
@@ -310,25 +333,25 @@ python -m cryptosight.execution.main
 
 ---
 
-## 📁 Repository Structure
+<div id="author"></div>
+<div align="center">
 
-```text
-cryptosight/
-├── backend/                       # FastAPI REST API backend services & routers
-│   ├── main.py                    # Application entry point & CORS configuration
-│   ├── routers/                   # APIRouters (dashboard, strategy, backtest, wallet, ml)
-│   └── services/                  # SQL query builders, calculation services & fallback handlers
-├── data/                          # Data ingestion engine with SQL gap-filling
-│   ├── downloader.py              # Master Downloader with PostgreSQL COPY streaming
-│   ├── binance/                   # Binance REST fetcher & main runner
-│   └── bybit/                     # Bybit REST fetcher & main runner
-├── execution/                     # Bybit UTA V5 Automated Live Execution Engine
-│   ├── engine.py                  # Master live execution loop & position reconciler
-│   ├── bybit_executor.py          # Bybit V5 REST API executor & order manager
-│   ├── account_stats.py           # Account performance statistics calculator
-│   └── main.py                    # Live execution entry point
-├── tal_Indicators/                # Dynamic __getattr__ wrapper for 158 TA-Lib indicators
-├── signals/                       # Declarative YAML quant signal generator
-├── simulator/                     # Bar-by-bar event-driven simulation engine
-├── backtesting/                   # Vectorized 10-step backtester with commission & slippage
-├── sentiment/
+## 👨‍💻 Built & Engineered by Afnan Shoukat
+
+**Full-Stack Quantitative Engineering Intern @ [Neurog.ai](https://neurog.ai)**  
+*Financial Data Scientist • Algorithmic Systems Architect*
+
+<br/>
+
+[![Connect on LinkedIn](https://img.shields.io/badge/Connect%20on-LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/afnanshoukat)
+[![Follow on GitHub](https://img.shields.io/badge/Follow%20on-GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/21Afnan)
+[![Email Contact](https://img.shields.io/badge/Email-Contact%20Me-EA4335?style=for-the-badge&logo=gmail&logoColor=white)](mailto:afnanshoukat21@gmail.com)
+[![Visit Neurog.ai](https://img.shields.io/badge/Internship-Neurog.ai-8A2BE2?style=for-the-badge&logo=openai&logoColor=white)](https://neurog.ai)
+
+<br/>
+
+*Engineered with mathematical precision, zero data leakage, and institutional quantitative rigor.*
+
+© 2026 CryptoSight. All rights reserved.
+
+</div>
