@@ -95,7 +95,7 @@ export default function DrawdownChart({ data = [], height = 220 }) {
         priceLineVisible: false,
         priceFormat: {
           type: 'custom',
-          formatter: (price) => `${(price * 100).toFixed(2)}%`,
+          formatter: (price) => `${(price).toFixed(2)}%`,
         },
         autoscaleInfoProvider: (original) => {
           const res = original();
